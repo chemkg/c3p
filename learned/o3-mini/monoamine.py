@@ -4,86 +4,94 @@ Classifies: CHEBI:63534 monoamine
 """
 Classifies: monoamine
 Definition: An aralylamino compound which contains one amino group connected 
-to an aromatic ring by a two‐carbon chain.
+to an aromatic ring by a two‐carbon chain. Monoamines are derived from aromatic
+amino acids via decarboxylation.
 """
 
 from rdkit import Chem
+from rdkit.Chem import rdMolDescriptors
 
 def is_monoamine(smiles: str):
     """
     Determines if a molecule is a monoamine based on its SMILES string.
     A monoamine is defined as an aralylamino compound that contains one amino 
-    group connected to an aromatic ring by a two‐carbon chain.
-    
+    group connected to an aromatic ring by a two‐carbon chain. In catecholamines
+    the first carbon may carry a hydroxyl substituent. Additionally, typical monoamines
+    are relatively small (here we require a molecular weight of 500 Da or less) and 
+    must not have a carboxyl group (to avoid amino acid derivatives).
+
     Args:
         smiles (str): SMILES string of the molecule
-        
+
     Returns:
         bool: True if molecule is classified as a monoamine, False otherwise.
         str: Reason for the classification decision.
     """
-    # Parse the SMILES string into an RDKit molecule object.
+    # Parse SMILES into an RDKit molecule.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-    
-    # -- Exclude molecules that are likely amino acid derivatives --
-    # Typical amino acids contain a carboxyl group. Here, we look for a pattern that has:
-    # a carbonyl (C=O) and a hydroxyl (O) attached to that carbon.
+
+    # Check for a carboxyl group (typical for amino acid derivatives).
+    # This SMARTS searches for a carbonyl (C=O) with an -OH or -O^- attached.
     carboxyl_pattern = Chem.MolFromSmarts("C(=O)[O;H1,-]")
     if carboxyl_pattern and mol.HasSubstructMatch(carboxyl_pattern):
         return False, "Contains carboxyl group, likely an amino acid derivative rather than a monoamine"
     
-    # -- Define a refined SMARTS pattern for the aromatic ethylamine chain --
-    # The pattern looks for:
-    #  1. An aromatic atom [c] (which we will later check to be in a six‐membered ring),
-    #  2. Followed by two aliphatic CH2 groups, and then 
-    #  3. A nitrogen (which can be primary, secondary, or even protonated).
-    # We label the atoms so we can later check the aromatic atom and the nitrogen.
-    smarts = "[c:1][CH2:2][CH2:3][N:4]"
-    pattern = Chem.MolFromSmarts(smarts)
-    if pattern is None:
-        return False, "Error in SMARTS pattern definition"
+    # Prepare two SMARTS patterns:
+    # Pattern 1: A simple aromatic ethylamine chain: aromatic carbon – CH2 – CH2 – nitrogen.
+    pattern1 = Chem.MolFromSmarts("[c:1][CH2:2][CH2:3][N:4]")
+    # Pattern 2: A variant found in catecholamines where the first carbon carries an -OH:
+    # aromatic carbon – CH(OH) – CH2 – nitrogen.
+    pattern2 = Chem.MolFromSmarts("[c:1][C;!a;H1]([OX2H])[CH2:3][N:4]")
     
-    # Find all substructure matches for our pattern.
-    matches = mol.GetSubstructMatches(pattern, uniquify=True)
-    
-    # Filter matches:
-    # We require that the aromatic atom (match[0]) is in a ring of size 6
-    # and that the two chain carbons (match[1] and match[2]) are not aromatic.
+    # This list will hold valid chain matches (as tuples of atom indices).
     valid_matches = []
+    # Get ring information for filtering aromatic atoms in 6-membered rings.
     rings = mol.GetRingInfo().AtomRings()
-    for match in matches:
-        aromatic_atom = mol.GetAtomWithIdx(match[0])
-        # Check if this atom is in a ring of exactly 6 atoms (a benzene-type ring)
-        in_6_membered_ring = any(len(ring) == 6 and match[0] in ring for ring in rings)
-        if not in_6_membered_ring:
+    
+    for pattern in (pattern1, pattern2):
+        if pattern is None:
             continue
-        # Ensure the two carbon atoms in the chain are aliphatic.
-        atom2 = mol.GetAtomWithIdx(match[1])
-        atom3 = mol.GetAtomWithIdx(match[2])
-        if atom2.GetIsAromatic() or atom3.GetIsAromatic():
-            continue
-        valid_matches.append(match)
+        matches = mol.GetSubstructMatches(pattern, uniquify=True)
+        for match in matches:
+            # match indices: 
+            #   match[0]: aromatic atom from the ring
+            #   match[1] and match[2]: the two linker carbons
+            #   match[3]: the nitrogen
+            aromatic_idx = match[0]
+            # Check that the aromatic atom is in at least one six-membered ring
+            in_6_membered_ring = any(len(ring) == 6 and aromatic_idx in ring for ring in rings)
+            if not in_6_membered_ring:
+                continue
+            # Check that the two linker carbons are not aromatic.
+            atom1 = mol.GetAtomWithIdx(match[1])
+            atom2 = mol.GetAtomWithIdx(match[2])
+            if atom1.GetIsAromatic() or atom2.GetIsAromatic():
+                continue
+            valid_matches.append(match)
     
     if not valid_matches:
         return False, "No valid aromatic ethylamine chain found"
-
-    # Count the number of unique nitrogen atoms identified in the valid matches.
-    amine_nitrogens = set(match[3] for match in valid_matches)
     
+    # Count unique nitrogen atoms from all valid matches
+    amine_nitrogens = set(match[3] for match in valid_matches)
     if len(amine_nitrogens) != 1:
         return False, f"Found {len(amine_nitrogens)} distinct aromatic ethylamine chain(s); expected exactly one"
+
+    # Use molecular weight as an additional filter; monoamines are usually small.
+    mol_wt = rdMolDescriptors.CalcExactMolWt(mol)
+    if mol_wt > 500:
+        return False, f"Molecular weight {mol_wt:.1f} Da is too high for a typical monoamine"
     
-    # Passed all tests: exactly one valid aryl–ethylamine chain was found and no disqualifying groups were detected.
+    # If all checks pass, the molecule is classified as a monoamine.
     return True, "Found a single aromatic ethylamine chain (aralylamino group) indicative of a monoamine"
 
-# Example usage (to test, uncomment and run):
+# Example usage (uncomment to test):
 # smiles_examples = [
-#     "C[C@@H](CCc1ccc(O)cc1)NCCc1ccc(O)c(O)c1",  # (S)-dobutamine
-#     "C1=C(C(=CC(=C1O)O)[N+](=O)[O-])CCN",          # 4-(2-aminoethyl)-5-nitrobenzene-1,2-diol
-#     "NCCc1ccc(O)c(O)c1",                           # dopamine hydrochloride
-#     "C[C@H](N)[C@H](O)c1ccc(O)c(O)c1"              # (-)-alpha-Methylnoradrenaline
+#     "C[C@@H](CCc1ccc(O)cc1)NCCc1ccc(O)c(O)c1",  # (S)-dobutamine (True positive)
+#     "S(OC1=C(O)C=C([C@@H](O)CNC)C=C1)(O)(=O)=O",  # Epinephrine sulfate (was false negative before)
+#     "C1(=C(C=C2C(=C1)C3=C(N2)[C@]4(...",       # A false positive example (likely >500 Da)
 # ]
 # for smi in smiles_examples:
 #     result, reason = is_monoamine(smi)
