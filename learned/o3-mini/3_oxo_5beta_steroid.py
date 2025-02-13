@@ -2,63 +2,65 @@
 Classifies: CHEBI:1624 3-oxo-5beta-steroid
 """
 """
-Classifies: 3-oxo-5beta-steroid, defined as 'Any 3-oxo steroid that has beta- configuration at position 5.'
-Heuristic criteria:
-  1. The molecule must have a steroid-like fused ring system. We identify rings via RDKit’s ring info,
-     then build a graph of rings that share at least 2 atoms. The largest connected component is assumed to be the steroid nucleus.
-     A typical steroid core is composed of 4 fused rings (three six-membered rings and one five-membered ring).
-  2. The molecule should contain a ketone group (C=O) in which the carbon is inside a ring (to provide the “3-oxo” feature).
-  3. The input SMILES should include the “@@” stereochemical marker as a proxy for the beta configuration at position 5.
-Note: These checks are heuristic and might produce false positives or negatives.
+Classifies: 3-oxo-5beta-steroid, defined as 'Any 3-oxo steroid that has beta- configuration at position 5.' 
+Heuristic criteria revised:
+  1. Identify all ring systems from the input molecule.
+  2. Build a graph of fused rings (rings sharing at least 2 atoms) and search for a connected component
+     that has exactly 4 rings and whose ring sizes are exactly three six-membered rings and one five-membered ring.
+     (This represents the canonical steroid nucleus, i.e. cyclopentanoperhydrophenanthrene.)
+  3. Check that at least one of the carbons in that candidate nucleus bears a double-bonded oxygen (a ketone) 
+     – which should be a ring-bound carbonyl (the "3-oxo" feature).
+  4. As a proxy for the beta configuration at carbon-5, require that the SMILES string includes at least one "@@" annotation.
+     
+Note: Since steroid numbering is nontrivial from a SMILES string, these conditions are all heuristic.
 """
 
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
+from rdkit.Chem.rdchem import BondType
 
 def is_3_oxo_5beta_steroid(smiles: str):
     """
-    Determines if a molecule belongs to the 3-oxo-5beta-steroid class based on its SMILES string.
+    Determines if a molecule appears to be a 3-oxo-5beta-steroid based on its SMILES string.
     
-    The function performs a series of heuristic checks:
-      (a) Parses the molecule and gets its ring information.
-      (b) Constructs a graph of rings that are fused (sharing at least 2 atoms)
-          and verifies that the largest connected component has at least four rings,
-          including at least three six-membered rings and one five-membered ring.
-      (c) Searches for a ketone (C=O) where the carbon is part of a ring.
-      (d) Looks in the original SMILES string for an explicit "@@" chiral annotation.
+    The heuristic:
+      (a) Parse the molecule and extract all ring systems.
+      (b) Build a connectivity graph among rings that share at least 2 atoms. Then search for a connected
+          set of rings that has exactly 4 fused rings, consisting of 3 six-membered rings and 1 five-membered ring.
+      (c) Check that within the candidate steroid nucleus there is at least one ring-bound ketone (C=O).
+      (d) Verify that the original SMILES string contains an explicit chiral tag ("@@") that is assumed to
+          indicate the beta configuration at position 5.
     
     Args:
         smiles (str): SMILES string of the molecule.
         
     Returns:
-        bool: True if the molecule passes the heuristic checks, False otherwise.
+        bool: True if molecule fits the heuristic criteria for a 3-oxo-5beta-steroid, False otherwise.
         str: Explanation for the decision.
     """
-    # Parse SMILES
+    # Parse the SMILES string into a molecule.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Get ring information from the molecule
+    # Get ring information: each ring is returned as a tuple of atom indices.
     ring_info = mol.GetRingInfo()
-    rings = ring_info.AtomRings()  # Each ring is a tuple of atom indices.
+    rings = ring_info.AtomRings()
     if not rings:
         return False, "No rings found in the molecule"
     
-    # Build a "ring connectivity" graph: each ring is a node;
-    # connect two rings if they share at least two atoms.
-    ring_nodes = list(range(len(rings)))
-    # Represent rings as sets for easier intersection
-    ring_sets = [set(r) for r in rings]
+    # Build a connectivity graph of rings.
+    n_rings = len(rings)
+    ring_nodes = list(range(n_rings))
+    ring_sets = [set(r) for r in rings]  # convert tuples to sets for intersection
     connectivity = {i: set() for i in ring_nodes}
     for i in ring_nodes:
         for j in ring_nodes:
-            if i < j:
-                if len(ring_sets[i].intersection(ring_sets[j])) >= 2:
-                    connectivity[i].add(j)
-                    connectivity[j].add(i)
+            if i < j and len(ring_sets[i].intersection(ring_sets[j])) >= 2:
+                connectivity[i].add(j)
+                connectivity[j].add(i)
     
-    # Find connected components in the ring graph
+    # Find connected components in the ring graph.
     visited = set()
     components = []
     for node in ring_nodes:
@@ -70,50 +72,55 @@ def is_3_oxo_5beta_steroid(smiles: str):
                 if current not in visited:
                     visited.add(current)
                     comp.add(current)
-                    stack.extend(connectivity[current] - visited)
+                    stack.extend(list(connectivity[current] - visited))
             components.append(comp)
     
-    # Identify the largest connected component (candidate steroid nucleus)
-    largest_comp = max(components, key=lambda comp: len(comp))
-    # Count the rings by size in that component.
-    six_count = 0
-    five_count = 0
-    for idx in largest_comp:
-        ring_size = len(rings[idx])
-        if ring_size == 6:
-            six_count += 1
-        elif ring_size == 5:
-            five_count += 1
-    # Typical steroid nucleus (cyclopentanoperhydrophenanthrene) has 3 six-membered and 1 five-membered ring.
-    if len(largest_comp) < 4:
-        return False, ("Fused ring system too small. "
-                       "Expected at least 4 contiguous rings as a steroid core, found {}.".format(len(largest_comp)))
-    if six_count < 3 or five_count < 1:
-        return False, ("Ring sizes in fused system do not match steroid pattern "
-                       "(requires at least three 6-membered and one 5-membered rings; found {} six-membered and {} five-membered).".format(six_count, five_count))
+    # Look for a connected component that represents the steroid nucleus:
+    # It must have exactly 4 rings, with exactly 3 six-membered rings and 1 five-membered ring.
+    candidate_component = None
+    for comp in components:
+        if len(comp) == 4:
+            six_count = 0
+            five_count = 0
+            for idx in comp:
+                ring_size = len(rings[idx])
+                if ring_size == 6:
+                    six_count += 1
+                elif ring_size == 5:
+                    five_count += 1
+            if six_count == 3 and five_count == 1:
+                candidate_component = comp
+                break
+    if candidate_component is None:
+        return False, ("Fused ring system does not match typical steroid nucleus. "
+                       "Expected exactly 4 fused rings (3 six-membered and 1 five-membered) but none found.")
     
-    # Check for a ketone group (C=O) where the carbon is in a ring:
-    # Loop over all atoms to find a carbon with a double-bonded oxygen and verify the carbon is in a ring.
+    # Create the set of atoms that are part of the candidate steroid nucleus.
+    candidate_atoms = set()
+    for idx in candidate_component:
+        candidate_atoms.update(rings[idx])
+    
+    # Search for a ketone group (C=O) where the carbon is in the candidate nucleus.
     ketone_found = False
     for atom in mol.GetAtoms():
-        if atom.GetAtomicNum() == 6:  # carbon
-            # Check if atom is in a ring
-            if mol.GetRingInfo().NumAtomRings(atom.GetIdx()) > 0:
-                for bond in atom.GetBonds():
-                    # Look for a double bond to oxygen
+        if atom.GetAtomicNum() == 6 and atom.GetIdx() in candidate_atoms:
+            # Check if this carbon is double-bonded to an oxygen.
+            for bond in atom.GetBonds():
+                # Check the bond type using RDKit's BondType enum.
+                if bond.GetBondType() == BondType.DOUBLE:
                     nbr = bond.GetOtherAtom(atom)
-                    if nbr.GetAtomicNum() == 8 and bond.GetBondTypeAsDouble() == 2:
+                    if nbr.GetAtomicNum() == 8:
                         ketone_found = True
                         break
             if ketone_found:
                 break
     if not ketone_found:
-        return False, "No ring-bound ketone group found (missing 3-oxo feature)"
+        return False, "No ring-bound ketone group found within the candidate steroid nucleus (missing 3-oxo feature)"
     
-    # Check for chiral annotation for beta configuration.
-    # We use the presence of "@@" in the SMILES string as a proxy.
+    # Check for chiral annotation indicating beta configuration.
+    # We require that the original SMILES contains the '@@' symbol.
     if "@@" not in smiles:
-        return False, "No '@@' stereochemical annotation found (missing beta configuration indicator)"
+        return False, "No '@@' chiral annotation found in SMILES (missing beta configuration indicator)"
     
     return True, "Molecule appears to be a 3-oxo steroid with beta configuration based on heuristic criteria"
 
