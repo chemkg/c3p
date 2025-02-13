@@ -17,9 +17,8 @@ def is_short_chain_fatty_acid(smiles: str):
     
     A short-chain fatty acid in this context is defined as an aliphatic monocarboxylic acid
     (i.e. containing exactly one carboxyl group) whose longest continuous carbon chain (including
-    the carboxyl carbon) has fewer than 6 carbon atoms. Furthermore, any substituent attached
-    to the backbone that is not purely hydrocarbon (only carbon atoms, with implicit hydrogens) 
-    disqualifies the molecule.
+    the carboxyl carbon) has fewer than 6 carbon atoms. Any substituent on the chain that is not a 
+    hydrocarbon (i.e. not a carbon or an implicit hydrogen) would disqualify it.
     
     Args:
         smiles (str): SMILES string of the molecule.
@@ -28,138 +27,115 @@ def is_short_chain_fatty_acid(smiles: str):
         bool: True if molecule is a short-chain fatty acid, False otherwise.
         str: Reason for classification.
     """
-    # Parse SMILES string
+    # Parse SMILES
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Molecule must be acyclic
+    # Check that the molecule is acyclic (no rings) because short‐chain fatty acids are open‐chain.
     if mol.GetRingInfo().NumRings() > 0:
         return False, "Molecule contains rings and is not purely aliphatic"
     
-    # Identify the carboxyl group.
-    # We use a SMARTS pattern for a carboxylic acid: a trigonal carbon with a double-bonded O and an -OH.
-    acid_query = Chem.MolFromSmarts("[CX3](=O)[OX2H]")
-    acid_matches = mol.GetSubstructMatches(acid_query)
-    if len(acid_matches) != 1:
-        return False, "Molecule does not have exactly one carboxyl group"
+    # Look for a carboxyl group.
+    # We use a SMARTS pattern for a carboxylic acid: [C](=O)[O;H1]
+    acid_smarts = "[C](=O)[O;H1]"
+    acid_query = Chem.MolFromSmarts(acid_smarts)
+    matches = mol.GetSubstructMatches(acid_query)
+    if not matches:
+        return False, "No carboxyl (acid) group found"
+    if len(matches) != 1:
+        return False, "More than one carboxyl group was found, not a monocarboxylic acid"
     
-    # In the match, the first atom is the carboxyl carbon and the remaining atoms are the oxygens.
-    acid_match = acid_matches[0]
-    acid_carbon = acid_match[0]
-    acid_oxygens = set(acid_match[1:])
+    # The carboxyl carbon is the first atom in the match.
+    acid_idx = matches[0][0]
+    acid_atom = mol.GetAtomWithIdx(acid_idx)
+    if acid_atom.GetAtomicNum() != 6:
+        return False, "Carboxyl group does not have a carbon as expected"
     
-    # Build a graph of all carbon atoms (by their indices) that are connected via C–C bonds.
-    carbon_atoms = [atom.GetIdx() for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6]
-    carbon_graph = {idx: [] for idx in carbon_atoms}
-    for idx in carbon_atoms:
-        atom = mol.GetAtomWithIdx(idx)
-        for nbr in atom.GetNeighbors():
-            if nbr.GetAtomicNum() == 6:
-                nidx = nbr.GetIdx()
-                if nidx in carbon_graph:
-                    carbon_graph[idx].append(nidx)
-    
-    # Restrict to the connected component of carbons reachable from the acid carbon.
-    def dfs_collect(start):
-        comp = set()
-        stack = [start]
+    # Define a helper function to build the connected "acyl chain" graph.
+    # The acyl chain includes carbons connected via C–C bonds from the acid carbon.
+    def get_carbon_chain(start_idx):
+        chain = set()
+        stack = [start_idx]
         while stack:
-            current = stack.pop()
-            if current not in comp:
-                comp.add(current)
-                for neigh in carbon_graph[current]:
-                    if neigh not in comp:
-                        stack.append(neigh)
-        return comp
-
-    acyl_component = dfs_collect(acid_carbon)
-    if acid_carbon not in acyl_component:
-        return False, "Acid carbon is not in the carbon component"
-    
-    # Next, find the longest simple path (in terms of number of carbon atoms) starting at the acid carbon.
-    max_path = []
-    def dfs_path(current, path, visited):
-        nonlocal max_path
-        if len(path) > len(max_path):
-            max_path = path.copy()
-        for neigh in carbon_graph[current]:
-            if neigh not in visited:
-                visited.add(neigh)
-                path.append(neigh)
-                dfs_path(neigh, path, visited)
-                path.pop()
-                visited.remove(neigh)
-    dfs_path(acid_carbon, [acid_carbon], set([acid_carbon]))
-    chain_length = len(max_path)
-    
-    # Check that the length (number of carbons in the backbone) is less than 6.
-    if chain_length >= 6:
-        return False, f"Longest carbon chain has {chain_length} carbons, exceeding the short-chain limit (<6)"
-    
-    # The chosen longest chain is our "backbone". (If there are more than one longest chain,
-    # we choose one arbitrarily; note that if a heteroatom is attached to any backbone carbon
-    # in any longest chain, it should disqualify the molecule.)
-    backbone = set(max_path)
-
-    # For each carbon atom in the backbone, examine substituents (neighbors not in the backbone).
-    # For the acid carbon, ignore the oxygen atoms that are part of the acid group.
-    # For each branch (which may be more than one atom long) we recursively check that the entire
-    # branch is hydrocarbon. (Allowed atoms are carbon (6) or hydrogen (1); note that hydrogens are
-    # usually implicit, so only explicit atoms need be checked.)
-    def branch_is_hydrocarbon(start, visited):
-        """DFS on the branch to ensure all atoms are carbon (if not hydrogen)"""
-        if start in visited:
-            return True
-        visited.add(start)
-        atom = mol.GetAtomWithIdx(start)
-        # Only carbon is allowed in branches (if not simply hydrogen, which would be implicit)
-        if atom.GetAtomicNum() != 6:
-            return False
-        for nbr in atom.GetNeighbors():
-            # Do not traverse back into any atom that is in the backbone.
-            if nbr.GetIdx() in backbone:
+            curr = stack.pop()
+            if curr in chain:
                 continue
-            if nbr.GetIdx() in visited:
-                continue
-            # Allow hydrogen if explicit (though typically they are implicit)
-            if nbr.GetAtomicNum() not in (6, 1):
-                return False
-            if nbr.GetAtomicNum() == 6:
-                if not branch_is_hydrocarbon(nbr.GetIdx(), visited):
-                    return False
-        return True
+            chain.add(curr)
+            atom = mol.GetAtomWithIdx(curr)
+            for neighbor in atom.GetNeighbors():
+                if neighbor.GetAtomicNum() == 6:  # only consider carbon neighbors
+                    # Avoid traveling into the acid group oxygens (or other heteroatoms)
+                    stack.append(neighbor.GetIdx())
+        return chain
 
-    for idx in backbone:
+    # Build the carbon chain starting at the acid carbon.
+    chain_indices = get_carbon_chain(acid_idx)
+    
+    # Note: the carboxyl carbon itself is part of a functional group,
+    # so when looking for non-hydrocarbon substituents, we will ignore its attached oxygen atoms.
+    #
+    # Now we build an adjacency map for the acyl chain (only carbons within chain_indices)
+    adjacency = {idx: [] for idx in chain_indices}
+    for idx in chain_indices:
         atom = mol.GetAtomWithIdx(idx)
-        for nbr in atom.GetNeighbors():
-            nidx = nbr.GetIdx()
-            # For the acid carbon, skip the oxygens that are part of the acid.
-            if idx == acid_carbon and nidx in acid_oxygens:
+        for neighbor in atom.GetNeighbors():
+            nidx = neighbor.GetIdx()
+            if nidx in chain_indices:
+                adjacency[idx].append(nidx)
+    
+    # Compute the longest simple path in the carbon chain graph.
+    # Because short-chain fatty acids have few carbons, a brute-force DFS is acceptable.
+    max_path_length = 0  # maximum number of carbon atoms in a simple path
+
+    def dfs(current, visited):
+        nonlocal max_path_length
+        visited.add(current)
+        # update max_path_length based on visited set size
+        if len(visited) > max_path_length:
+            max_path_length = len(visited)
+        for neigh in adjacency[current]:
+            if neigh not in visited:
+                dfs(neigh, visited)
+        visited.remove(current)
+    
+    dfs(acid_idx, set())
+
+    # Check chain length: by definition the total number of carbons (including the carboxyl carbon)
+    # should be less than 6.
+    if max_path_length >= 6:
+        return False, f"Longest carbon chain has {max_path_length} carbons, exceeding the short-chain limit (<6)"
+    
+    # Now verify that any substituents on the acyl chain (attached to carbons in chain_indices)
+    # that are not part of the acyl chain or the carboxyl acid group are hydrocarbon in nature.
+    # Allowed atoms: carbon (atomic number 6) and (implicit) hydrogens.
+    # For the acid carbon itself, ignore the two oxygens that form the carboxyl group.
+    for idx in chain_indices:
+        atom = mol.GetAtomWithIdx(idx)
+        for neighbor in atom.GetNeighbors():
+            nidx = neighbor.GetIdx()
+            # If neighbor is already part of the carbon chain, skip.
+            if nidx in chain_indices:
                 continue
-            # Skip if the neighbor is part of the backbone.
-            if nidx in backbone:
+            # For the acid carbon, allow the oxygen atoms that form the acid group.
+            if idx == acid_idx and neighbor.GetAtomicNum() == 8:
                 continue
-            # If the neighbor is not carbon (or hydrogen), then it is a non-hydrocarbon substituent.
-            if nbr.GetAtomicNum() not in (6, 1):
+            # If any neighbor is not a hydrogen (atomic number 1) or carbon, disqualify.
+            if neighbor.GetAtomicNum() not in (1, 6):
                 return False, "Non-hydrocarbon substituent found attached to the acyl chain"
-            # If the neighbor is carbon, traverse its branch.
-            if nbr.GetAtomicNum() == 6:
-                if not branch_is_hydrocarbon(nidx, set()):
-                    return False, "Non-hydrocarbon substituent found attached to the acyl chain"
+    
     return True, "Molecule is an aliphatic monocarboxylic acid with a carbon chain length of less than C6"
 
-# (Optional) Main block to test a few SMILES strings.
+# (Optional) You can include a main block to test several SMILES strings.
 if __name__ == "__main__":
     test_smiles = [
-        "CCCCC(O)=O",                 # valeric acid (should be True)
-        "CC(C)=CC(O)=O",              # 3-methylbut-2-enoic acid (should be True)
-        "CCC(C)C(O)=O",               # (R)-2-methylbutyric acid (should be True)
-        "CCCC(O)=O",                  # butyric acid (should be True)
-        "CCCC(CC=C)C(O)=O",           # 2-n-Propyl-4-pentenoic acid (should be False: chain too long)
-        "OC(=O)C(CC)(CC)C",           # 2-ethyl-2-methyl-butanoic acid (should be False: extra substituents)
-        "CCC(CO)C(O)=O",              # 2-ethylhydracrylic acid (should be False: non-hydrocarbon substituent)
+        "CCCCC(O)=O",         # valeric acid (C5 acid)
+        "CC(C)=CC(O)=O",       # 3-methylbut-2-enoic acid (backbone length = 5)
+        "CCC(C)C(O)=O",        # (R)-2-methylbutyric acid (backbone length = 4)
+        "CCCC(O)=O",           # butyric acid (C4 acid)
+        "[H][C@@]12[C@H](CCN1CC=C2COC(=O)[C@](O)([C@H](C)O)C(C)(C)O)OC(=O)C(\\C)=C/C"  # heliosupine (complex cyclic)
     ]
+    
     for smi in test_smiles:
         result, reason = is_short_chain_fatty_acid(smi)
         print(f"SMILES: {smi}\n  Is short-chain fatty acid? {result}\n  Reason: {reason}\n")
