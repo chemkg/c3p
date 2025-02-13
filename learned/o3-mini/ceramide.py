@@ -4,180 +4,139 @@ Classifies: CHEBI:17761 ceramide
 """
 Classifies: Ceramide (N-acyl-sphingoid bases)
 Definition:
-  Ceramides are sphingoid bases with an amide-linked fatty acid.
-  The fatty acid is typically saturated or monounsaturated with chain lengths
-  from 14 to 26 carbon atoms; the sphingoid base usually carries at least one hydroxyl group.
+  Ceramides are sphingoid bases with an amide-linked fatty acid. The fatty acid is typically saturated or 
+  monounsaturated with 14–26 carbon atoms and the sphingoid base usually has a hydroxyl group (often at C2).
 
-This implementation:
-  - Parses the SMILES string with sanitize=False and then manually sanitizes using a variant that skips kekulization.
-  - Iterates over bonds to identify an amide bond (a C(=O)–N connection).
-  - Fragments the molecule by breaking the amide bond to separate the acyl (fatty acid) side and the sphingoid side.
-  - On the acyl side, starting from the carbonyl carbon, it recursively computes the maximum contiguous carbon chain length.
-    This chain must be between 14 and 26 carbons.
-  - On the sphingoid side, it requires that there is at least one oxygen atom that is likely present as a hydroxyl group.
-  - Extensive try/except blocks and custom sanitization are used to overcome kekulization issues.
+This program uses an approximate substructure pattern to identify a ceramide:
+  - It looks for the substructure "C(=O)N[C](CO)" where the amide carbonyl is linked to 
+    a nitrogen that is in turn connected to a carbon with an attached –OH (the "CO" fragment).
+  - It then inspects the acyl chain (the carbon connected to the carbonyl carbon, not part of the amide)
+    and measures its length. The chain length must be between 14 and 26 carbons.
+  - Also, it verifies that the sphingoid side (the carbon attached to the amide nitrogen on the head-group)
+    carries at least one oxygen atom (as a proxy for a hydroxyl group).
+    
+Note: This is a heuristic method and may not cover all edge cases.
 """
+
 from rdkit import Chem
-from rdkit.Chem import rdMolDescriptors, rdmolops
+from rdkit.Chem import rdMolDescriptors
 
 def is_ceramide(smiles: str):
     """
     Determines if a molecule is a ceramide based on its SMILES string.
-
-    A ceramide (N-acyl-sphingoid base) is defined heuristically as a molecule featuring:
-      - An amide bond (C(=O)–N) wherein the acyl (fatty acid) side has a contiguous chain of 14–26 carbon atoms.
-      - A sphingoid base side (the fragment containing the nitrogen) that contains at least one hydroxyl group.
-
+    
+    A ceramide is defined as an N-acyl-sphingoid base:
+      - It must contain an amide bond (C(=O)N) linking a fatty acid to a sphingoid base.
+      - The fatty acid chain (attached to the carbonyl carbon) should be between 14 and 26 carbons.
+      - The sphingoid base side should exhibit at least one hydroxyl group.
+    
     Args:
-      smiles (str): SMILES string of the molecule.
+        smiles (str): SMILES string of the molecule.
     
     Returns:
-      bool: True if the molecule is classified as a ceramide, False otherwise.
-      str: A reason for the decision.
+        bool: True if molecule is classified as a ceramide, False otherwise.
+        str: Reason for classification.
     """
-    # Try to parse the SMILES string without automatic sanitization to avoid kekulization issues.
-    try:
-        mol = Chem.MolFromSmiles(smiles, sanitize=False)
-        if mol is None:
-            return False, "Invalid SMILES string"
-        # Manually sanitize while skipping kekulization
-        sanitize_flags = (Chem.SanitizeFlags.SANITIZE_ALL & ~Chem.SanitizeFlags.SANITIZE_KEKULIZE)
-        Chem.SanitizeMol(mol, sanitizeOps=sanitize_flags)
-    except Exception as e:
-        return False, f"Error parsing/sanitizing molecule: {str(e)}"
+    # Parse SMILES string.
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return False, "Invalid SMILES string"
     
-    # Add explicit hydrogens so hydroxyl groups are clearly represented
-    try:
-        mol = Chem.AddHs(mol)
-    except Exception as e:
-        return False, f"Error adding hydrogens: {str(e)}"
+    # Define a substructure pattern having an amide and a nearby hydroxymethyl (CO) group.
+    # This pattern is expected to capture many ceramide cores.
+    # Pattern: C(=O)N[C](CO)
+    ceramide_pattern = Chem.MolFromSmarts("C(=O)N[C](CO)")
+    matches = mol.GetSubstructMatches(ceramide_pattern)
+    if not matches:
+        return False, "No ceramide core substructure (C(=O)N[C](CO)) detected"
     
-    # Helper function: Recursively computes maximum contiguous chain of carbon atoms.
+    # Helper function: recursively determine the maximum length of a contiguous chain of carbons.
     def get_max_chain_length(atom, coming_from_idx, visited):
+        # Only traverse if the atom is a carbon.
         if atom.GetAtomicNum() != 6:
             return 0
+        max_length = 1  # count this atom
         visited.add(atom.GetIdx())
-        max_length = 1
         for nbr in atom.GetNeighbors():
             if nbr.GetIdx() == coming_from_idx:
                 continue
+            # Continue only if the neighbor is carbon and not visited (to avoid cycles)
             if nbr.GetAtomicNum() == 6 and nbr.GetIdx() not in visited:
-                length = 1 + get_max_chain_length(nbr, atom.GetIdx(), visited.copy())
-                if length > max_length:
-                    max_length = length
+                # Recursive call passing current atom's index as coming from.
+                chain_length = 1 + get_max_chain_length(nbr, atom.GetIdx(), visited.copy())
+                if chain_length > max_length:
+                    max_length = chain_length
         return max_length
 
-    # Iterate over bonds looking for an amide bond: C(=O)–N.
-    for bond in mol.GetBonds():
-        a1 = bond.GetBeginAtom()
-        a2 = bond.GetEndAtom()
-        # Check that one atom is carbon and the other nitrogen.
-        if (a1.GetAtomicNum() == 6 and a2.GetAtomicNum() == 7) or (a1.GetAtomicNum() == 7 and a2.GetAtomicNum() == 6):
-            if a1.GetAtomicNum() == 6:
-                c_atom = a1
-                n_atom = a2
-            else:
-                c_atom = a2
-                n_atom = a1
-
-            # Verify the carbon atom has a double-bonded oxygen (carbonyl)
-            has_carbonyl_oxygen = False
-            for nbr in c_atom.GetNeighbors():
-                if nbr.GetAtomicNum() == 8:
-                    bond_to_oxygen = mol.GetBondBetweenAtoms(c_atom.GetIdx(), nbr.GetIdx())
-                    if bond_to_oxygen is not None and bond_to_oxygen.GetBondType() == Chem.BondType.DOUBLE:
-                        has_carbonyl_oxygen = True
-                        break
-            if not has_carbonyl_oxygen:
-                continue  # not an amide C(=O)–N
-
-            # Mark atoms to later identify fragments.
-            c_atom.SetProp("is_carbonyl", "1")
-            n_atom.SetProp("is_nitrogen", "1")
-            bond_idx = bond.GetIdx()
-            
-            # Fragment the molecule by breaking this bond.
-            try:
-                frag_mol = rdmolops.FragmentOnBonds(mol, [bond_idx], addDummies=False)
-            except Exception as e:
-                # Clean up and skip this bond if fragmentation fails
-                c_atom.ClearProp("is_carbonyl")
-                n_atom.ClearProp("is_nitrogen")
+    # Loop over each substructure match.
+    for match in matches:
+        # According to our SMARTS pattern, the match tuple is:
+        # match[0] = carbonyl carbon "C(=O)", match[1] = amide nitrogen "N", match[2] = sphingoid carbon with CO.
+        carbonyl_idx, amideN_idx, sphingo_idx = match[0], match[1], match[2]
+        carbonyl_atom = mol.GetAtomWithIdx(carbonyl_idx)
+        amideN_atom = mol.GetAtomWithIdx(amideN_idx)
+        sphingo_atom = mol.GetAtomWithIdx(sphingo_idx)
+        
+        # Identify the acyl chain starting from the carbonyl carbon.
+        # The carbonyl carbon in an amide is bonded to:
+        #   - an oxygen (from the C=O)
+        #   - the nitrogen (amide bond)
+        #   - and one additional substituent that should be the start of the fatty acid chain.
+        acyl_start = None
+        for nbr in carbonyl_atom.GetNeighbors():
+            # Skip the oxygen (usually symbol "O") and the amide nitrogen.
+            if nbr.GetIdx() == amideN_idx:
                 continue
-            frags = rdmolops.GetMolFrags(frag_mol, asMols=True, sanitizeFrags=True)
-            
-            frag_acyl = None  # Should contain the carbonyl carbon.
-            frag_sphingo = None  # Should contain the nitrogen.
-            for frag in frags:
-                for atom in frag.GetAtoms():
-                    if atom.HasProp("is_carbonyl"):
-                        frag_acyl = frag
-                    if atom.HasProp("is_nitrogen"):
-                        frag_sphingo = frag
-                if frag_acyl is not None and frag_sphingo is not None:
-                    break
-            
-            # Remove temporary properties in original mol.
-            for atom in mol.GetAtoms():
-                if atom.HasProp("is_carbonyl"):
-                    atom.ClearProp("is_carbonyl")
-                if atom.HasProp("is_nitrogen"):
-                    atom.ClearProp("is_nitrogen")
-            
-            if frag_acyl is None or frag_sphingo is None:
-                continue  # fragmentation did not produce distinct fragments
+            if nbr.GetAtomicNum() == 8:
+                continue
+            # Expecting a carbon here; pick the first one.
+            if nbr.GetAtomicNum() == 6:  
+                acyl_start = nbr
+                break
+        
+        if acyl_start is None:
+            continue  # skip this match if no acyl chain was found.
+        
+        # Count the length of the acyl chain.
+        acyl_chain_length = get_max_chain_length(acyl_start, carbonyl_idx, set())
+        if not (14 <= acyl_chain_length <= 26):
+            continue  # chain length not in the expected range.
+        
+        # Now verify the sphingoid side: Check that the nitrogen has another substituent (the sphingo head)
+        # which should have at least one oxygen attached (as a proxy for a hydroxyl group).
+        sphingo_candidate = None
+        for nbr in amideN_atom.GetNeighbors():
+            if nbr.GetIdx() == carbonyl_idx:
+                continue
+            # We expect this neighbor to be a carbon: the start of the sphingoid base.
+            if nbr.GetAtomicNum() == 6:
+                sphingo_candidate = nbr
+                break
+        if sphingo_candidate is None:
+            continue
 
-            # In frag_acyl, identify the acyl carbonyl atom.
-            acyl_carbonyl = None
-            for atom in frag_acyl.GetAtoms():
-                if atom.GetAtomicNum() == 6 and atom.HasProp("is_carbonyl"):
-                    acyl_carbonyl = atom
-                    break
-            if acyl_carbonyl is None:
-                continue  # cannot identify acyl carbonyl
-
-            # Choose the neighbor (other than the oxygen) as the start of the fatty acid chain.
-            acyl_candidate = None
-            for nbr in acyl_carbonyl.GetNeighbors():
-                if nbr.GetAtomicNum() == 6:
-                    acyl_candidate = nbr
-                    break
-            if acyl_candidate is None:
-                continue  # no valid acyl chain starting atom found
-
-            # Count contiguous chain length: include carbonyl carbon plus chain.
-            chain_length = 1 + get_max_chain_length(acyl_candidate, acyl_carbonyl.GetIdx(), set())
-            if not (14 <= chain_length <= 26):
-                continue  # acyl chain is not in the required range
-
-            # On the sphingoid side, check for the presence of a hydroxyl group.
-            sphingo_has_hydroxyl = False
-            for atom in frag_sphingo.GetAtoms():
-                if atom.GetAtomicNum() == 8:
-                    # With explicit hydrogens, a hydroxyl oxygen typically has at least one hydrogen.
-                    if atom.GetTotalNumHs() > 0:
-                        sphingo_has_hydroxyl = True
-                        break
-            if not sphingo_has_hydroxyl:
-                continue  # no hydroxyl group detected in sphingoid fragment
-
-            return True, f"Ceramide detected; fatty acid chain length = {chain_length} carbons."
+        # Check if the sphingoid candidate has at least one oxygen neighbor.
+        has_OH = False
+        for nbr in sphingo_candidate.GetNeighbors():
+            if nbr.GetAtomicNum() == 8:
+                has_OH = True
+                break
+        if not has_OH:
+            continue  # No hydroxyl on the sphingoid base.
+        
+        # If we reach here, we have found a ceramide core with appropriate acyl chain length and a hydroxyl.
+        return True, f"Ceramide detected with acyl chain length {acyl_chain_length} carbons"
     
-    return False, "No amide bond with a valid acyl chain (14-26 C) and sphingoid hydroxyl group found."
+    # If none of the matches fulfill our criteria, return False.
+    return False, "No substructure had both an amide with appropriate acyl chain length and a sphingoid hydroxyl group"
 
-# (Optional) Basic testing code.
+# (Optional) basic testing
 if __name__ == "__main__":
+    # A list of sample ceramide SMILES (some from the provided examples)
     test_smiles = [
-        # Examples of ceramide structures:
-        "CCCCCCCCCCCCCC[C@@H](O)[C@H](CO[C@@H]1O[C@H](CO)[C@H](O)[C@H](O)[C@H]1O)NC(=O)C(O)CCCC",
-        "CCCCCCCCCCCCCCCC(=O)N[C@@H](CO)[C@H](O)\\C=C\\CCCCCCCCCC(C)C",
-        "CCCCCCCCCCCCCCCCCCCCCCCCCCC(=O)N[C@@H](CO)[C@H](O)CCCCCCCCCCCCC",
-        # The problematic SMILES from the initial error:
-        "C[C@@H](C1=CC=CC=C1)NC(=O)[C@@H]2[C@H]([C@@H]3CN4C(=CC=C(C4=O)C5=CC=CC=C5F)[C@H]2N3C)CO"
+        "CCCCCCCCCCCCCCCC[C@@H](O)[C@H](O)\\C=C\\CCCCCCCCCC(C)C",  # N-heptadecanoyl-15-methylhexadecasphing-4-enine
+        "CCCCCCCCCCCCCCCCCCCCCCCCCCC(=O)N[C@@H](CO)[C@H](O)CCCCCCCCCCCCC"  # N-octacosanoyl-15-methylhexadecasphinganine
     ]
     for smi in test_smiles:
-        result, reason = is_ceramide(smi)
-        print("SMILES:", smi)
-        print("is_ceramide:", result)
-        print("Reason:", reason)
-        print()
+        res, reason = is_ceramide(smi)
+        print(f"SMILES: {smi}\n  is_ceramide: {res}\n  Reason: {reason}\n")
