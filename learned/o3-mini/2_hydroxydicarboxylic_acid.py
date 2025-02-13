@@ -4,15 +4,12 @@ Classifies: CHEBI:50263 2-hydroxydicarboxylic acid
 """
 Classifies: 2-hydroxydicarboxylic acid
 
-Definition: A dicarboxylic acid carrying a hydroxy group on the carbon atom at the position alpha
-to (at least one) carboxy group.
-Our improved approach: 
- - The molecule must have exactly 2 carboxyl (-C(=O)[OH]) groups.
- - For each carboxyl group, we look at its bonded (non-oxygen) neighbors (“alpha-carbon candidates”).
- - If at least one candidate bears a hydroxy (–OH) substituent then it qualifies.
- - HOWEVER, if all such candidates are sp³ then we require that they be the same carbon (i.e. exactly one unique alpha–OH),
-   because many false positives (e.g. tartaric acid) have two separate α–OH centers.
- - If any candidate is sp² we accept that case (to cover cases like dihydroxyfumaric acid).
+Definition: A dicarboxylic acid carrying a hydroxy group on the carbon atom at position alpha
+to at least one carboxy group. Our improved strategy is to insist that:
+ - The molecule has exactly 2 carboxylic acid groups (–C(=O)OH).
+ - For each of these groups, we obtain the carbon neighbor(s) (the potential α–carbon) that bear an –OH group.
+ - If any candidate is sp2 we accept (this covers cases such as dihydroxyfumaric acid).
+ - Otherwise (if candidates are all sp3) we require that the same carbon is the α–carbon for both acid groups.
 """
 
 from rdkit import Chem
@@ -27,76 +24,82 @@ def is_2_hydroxydicarboxylic_acid(smiles: str):
     
     Returns:
         bool: True if the molecule is classified as a 2-hydroxydicarboxylic acid, False otherwise.
-        str: Reason for the classification.
+        str: Explanation for the classification.
     """
-    # Parse the SMILES string
+    # Parse SMILES and add explicit hydrogens so that -OH groups appear explicitly.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-    
-    # Add explicit hydrogens so that -OH groups show up explicitly
     mol = Chem.AddHs(mol)
     
-    # SMARTS for carboxy acid group: C(=O)[OH]
+    # Define a SMARTS pattern for a carboxylic acid group: [CX3](=O)[OX2H]
     acid_smarts = "[CX3](=O)[OX2H]"
     acid_query = Chem.MolFromSmarts(acid_smarts)
     acid_matches = mol.GetSubstructMatches(acid_query)
     
-    # Get unique acid carbon indices (the first atom in the SMARTS)
-    acid_carbon_idxs = set(match[0] for match in acid_matches)
+    # Get unique indices corresponding to the carbon of the carboxyl groups (first atom in SMARTS)
+    acid_carbon_idxs = {match[0] for match in acid_matches}
     if len(acid_carbon_idxs) != 2:
         return False, f"Expected exactly 2 carboxyl groups; found {len(acid_carbon_idxs)}"
     
-    # This set will hold unique α–carbon candidates that carry an OH
-    alpha_oh_atoms = set()
-    
-    # Loop over each acid carbon index.
-    for acid_idx in acid_carbon_idxs:
+    # For each carboxyl carbon, find neighboring carbon atoms that carry at least one -OH.
+    # For a neighbor to be a valid alpha-carbon candidate it must:
+    #  - be a carbon (atomic number 6)
+    #  - have at least one neighbor (other than the acid carbon) which is oxygen bound to at least one hydrogen
+    def get_alpha_candidates(acid_idx):
+        candidates = set()
         acid_atom = mol.GetAtomWithIdx(acid_idx)
-        # Look at neighbors of the acid carbon; we want carbon neighbors only.
         for neighbor in acid_atom.GetNeighbors():
-            if neighbor.GetAtomicNum() != 6:  # ignore non-carbon neighbors
+            if neighbor.GetAtomicNum() != 6:  # only consider carbon neighbors
                 continue
-            # Now check if this neighbor (the potential alpha-carbon) bears an -OH group.
-            has_oh = False
+            # Examine the neighbors of this candidate (excluding the acid carbon)
             for sub_neigh in neighbor.GetNeighbors():
-                if sub_neigh.GetIdx() == acid_idx: 
-                    continue  # skip the acid carbon
-                if sub_neigh.GetAtomicNum() == 8:
-                    # Check if the oxygen is part of an OH (bonded to at least one hydrogen)
+                if sub_neigh.GetIdx() == acid_idx:
+                    continue
+                if sub_neigh.GetAtomicNum() == 8:  # candidate oxygen
+                    # Check if this oxygen has at least one hydrogen attached (i.e. -OH)
                     if any(n.GetAtomicNum() == 1 for n in sub_neigh.GetNeighbors()):
-                        has_oh = True
+                        candidates.add(neighbor.GetIdx())
                         break
-            if has_oh:
-                alpha_oh_atoms.add(neighbor.GetIdx())
+        return candidates
+
+    # Create a mapping from each acid carbon to its set of candidate alpha-carbons
+    acid_to_candidates = {}
+    for acid_idx in acid_carbon_idxs:
+        acid_to_candidates[acid_idx] = get_alpha_candidates(acid_idx)
     
-    if not alpha_oh_atoms:
+    # Check if at least one acid group has a candidate; if none, then there's no alpha-OH.
+    if all(len(cands) == 0 for cands in acid_to_candidates.values()):
         return False, "No carboxy group found with an alpha-carbon bearing a hydroxy group"
     
-    # For better discrimination:
-    # If any of the alpha OH candidates is sp2, we accept the structure.
-    for atom_idx in alpha_oh_atoms:
-        atom = mol.GetAtomWithIdx(atom_idx)
-        if atom.GetHybridization() == rdchem.HybridizationType.SP2:
+    # Gather candidates per acid
+    candidate_sets = list(acid_to_candidates.values())
+    # Compute the union and intersection of candidate sets.
+    union_candidates = set().union(*candidate_sets)
+    common_candidates = set(candidate_sets[0]).intersection(*candidate_sets[1:])
+    
+    # If any candidate in the union is sp2 hybridized, accept the structure (covers unsaturated cases).
+    for cand_idx in union_candidates:
+        cand_atom = mol.GetAtomWithIdx(cand_idx)
+        if cand_atom.GetHybridization() == rdchem.HybridizationType.SP2:
             return True, "Found a carboxy group with an alpha-carbon (sp2) bearing a hydroxy group"
     
-    # Else, all candidates are sp3.
-    # In many true positives (e.g. malic acid derivatives) the same alpha-carbon provides the OH functionality for both COOH groups.
-    # If we have more than one unique saturated alpha-carbon, that is similar to the situation in tartaric acid,
-    # which we want to exclude.
-    if len(alpha_oh_atoms) == 1:
-        return True, "Found a carboxy group with an alpha-carbon (sp3) bearing a hydroxy group"
+    # If all candidates are sp3, require that both acid groups share exactly one common candidate.
+    if len(common_candidates) == 1:
+        return True, "Found a carboxy group with a common alpha-carbon (sp3) bearing a hydroxy group"
+    elif len(common_candidates) > 1:
+        return False, f"Found {len(common_candidates)} common saturated alpha-carbons with OH (likely not a 2-hydroxydicarboxylic acid)"
     else:
-        return False, f"Found {len(alpha_oh_atoms)} separate saturated alpha-carbons with OH (likely not a 2-hydroxydicarboxylic acid)"
+        # There is no common candidate among the two acid groups; hence the alpha-OH centers are separate.
+        return False, f"Found separate saturated alpha-carbons with OH for each carboxyl group, not a single common center"
 
-# For testing purposes, one might uncomment and run a few examples:
+# Example usage (for testing):
 # test_smiles = [
-#     "OC(=O)C(CCC(O)=O)O",           # 2-hydroxyadipic acid (should be True)
-#     "O=C(O)CC(O)=O",                # simple dicarboxylic acid but no proper alpha OH (False)
-#     "OC(=O)C(\\O)=C(/O)C(O)=O",      # dihydroxyfumaric acid (True, alpha carbon is sp2)
-#     "O[C@@H](CC(O)=O)C(O)=O",        # (S)-malic acid (True, one unique sp3 alpha OH)
-#     "O[C@@H]([C@H](O)C(O)=O)C(O)=O"   # D-tartaric acid (False: two different alpha-OH centers)
+#     "OC(=O)C(\\O)=C(/O)C(O)=O",      # dihydroxyfumaric acid: sp2 case, should be True
+#     "OC(CCCC(O)=O)C(O)=O",           # 2-hydroxyadipic acid: common sp3 candidate, should be True
+#     "O[C@@H](CC(O)=O)C(O)=O",         # (S)-malic acid: common sp3 candidate, should be True
+#     "O[C@@H]([C@H](O)C(O)=O)C(O)=O",   # tartaric acid: distinct saturated alpha-OH centers, should be False
 # ]
 # for smi in test_smiles:
-#     res, reason = is_2_hydroxydicarboxylic_acid(smi)
-#     print(f"SMILES: {smi}\nResult: {res}, Reason: {reason}\n")
+#     result, reason = is_2_hydroxydicarboxylic_acid(smi)
+#     print(f"SMILES: {smi}\nResult: {result}, Reason: {reason}\n")
