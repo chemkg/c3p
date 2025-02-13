@@ -4,18 +4,23 @@ Classifies: CHEBI:17408 monoacylglycerol
 #!/usr/bin/env python
 """
 Classifies: monoacylglycerol
-Definition:
-  A glyceride in which any one of the R groups (position not specified) is an acyl group 
-  while the remaining two R groups can be either H or alkyl groups.
 
-Heuristic:
+Definition:
+  A monoacylglycerol is defined as a glyceride in which one of the substituents on the glycerol
+  backbone is an acyl group (linked via an ester –O–C(=O)– bond) while the two remaining substituents
+  are free (typically -OH groups).
+
+Heuristic Overview:
   1. Parse the SMILES string.
-  2. Look for a three‐carbon (propane) chain with the expected pattern for glycerol:
-     the first and third carbon (CH2) and the central carbon (CH).
-  3. For each such chain, examine the substituents (neighbors not in the chain). 
-     A monoacylglycerol should have exactly three oxygen substituents – one ester linkage 
-     (–O–C(=O)–) and two free hydroxyls (–OH).
-  4. If found, return True with a reason; otherwise return False with an explanation.
+  2. Look for a three‐carbon (sp³) chain that is a candidate glycerol backbone.
+  3. For each candidate chain, collect all oxygen atoms bonded to its carbons that are not part of the chain.
+  4. Classify these oxygens as ester oxygen (if the oxygen is bonded to a carbon that is also double bonded to another oxygen)
+     or as free hydroxyl (if it carries at least one hydrogen).
+  5. If exactly three oxygen substituents are found – one ester and two free – we classify the molecule as a monoacylglycerol.
+  
+Note:
+  This is a heuristic approach. In cases where the substituents or ordering differ significantly, the heuristic
+  may fail. In that case the function returns False with an explanation.
 """
 
 from rdkit import Chem
@@ -23,112 +28,128 @@ from rdkit import Chem
 def is_monoacylglycerol(smiles: str):
     """
     Determines if a molecule is a monoacylglycerol based on its SMILES string.
-    A monoacylglycerol is a glyceride in which one of the three substituents on a glycerol
-    backbone (CH2-CHOH-CH2) is acylated (via an ester bond) and the other two groups are free
-    (as hydroxyls or simple alkyl, though in our heuristic we look for -OH groups).
+    
+    A monoacylglycerol should contain a glycerol backbone (a linear chain of three sp³ carbons) 
+    that bears three oxygen substituents. One of these oxygens should form an ester bond (attached to a 
+    carbon that carries a carbonyl group) and the other two should appear as free hydroxyl groups.
     
     Args:
-        smiles (str): SMILES string of the molecule
-
+        smiles (str): A SMILES string of the molecule.
+    
     Returns:
-        bool: True if molecule is classified as a monoacylglycerol, False otherwise.
-        str: Explanation/reason for the classification.
+        bool: True if the molecule is classified as a monoacylglycerol, False otherwise.
+        str: Explanation for the classification decision.
     """
-    # Attempt to parse the SMILES string.
+    # Parse the SMILES string into an RDKit molecule.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
 
-    # --- Helper functions ---
+    # Helper function: returns True if the oxygen atom is part of an ester bond.
     def is_ester_oxygen(oxy):
         """
-        Return True if the oxygen atom 'oxy' is part of an ester bond.
-        We assume that if an oxygen bonded to a carbon that itself has a double bond to another oxygen,
-        then that oxygen is esterified.
+        Check if the oxygen 'oxy' is directly bonded to a carbon that is also double-bonded to another oxygen.
+        This is taken to indicate an ester linkage (–O–C(=O)–).
         """
-        # Iterate over neighbors of the oxygen atom.
+        # For each neighbor of the oxygen:
         for nbr in oxy.GetNeighbors():
-            # We expect the neighbor to be carbon.
-            if nbr.GetAtomicNum() == 6:
-                # Look at bonds from the carbon.
+            if nbr.GetAtomicNum() == 6:  # carbon
+                # Examine bonds from that carbon.
                 for bond in nbr.GetBonds():
-                    # Skip the bond that connects back to oxy.
+                    # Skip the bond to oxy.
                     if bond.GetOtherAtom(nbr) == oxy:
                         continue
-                    # If the bond is a double bond and the other atom is oxygen, we likely have C(=O)
-                    if bond.GetBondTypeAsDouble() == 2 and bond.GetOtherAtom(nbr).GetAtomicNum() == 8:
+                    # If bond type is double and the other atom is oxygen, count as carbonyl.
+                    if bond.GetBondType() == Chem.BondType.DOUBLE and bond.GetOtherAtom(nbr).GetAtomicNum() == 8:
                         return True
         return False
 
+    # Helper function: returns True if the oxygen appears to be a free hydroxyl.
     def is_free_hydroxyl(oxy):
         """
-        Return True if the oxygen atom 'oxy' appears to be a free hydroxyl.
-        We expect a hydroxyl oxygen to have at least one hydrogen attached.
+        Check if the oxygen atom 'oxy' appears to be a free hydroxyl group.
+        We check if it carries at least one hydrogen (explicit or implicit).
         """
-        # Many times the explicit H count is not present; use GetTotalNumHs.
         if oxy.GetTotalNumHs() > 0:
             return True
         return False
 
-    # --- Step 1: Look for a glycerol backbone candidate
-    # We look for a three-carbon chain (CH2-CH-CH2).
-    # Terminal carbons are CH2 (degree=2 for heteroatoms when ignoring the chain) and central is CH.
-    glycerol_smarts = "[CH2;D2]-[CH;D3]-[CH2;D2]"
-    glycerol_pattern = Chem.MolFromSmarts(glycerol_smarts)
-    matches = mol.GetSubstructMatches(glycerol_pattern)
-    if not matches:
-        return False, "No three-carbon (glycerol) backbone found"
+    # --- Step 1: Identify candidate glycerol backbones.
+    # Instead of using a strict SMARTS match (which in our previous attempt required
+    # each backbone carbon to have exactly one oxygen neighbor), we can search for any three-carbon
+    # chain (sp³) and then check the substituents.
+    candidate_indices = []
+    # Loop over all atoms; only consider carbons with sp3 hybridization.
+    atoms = [atom for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6 and atom.GetHybridization() == Chem.rdchem.HybridizationType.SP3]
+    n_atoms = len(atoms)
+    # Create a mapping from atom index to atom for convenience.
+    atom_idx_set = set(a.GetIdx() for a in atoms)
+    
+    # We now look for connected triplets a-b-c where a, b, c are distinct and connected in sequence.
+    for a in atoms:
+        for b in a.GetNeighbors():
+            if b.GetIdx() not in atom_idx_set:
+                continue
+            # Ensure a and b are connected by a single (non-aromatic) bond.
+            bond_ab = mol.GetBondBetweenAtoms(a.GetIdx(), b.GetIdx())
+            if bond_ab is None or bond_ab.GetBondType() != Chem.BondType.SINGLE:
+                continue
+            for c in b.GetNeighbors():
+                if c.GetIdx() not in atom_idx_set or c.GetIdx() == a.GetIdx():
+                    continue
+                bond_bc = mol.GetBondBetweenAtoms(b.GetIdx(), c.GetIdx())
+                if bond_bc is None or bond_bc.GetBondType() != Chem.BondType.SINGLE:
+                    continue
+                # We require that a and c are not directly bonded (to ensure a linear chain of three atoms).
+                if mol.GetBondBetweenAtoms(a.GetIdx(), c.GetIdx()):
+                    continue
+                # We have a candidate chain: record the ordered triple (a, b, c)
+                candidate = (a.GetIdx(), b.GetIdx(), c.GetIdx())
+                candidate_indices.append(candidate)
+    
+    if not candidate_indices:
+        return False, "No three-carbon sp³ backbone found"
 
-    # Examine each candidate backbone for the expected oxygen substituents.
-    for match in matches:
-        # match is a tuple of atom indices for the 3 carbons in order.
-        # For a glycerol (or monoacylglycerol) backbone, each carbon should have one extra oxygen
-        # substituent (apart from the carbon–carbon bonds connecting the three carbons).
+    # --- Step 2: For each glycerol candidate, check the oxygen substituents.
+    for cand in candidate_indices:
+        # Get the three backbone atoms.
+        backbone_atoms = [mol.GetAtomWithIdx(idx) for idx in cand]
+        # Collect unique oxygen atoms (neighbors not in the backbone).
+        oxy_set = {}
+        for atom in backbone_atoms:
+            for nbr in atom.GetNeighbors():
+                if nbr.GetAtomicNum() == 8 and nbr.GetIdx() not in cand:
+                    oxy_set[nbr.GetIdx()] = nbr
+        # A proper glycerol backbone (or its modified derivative) should have exactly 3 oxygen substituents.
+        if len(oxy_set) != 3:
+            continue
+
         ester_count = 0
         free_oh_count = 0
-        ok_candidate = True
-
-        # Loop over the three backbone carbons.
-        for idx in match:
-            atom = mol.GetAtomWithIdx(idx)
-            # Find neighbors that are not in the backbone (i.e. substituents).
-            subst_neigh = [nbr for nbr in atom.GetNeighbors() if nbr.GetIdx() not in match]
-            # We expect exactly one substituent oxygen for each glycerol carbon.
-            # (Note: In monoacylglycerol, one of these oxygens will be esterified.)
-            oxy_neighbors = [nbr for nbr in subst_neigh if nbr.GetAtomicNum() == 8]
-            if len(oxy_neighbors) != 1:
-                ok_candidate = False
-                break
-            # Check the oxygen substituent.
-            oxy = oxy_neighbors[0]
+        for oxy in oxy_set.values():
             if is_ester_oxygen(oxy):
                 ester_count += 1
             elif is_free_hydroxyl(oxy):
                 free_oh_count += 1
             else:
-                # It is an oxygen but not clearly -OH, so mark candidate as not matching.
-                ok_candidate = False
-                break
+                # If the oxygen is neither clearly ester nor free hydroxyl,
+                # we do not count it.
+                pass
 
-        # For monoacylglycerol we expect one ester and two free hydroxyl groups.
-        if ok_candidate:
-            if ester_count == 1 and free_oh_count == 2:
-                return True, "Glycerol backbone found with one acyl (ester) substituent and two free hydroxyl groups"
-            else:
-                # Candidate found but its substituent pattern does not match monoacylglycerol.
-                # Continue to check any other candidate.
-                continue
+        if ester_count == 1 and free_oh_count == 2:
+            return True, "Glycerol backbone found with one acyl (ester) substituent and two free hydroxyl groups"
 
-    return False, "No glycerol backbone with exactly one acyl (ester) substitution and two free hydroxyls found"
+    return False, "No glycerol backbone with exactly one acyl (ester) substitution and two free hydroxyl groups found"
 
-    
+
 # Example usage:
 if __name__ == '__main__':
-    # Test a few examples; you can add more test SMILES.
     test_smiles = [
-        "CCCCCCCCCCCC(=O)OC[C@@H](O)CO",  # 1-hexadecanoyl-sn-glycerol (monoacylglycerol)
-        "CCCC(=O)OCC(O)CO",              # monobutyrin (also monoacylglycerol)
-        "OCC(O)CO"                      # glycerol (no ester group)
+        "C(CCCCCCCCCCCC(OCC(CO)O)=O)CCCCCCC",  # 1-icosanoylglycerol
+        "CCCCCC\\C=C/CCCCCCCC(=O)OC(CO)CO",     # 2-linoleoylglycerol
+        "CCCCCCCCC(=O)OC[C@@H](O)CO",           # 1-decanoyl-sn-glycerol
+        "O(C[C@@H](O)CO)C(=O)CC/C=C\\C/C=C\\C/C=C\\C/C=C\\C/C=C\\CCCCC",  # MG(22:5(...))
+        "O=C1C2=C(O)C(=C(C)C=C2C(=O)C=3C1=C(O)C=C(O)C3)C(=O)OC[C@H](O)CO",  # A false positive candidate
     ]
     for s in test_smiles:
         res, reason = is_monoacylglycerol(s)
