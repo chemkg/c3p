@@ -3,43 +3,45 @@ Classifies: CHEBI:37143 organofluorine compound
 """
 """
 Classifies: Organofluorine Compound
-An organofluorine compound is defined as any compound containing at least one carbon-fluorine bond.
+An organofluorine compound is defined as any compound containing at least one carbon–fluorine bond.
+In this improved version we inspect every bond to ensure that a C–F bond is found.
 """
 from rdkit import Chem
 
 def is_organofluorine_compound(smiles: str):
     """
     Determines if a molecule is an organofluorine compound based on its SMILES string.
-    A compound is considered an organofluorine compound if it contains at least one carbon-fluorine (C–F) bond.
+    An organofluorine compound is defined (for our purposes) as any compound that contains
+    at least one carbon–fluorine (C–F) bond.
 
     Args:
         smiles (str): SMILES string of the molecule
 
     Returns:
-        bool: True if the molecule contains at least one C-F bond, False otherwise.
+        bool: True if the molecule contains at least one C–F bond, False otherwise.
         str: Reason for classification.
     """
-    # Parse SMILES string into a molecule object
+    # Parse the SMILES string into a molecule object
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Define a SMARTS pattern for a C-F bond (C is atomic number 6, F is atomic number 9)
-    cf_pattern = Chem.MolFromSmarts("[#6]-[#9]")
-    if cf_pattern is None:
-        return False, "Failed to create substructure pattern for C-F bond"
+    # Iterate over each bond and check if one atom is carbon (atomic num 6) and the other is fluorine (atomic num 9)
+    for bond in mol.GetBonds():
+        atom1 = bond.GetBeginAtom()
+        atom2 = bond.GetEndAtom()
+        # Check both directions
+        if (atom1.GetAtomicNum() == 6 and atom2.GetAtomicNum() == 9) or (atom1.GetAtomicNum() == 9 and atom2.GetAtomicNum() == 6):
+            return True, "Contains at least one carbon–fluorine bond"
     
-    # Check if there is at least one C-F bond in the molecule
-    if mol.HasSubstructMatch(cf_pattern):
-        return True, "Contains at least one carbon-fluorine bond"
-    else:
-        return False, "No carbon-fluorine bonds detected"
-        
+    # If we found no such bond, then the compound is not organofluorine.
+    return False, "No carbon–fluorine bonds detected"
+
 # Example usage (uncomment for testing):
-# smiles_list = [
-#     "C[Si](Cn1cncn1)(c1ccc(F)cc1)c1ccc(F)cc1",  # flusilazole, an organofluorine compound
-#     "CCC",  # example without a C-F bond
+# test_smiles = [
+#     "C[Si](Cn1cncn1)(c1ccc(F)cc1)c1ccc(F)cc1",  # flusilazole; expected True
+#     "CCC",  # no C–F bond; expected False
 # ]
-# for smi in smiles_list:
+# for smi in test_smiles:
 #     result, reason = is_organofluorine_compound(smi)
 #     print(f"SMILES: {smi}\nResult: {result}\nReason: {reason}\n")
