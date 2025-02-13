@@ -5,9 +5,8 @@ Classifies: CHEBI:15341 beta-D-glucosiduronic acid
 Classifies: beta-D-glucosiduronic acid conjugate
 Definition: A glucosiduronic acid resulting from the formal condensation 
 of any substance with beta-D-glucuronic acid to form a glycosidic bond.
-The method identifies a pyranose glucuronide ring that carries a carboxyl group
-and checks that the glycosidic oxygen (the first atom in the SMARTS) links 
-to an external aglycone.
+The method identifies a pyranose glucuronic acid fragment (allowing for O‐ or N‐linkage)
+and checks that the linking atom is attached to an external aglycone.
 """
 
 from rdkit import Chem
@@ -15,54 +14,52 @@ from rdkit import Chem
 def is_beta_D_glucosiduronic_acid(smiles: str):
     """
     Determines if a molecule (given by its SMILES string) is a beta-D-glucosiduronic acid conjugate.
-    The algorithm works by searching for a glucuronide ring fragment using a relaxed,
-    non-chiral SMARTS pattern. This fragment is defined as a six-membered ring containing one oxygen
-    and five carbons with one of the carbons substituted with a carboxyl group.
-    Then we verify that the glycosidic oxygen (the first atom in the SMARTS match)
-    is attached to an external aglycone.
+    The algorithm searches for a glucuronic acid moiety defined as a pyranose ring bearing a carboxyl group 
+    and attached via a glycosidic bond through an oxygen or nitrogen. It then verifies that the linking atom 
+    (the anomeric heteroatom) is connected to an external (non-sugar) fragment.
     
     Args:
         smiles (str): SMILES string of the molecule.
         
     Returns:
-        bool: True if molecule is classified as a beta-D-glucosiduronic acid conjugate, False otherwise.
-        str: A reason message explaining the classification.
+        bool: True if the molecule is classified as a beta-D-glucosiduronic acid conjugate, False otherwise.
+        str: A message explaining the basis for the classification.
     """
     # Parse the input SMILES string.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Define a relaxed SMARTS pattern for the beta-D-glucuronide moiety.
-    # Here, the pattern "OC1C(O)C(O)C(O)C(O1)C(=O)O" represents:
-    #   - A glycosidic oxygen (first 'O') that links an external group to the sugar.
-    #   - A six-membered (pyranose) ring: C1 ... O1 where the ring consists of one oxygen and five carbons.
-    #   - A carboxyl group (C(=O)O) appended to one of the ring carbons.
-    sugar_smarts = "OC1C(O)C(O)C(O)C(O1)C(=O)O"
+    # Define a relaxed SMARTS for the beta-D-glucuronic acid moiety.
+    # We allow for the glycosidic linking atom to be either O or N:
+    #   [O,N] - the linking heteroatom (i.e. the atom that bonds the sugar to the aglycone)
+    #   C1 ... C(O1) - a six-membered (pyranose) ring in which one atom is the ring oxygen (specified by O1)
+    #   and one of the ring carbons bears a carboxyl group (C(=O)O) appended to it.
+    # This pattern is a relaxed approximation and does not enforce strict chiral configuration.
+    sugar_smarts = "[O,N]C1C(O)C(O)C(O)C(O1)C(=O)O"
     sugar_pattern = Chem.MolFromSmarts(sugar_smarts)
     if sugar_pattern is None:
-        return None, None  # SMARTS pattern failed to compile
+        return None, "Error compiling SMARTS for glucuronic acid"
     
-    # Find substructure matches for the glucuronide ring.
-    # We ignore chiral specifications for robustness.
+    # Search for all substructure matches (ignoring chirality for robustness).
     matches = mol.GetSubstructMatches(sugar_pattern, useChirality=False)
     if not matches:
         return False, "No beta-D-glucuronic acid substructure found"
-    
-    # For each identified sugar match, verify that the glycosidic oxygen (first atom in the pattern)
-    # forms a glycosidic bond by having an external (non-sugar) connection.
+        
+    # For each identified sugar match, verify that the linking heteroatom provides a true glycosidic bond by 
+    # having at least one neighbor that is not part of the sugar fragment.
     for match in matches:
-        glyco_O = mol.GetAtomWithIdx(match[0])
+        # match[0] corresponds to the atom matching the [O,N] (glycosidic linking atom).
+        linking_atom = mol.GetAtomWithIdx(match[0])
         external_attachment = False
-        # Check every neighbor of the glycosidic oxygen.
-        for neighbor in glyco_O.GetNeighbors():
-            # If the neighbor is not part of the matched sugar fragment, then it is considered an aglycone attachment.
+        for neighbor in linking_atom.GetNeighbors():
+            # If the neighbor is not in the substructure match, we regard this as an external attachment.
             if neighbor.GetIdx() not in match:
                 external_attachment = True
                 break
         if external_attachment:
             return True, "Contains beta-D-glucuronic acid moiety attached via a glycosidic bond"
     
-    # If we found the sugar fragment but the glycosidic oxygen is not linked outside,
+    # If we have found the sugar fragment but no external attachment (the linking atom only bonds within the sugar),
     # then the fragment is likely a free acid.
     return False, "Glucuronic acid moiety found but no glycosidic attachment to an external aglycone"
