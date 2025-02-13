@@ -4,11 +4,12 @@ Classifies: CHEBI:23053 catechin
 """
 Classifies: Catechin class – Members of the class of hydroxyflavan that have a flavan-3-ol (catechin) scaffold.
 Heuristic:
-  • Look for a non‐aromatic six‐membered ring in the molecule that contains exactly one oxygen atom.
-  • Check if one or more ring carbons in that ring have a hydroxyl (–OH) substituent.
-  • Verify that the ring is fused with an aromatic ring (sharing at least 2 atoms – the “A ring”).
-  • Verify that at least one additional aromatic ring (a “B ring”) is attached as a substituent.
-Due to diversity in substitution, this algorithm is a heuristic.
+  • Add explicit hydrogens so that –OH groups are detectable.
+  • Search for a six‐membered, non‐aromatic ring that contains exactly one oxygen atom (candidate “C ring”).
+  • Check that at least one carbon on that ring is substituted with a hydroxyl (-OH) group.
+  • Verify that the candidate ring is fused with an aromatic ring (the “A ring”) sharing at least 2 atoms.
+  • Verify that at least one additional aromatic ring (“B ring”) is attached as a substituent (attached to candidate ring atoms not part of the fused system).
+Due to diversity in substitution this algorithm is heuristic.
 """
 
 from rdkit import Chem
@@ -16,94 +17,100 @@ from rdkit import Chem
 def is_catechin(smiles: str):
     """
     Determines if a molecule belongs to the catechin (flavan-3-ol) class based on its SMILES string.
-    It does so by searching for a six‐membered, non‐aromatic (saturated) oxygen‐containing ring 
-    (the flavan “C ring”) that:
-      - contains exactly one oxygen,
-      - carries at least one hydroxyl (–OH) group on one of its carbons,
-      - is fused (shares at least 2 atoms) with an aromatic ring (the “A ring”),
-      - has at least one additional attached aromatic ring (the “B ring”).
-
+    The heuristic searches for a non‐aromatic six‐membered oxygen-containing ring (the C ring)
+    fused to an aromatic ring (the A ring) and bearing an additional aromatic substituent (the B ring).
+    Explicit hydrogens are added so that hydroxyl substitutions can be identified.
+    
     Args:
         smiles (str): SMILES string of the molecule.
-
+    
     Returns:
-        bool: True if the molecule is classified as a catechin (flavan-3-ol), False otherwise.
+        bool: True if the molecule is classified as a catechin scaffold, False otherwise.
         str: Reason describing the classification decision.
     """
-    # Parse the SMILES string
+    # Parse the SMILES string and add explicit hydrogens
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string."
-
+    mol = Chem.AddHs(mol)
+    
     ring_info = mol.GetRingInfo()
-    atom_rings = ring_info.AtomRings()  # tuple of tuples, each is a ring (list of atom indices)
-
-    # Helper: test if a ring (given as indices) is entirely aromatic.
+    atom_rings = ring_info.AtomRings()  # each ring is a tuple of atom indices
+    
+    # Helper: check whether a ring (list of atom indices) is fully aromatic.
     def is_aromatic_ring(ring):
-        # A ring is aromatic if every atom in it is flagged as aromatic.
         for idx in ring:
             if not mol.GetAtomWithIdx(idx).GetIsAromatic():
                 return False
         return True
-
-    # Search among all rings for a candidate "C-ring": six-membered, non-aromatic, exactly one oxygen.
+    
+    # Iterate over all rings looking for a candidate six-membered “C ring”
     for ring in atom_rings:
         if len(ring) != 6:
-            continue  # not six-membered
+            continue  # we need a 6-membered ring
         candidate_atoms = [mol.GetAtomWithIdx(i) for i in ring]
-        # Count the number of oxygen atoms in the candidate ring
+        # Count oxygen atoms in the ring (should be exactly one)
         oxy_count = sum(1 for atom in candidate_atoms if atom.GetAtomicNum() == 8)
         if oxy_count != 1:
-            continue  # must contain exactly one oxygen (the heteroatom)
-        # In a catechin's C-ring, the carbons should be non-aromatic.
-        if any(atom.GetAtomicNum() == 6 and atom.GetIsAromatic() for atom in candidate_atoms):
             continue
 
-        # Check that at least one carbon in the candidate ring bears a hydroxyl group.
-        hydroxyl_found = False
+        # Ensure the candidate ring is non-aromatic.
+        if any(atom.GetIsAromatic() for atom in candidate_atoms):
+            continue
+
+        # Check if at least one carbon in the candidate ring has a hydroxyl (-OH) group.
+        has_hydroxyl = False
         for atom in candidate_atoms:
-            if atom.GetAtomicNum() == 6:
-                # Look at neighbors not in the ring. A hydroxyl group is an -OH: oxygen with at least one hydrogen.
-                for nbr in atom.GetNeighbors():
-                    if nbr.GetAtomicNum() == 8 and nbr.GetTotalNumHs() > 0:
-                        hydroxyl_found = True
+            # We focus on carbons (atomic number 6). (The ring oxygen is not used for –OH check.)
+            if atom.GetAtomicNum() != 6:
+                continue
+            # For each neighboring atom, check if it is an -OH group.
+            for nbr in atom.GetNeighbors():
+                # Skip if neighbor is in the candidate ring
+                if nbr.GetIdx() in ring:
+                    continue
+                # If the substituent is oxygen with at least one hydrogen, count it as hydroxyl.
+                if nbr.GetAtomicNum() == 8:
+                    # Get explicit hydrogen count
+                    # Sometimes the hydrogen count is stored explicitly since we called AddHs.
+                    if nbr.GetTotalNumHs() >= 1:
+                        has_hydroxyl = True
                         break
-            if hydroxyl_found:
+            if has_hydroxyl:
                 break
-        if not hydroxyl_found:
-            continue
-
-        # Look for a fused aromatic ring (“A ring”) that shares at least 2 atoms with the candidate ring.
+        if not has_hydroxyl:
+            continue  # candidate ring must have a hydroxyl substituent
+        
+        # Look for a fused aromatic ring ("A ring"): one that shares at least 2 atoms with the candidate ring.
         fused_aromatic = None
         for other_ring in atom_rings:
             if other_ring == ring:
                 continue
-            # Check if the intersection contains at least 2 atoms.
-            if len(set(ring) & set(other_ring)) >= 2:
-                # Consider this other ring aromatic if all its atoms are aromatic.
-                if is_aromatic_ring(other_ring):
-                    fused_aromatic = other_ring
-                    break
+            # Check intersection
+            common = set(ring) & set(other_ring)
+            if len(common) >= 2 and is_aromatic_ring(other_ring):
+                fused_aromatic = set(other_ring)
+                break
         if fused_aromatic is None:
-            continue  # no fused aromatic ring found
-
-        # Look for an additional aromatic substituent (“B ring”) attached to the candidate ring.
-        # We require that at least one atom of the candidate ring has a neighbor that is part of an aromatic ring
-        # that is not the fused aromatic ring.
+            continue  # need a fused aromatic ring
+        
+        # Look for an additional aromatic ring ("B ring") as a substituent.
+        # We require that at least one atom of the candidate ring has a neighbor
+        # that belongs to an aromatic ring that is NOT the fused aromatic ring.
         b_ring_found = False
         for idx in ring:
             atom = mol.GetAtomWithIdx(idx)
             for nbr in atom.GetNeighbors():
                 nbr_idx = nbr.GetIdx()
-                if nbr_idx in ring:
-                    continue  # neighbor is within the candidate ring
-                # Check all rings that nbr participates in.
+                # If neighbor is in candidate or in fused aromatic, skip.
+                if nbr_idx in ring or nbr_idx in fused_aromatic:
+                    continue
+                # Check each ring that neighbor belongs to.
                 for other_ring in atom_rings:
                     if nbr_idx in other_ring:
-                        # Skip the fused aromatic ring we already found
-                        if fused_aromatic is not None and set(other_ring) == set(fused_aromatic):
+                        # Skip rings that are identical to the fused aromatic ring
+                        if set(other_ring) == fused_aromatic:
                             continue
-                        # Accept if other_ring is aromatic
                         if is_aromatic_ring(other_ring):
                             b_ring_found = True
                             break
@@ -112,17 +119,17 @@ def is_catechin(smiles: str):
             if b_ring_found:
                 break
         if not b_ring_found:
-            continue  # did not find an extra aromatic substituent
-
+            continue  # no additional aromatic substituent found
+        
         # If all conditions are met, we assume the molecule contains a catechin (flavan-3-ol) scaffold.
         return True, ("Molecule contains a catechin (flavan-3-ol) scaffold: a non-aromatic six-membered heterocycle "
-                      "with one oxygen and a hydroxyl group, fused to an aromatic ring and bearing an extra aromatic substituent.")
-
+                      "with one oxygen and a hydroxyl substituent, fused with an aromatic ring and bearing an additional aromatic group.")
+    
     return False, "Molecule does not appear to contain the required flavan-3-ol (catechin) scaffold."
 
 # Example usage:
 if __name__ == "__main__":
-    # Test with one of the provided examples: (–)-catechin
+    # Test with one of the provided examples: (-)-catechin
     test_smiles = "O[C@@H]1Cc2c(O)cc(O)cc2O[C@H]1c1ccc(O)c(O)c1"
     decision, reason = is_catechin(test_smiles)
     print("Is catechin?", decision)
