@@ -3,13 +3,17 @@ Classifies: CHEBI:71543 rotenoid
 """
 """
 Classifies: Rotenoid – Members of the class of tetrahydrochromenochromene.
-Definition: Rotenoids consist of a cis‐fused tetrahydrochromenochromene skeleton and its substituted derivatives.
-Our improved approach uses refined criteria based on ring analysis. We look for a fused bicyclic system defined by:
-  1. Two rings that share at least two atoms (i.e. a shared bond).
-  2. One ring that is highly aromatic (chromene-like) and one that is partially saturated.
-     We quantify aromaticity by the fraction of atoms in the ring that are declared aromatic.
-  3. At least one of the rings must contain an oxygen atom.
-This refined heuristic should reduce false classifications.
+Definition: Rotenoids consist of a cis‐fused tetrahydrochromenochromene skeleton
+and its substituted derivatives. Our refined heuristic uses ring analysis:
+  1. Retrieve all rings in the molecule.
+  2. Loop over pairs of fused rings (sharing at least 2 atoms).
+  3. For each pair, compute the fraction of atoms in each ring that are aromatic.
+  4. Identify the ring with the higher aromatic fraction and require that:
+       - Its aromatic fraction is at least 0.75 (chromene‐like).
+       - The difference between the aromatic fractions is at least 0.10.
+       - The more aromatic ring contains at least one oxygen (atomic number 8)
+         that is a member of that ring.
+If any ring pair satisfies these conditions, the molecule is classified as a rotenoid.
 """
 
 from rdkit import Chem
@@ -17,18 +21,15 @@ from rdkit import Chem
 def is_rotenoid(smiles: str):
     """
     Determines if a molecule is likely to be a rotenoid based on its SMILES string.
-    It uses an improved heuristic:
-      1. Retrieve all rings (as lists of atom indices).
-      2. Check pairs of rings that are fused (share at least 2 atoms = a whole bond).
-      3. Compute the aromatic fraction for each ring.
-         A ring is considered mostly aromatic if (aromatic atoms/size) >= 0.75.
-         A ring is considered partially saturated if its aromatic fraction is lower.
-      4. If one ring meets the aromatic criteria and the other does not,
-         and if at least one of the two rings contains an oxygen atom,
-         then classify the molecule as a rotenoid.
-    
+    The heuristic approach is:
+      1. Get all rings (lists of atom indices) in the molecule.
+      2. For every pair of rings that are fused (i.e., share at least 2 atoms),
+         calculate the aromatic fractions.
+      3. Identify the more aromatic ring of the pair. It must have an aromatic fraction
+         at least 0.75 and differ from its partner by at least 0.10.
+      4. In addition, the more aromatic ring must have at least one oxygen atom as a ring member.
     Args:
-        smiles (str): SMILES string of the molecule.
+        smiles (str): SMILES representation of the molecule.
     Returns:
         bool: True if the molecule likely belongs to the rotenoid class, False otherwise.
         str: Explanation for the classification decision.
@@ -36,63 +37,70 @@ def is_rotenoid(smiles: str):
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-    
-    # Obtain ring information: each ring is a tuple of atom indices.
+
+    # Retrieve all rings in the molecule as tuples of atom indices.
     ring_info = mol.GetRingInfo()
     rings = ring_info.AtomRings()
+    if not rings:
+        return False, "No rings found in the molecule"
     
-    # Loop over all pairs of rings looking for a fused bicyclic system.
+    aromatic_threshold = 0.75
+    aromatic_diff_threshold = 0.10
+
+    # Loop over all pairs of rings to find a fused bicyclic system.
     for i in range(len(rings)):
         for j in range(i+1, len(rings)):
-            # For rings to be fused as rings (sharing at least one bond), they should share at least 2 atoms.
+            # Check if the rings share at least 2 atoms (i.e., fused via a bond).
             shared_atoms = set(rings[i]).intersection(rings[j])
             if len(shared_atoms) < 2:
                 continue  # Not fused strongly enough
-            
-            # Gather atom objects for each ring.
+
+            # Get atom objects for each ring.
             ring1_atoms = [mol.GetAtomWithIdx(idx) for idx in rings[i]]
             ring2_atoms = [mol.GetAtomWithIdx(idx) for idx in rings[j]]
-            
-            # Calculate aromatic fraction for each ring.
+
+            # Calculate aromatic fractions for each ring.
             arom1 = sum(1 for atom in ring1_atoms if atom.GetIsAromatic())
             arom2 = sum(1 for atom in ring2_atoms if atom.GetIsAromatic())
-            frac1 = arom1 / len(rings[i])
-            frac2 = arom2 / len(rings[j])
-            
-            # Define thresholds:
-            # A "chromene-like" ring should be mostly aromatic (at least 75% aromatic atoms).
-            # The partner (tetrahydro-like) ring should not reach this threshold.
-            aromatic_threshold = 0.75
-            
-            cond1 = (frac1 >= aromatic_threshold and frac2 < aromatic_threshold)
-            cond2 = (frac2 >= aromatic_threshold and frac1 < aromatic_threshold)
-            
-            if not (cond1 or cond2):
-                continue  # This pair does not show the desired difference in aromaticity
-            
-            # Check that at least one of the rings contains an oxygen atom.
-            has_oxygen_ring1 = any(atom.GetAtomicNum() == 8 for atom in ring1_atoms)
-            has_oxygen_ring2 = any(atom.GetAtomicNum() == 8 for atom in ring2_atoms)
-            if not (has_oxygen_ring1 or has_oxygen_ring2):
-                continue  # Neither ring contains oxygen
-            
-            # If the pair meets all criteria, we classify as rotenoid.
-            return True, ("Molecule contains a fused bicyclic system "
-                          "with one predominantly aromatic ring and one partially saturated ring, "
-                          "with at least one ring bearing oxygen, consistent with a rotenoid skeleton")
+            frac1 = arom1 / len(ring1_atoms)
+            frac2 = arom2 / len(ring2_atoms)
+
+            # Identify the more aromatic ring and the less aromatic ring.
+            if frac1 >= frac2:
+                high_frac, low_frac = frac1, frac2
+                high_ring_atoms = ring1_atoms
+            else:
+                high_frac, low_frac = frac2, frac1
+                high_ring_atoms = ring2_atoms
+
+            # Check if the more aromatic ring meets the aromaticity threshold 
+            # and the difference in aromaticity is sufficiently high.
+            if high_frac < aromatic_threshold or (high_frac - low_frac) < aromatic_diff_threshold:
+                continue
+
+            # Check that the more aromatic ring contains at least one oxygen atom
+            # as an integral member of the ring.
+            contains_oxygen = any(atom.GetAtomicNum() == 8 for atom in high_ring_atoms)
+            if not contains_oxygen:
+                continue
+
+            # If all criteria are met, classify the molecule as a rotenoid.
+            return True, ("Molecule contains a fused bicyclic system with one predominantly aromatic ring "
+                          "(aromatic fraction {:.2f}) and another less aromatic ring (fraction {:.2f}), "
+                          "with at least one oxygen atom in the aromatic ring. This is consistent with a rotenoid skeleton."
+                          .format(high_frac, low_frac))
     
-    # If no pair was found, return false.
+    # If no pair of rings passes the criteria, classify as not rotenoid.
     return False, "Molecule does not contain the fused bicyclic system characteristic of rotenoids"
 
-# Example usage:
+# Example usage (testing a few molecules)
 if __name__ == "__main__":
-    # Test examples (only a few given here; more can be added for further validation)
     test_examples = {
         "Millettosin": "O1C2C(O)(C=3C(OC2)=CC=4OCOC4C3)C(=O)C5=C1C6=C(OC(C=C6)(C)C)C=C5",
         "LSM-4404": "CC(C)C1CC2=C(O1)C=CC3=C2OC4=C(C3=O)C5=CC(=C(C=C5OC4)OC)OC",
-        "tephrosin": "[H][C@@]12COc3cc(OC)c(OC)cc3[C@]1(O)C(=O)c1ccc3OC(C)(C)C=Cc3c1O2",
-        "Stemonone (FN)": "O1C2=C(C=3C(OC2=O)=CC(OC)=C(OC)C3)C(=O)C=4C1=CC(OC)=CC4O"
+        "Tephrosin": "[H][C@@]12COc3cc(OC)c(OC)cc3[C@]1(O)C(=O)c1ccc3OC(C)(C)C=Cc3c1O2",
+        "Stemonone": "O1C2=C(C=3C(OC2=O)=CC(OC)=C(OC)C3)C(=O)C=4C1=CC(OC)=CC4O"
     }
-    for name, smi in test_examples.items():
-        result, reason = is_rotenoid(smi)
+    for name, smiles in test_examples.items():
+        result, reason = is_rotenoid(smiles)
         print(f"{name}: {result} -- {reason}")
