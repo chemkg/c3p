@@ -4,111 +4,130 @@ Classifies: CHEBI:48024 3'-hydroxyflavanones
 """
 Classifies: CHEBI:3'-hydroxyflavanones
 Definition: Any hydroxyflavanone with a hydroxy substituent at position 3'
-of the phenyl (B) ring attached to the flavanone core (2-phenylchroman-4-one)
+of the phenyl (B) ring attached to the flavanone core (2-phenylchroman-4-one).
 Heuristic:
-  1. Find an aromatic benzene ring (6 atoms) as the candidate B ring.
-  2. Identify an atom in that ring that attaches to another (non-aromatic) ring,
-     candidate for the flavanone core.
-  3. In that attached ring (flavanone core), check for a carbonyl group (C=O) and a ring oxygen.
-  4. For the benzene ring, determine the atoms that are meta (two bonds away) from the attachment.
-  5. Check that at least one meta atom carries a hydroxyl (-OH) substituent.
+  1. Find candidate benzene rings (aromatic, exactly 6 atoms).
+  2. For atoms in such a benzene ring, check for neighbors not in the ring.
+     These neighbors are potential attachment points to the flavanone core.
+  3. For each neighbor, look for a ring (other than the candidate benzene ring)
+     that is six-membered and non-aromatic. Within that candidate flavanone core ring,
+     require exactly one ring oxygen and at least one carbon atom that is bonded to a double-bonded oxygen (ketone).
+  4. For the candidate benzene (B) ring, find the atoms meta (two bonds away) 
+     from the attachment atom and check that at least one of these meta atoms carries an -OH group.
 Notes:
-  - We fixed the error where GetIsInRing was used and replaced it with IsInRing().
-  - The code now leverages RDKit functions correctly to search for the target motifs.
+  - These additional criteria help reduce false positives.
 """
 from rdkit import Chem
 
 def is_3__hydroxyflavanones(smiles: str):
     """
     Determines if a molecule is a 3'-hydroxyflavanone.
-
+    
     A 3'-hydroxyflavanone is defined as a flavanone (2-phenylchroman-4-one)
-    that possesses a hydroxy (-OH) substituent at the 3' position (meta relative 
-    to the attachment on the B ring) of the phenyl (B) ring.
-
+    that possesses a hydroxy (-OH) substituent at the meta (3') position relative 
+    to the attachment on the B ring.
+    
     Args:
         smiles (str): SMILES string of the molecule.
-
+    
     Returns:
         bool: True if the molecule is a 3'-hydroxyflavanone, False otherwise.
         str: Reason for the classification.
     """
-    # Parse SMILES
+    # Parse the molecule from SMILES.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-    
+
     ring_info = mol.GetRingInfo()
     atom_rings = ring_info.AtomRings()
-    
-    # Helper: checks if an atom has a hydroxyl (-OH) substituent
+
+    # Helper: Returns True if the given atom has a hydroxyl (-OH) substituent.
     def has_OH(atom):
         for nbr in atom.GetNeighbors():
-            if nbr.GetAtomicNum() == 8:
-                # Check if oxygen has at least one hydrogen (implicit or explicit)
+            if nbr.GetAtomicNum() == 8:  # Oxygen
+                # Either explicit hydrogen(s) or at least one implicit hydrogen
                 if nbr.GetTotalNumHs() > 0:
                     return True
         return False
 
-    # Helper: given a ring (as a tuple/list of atom indices) and an attachment index within the ring,
-    # compute the meta positions (two bonds away in the ring).
+    # Helper: Given a ring (tuple of atom indices) and attachment index within the ring,
+    # return the meta positions (2 bonds away in the ring).
     def meta_indices(ring, att_idx):
-        positions = [i for i, idx in enumerate(ring) if idx == att_idx]
         meta_set = set()
         ring_size = len(ring)
+        # Locate the position(s) where att_idx occurs (should be one normally)
+        positions = [pos for pos, idx in enumerate(ring) if idx == att_idx]
         for pos in positions:
             meta_set.add(ring[(pos + 2) % ring_size])
             meta_set.add(ring[(pos - 2) % ring_size])
         return meta_set
 
-    # Look for candidate benzene rings: aromatic, exactly 6 members.
+    # Loop over all rings to find candidate aromatic B rings: exactly 6 atoms and fully aromatic.
     for ring in atom_rings:
         if len(ring) != 6:
             continue
         if not all(mol.GetAtomWithIdx(i).GetIsAromatic() for i in ring):
-            continue
+            continue  # not a benzene ring
 
-        # For each atom in the benzene ring, see if it attaches to another ring (candidate core)
+        # For each atom (attachment candidate) in the benzene ring:
         for att_idx in ring:
             att_atom = mol.GetAtomWithIdx(att_idx)
-            # Consider neighbors outside the benzene ring
-            neighbors_outside = [nbr for nbr in att_atom.GetNeighbors() if nbr.GetIdx() not in ring]
-            if not neighbors_outside:
+            # Look at neighbors outside the ring
+            neighbor_atoms = [nbr for nbr in att_atom.GetNeighbors() if nbr.GetIdx() not in ring]
+            if not neighbor_atoms:
                 continue
 
-            for nbr in neighbors_outside:
-                # Look at all rings that contain the neighbor (candidate flavanone core ring)
-                candidate_core = False
+            # For each neighboring atom, search for a candidate flavanone core ring.
+            for nbr in neighbor_atoms:
+                candidate_core_found = False
+                # Look through rings that include this neighbor but are not the aromatic ring we started with.
                 for core_ring in atom_rings:
-                    # The neighbor must be in the candidate core ring and the ring must not be fully aromatic.
-                    if nbr.GetIdx() not in core_ring:
-                        continue
-                    if all(mol.GetAtomWithIdx(i).GetIsAromatic() for i in core_ring):
-                        continue
+                    if att_idx in core_ring:
+                        # Skip if this ring is the candidate B ring itself.
+                        if set(core_ring) == set(ring):
+                            continue
+                        # For flavanone core, we require a 6-membered ring that is NOT fully aromatic.
+                        if len(core_ring) != 6:
+                            continue
+                        if all(mol.GetAtomWithIdx(i).GetIsAromatic() for i in core_ring):
+                            continue
+                        # Ensure the candidate core ring contains the neighbor atom.
+                        if nbr.GetIdx() not in core_ring:
+                            continue
 
-                    # Check for the carbonyl (C=O) group and a ring oxygen in that ring.
-                    carbonyl_found = False
-                    ring_oxygen_found = False
-                    for idx in core_ring:
-                        atom_core = mol.GetAtomWithIdx(idx)
-                        # Check if the atom is oxygen and part of the ring.
-                        if atom_core.GetAtomicNum() == 8 and atom_core.IsInRing():
-                            ring_oxygen_found = True
-                        # For a carbon, look for a double-bonded oxygen.
-                        if atom_core.GetAtomicNum() == 6:
-                            for nbr2 in atom_core.GetNeighbors():
-                                bond = mol.GetBondBetweenAtoms(atom_core.GetIdx(), nbr2.GetIdx())
-                                if nbr2.GetAtomicNum() == 8 and bond is not None and bond.GetBondTypeAsDouble() == 2.0:
-                                    carbonyl_found = True
-                    if carbonyl_found and ring_oxygen_found:
-                        candidate_core = True
-                        break
+                        # Check that in the candidate core ring there is exactly one ring oxygen.
+                        oxygen_count = sum(1 for i in core_ring if mol.GetAtomWithIdx(i).GetAtomicNum() == 8)
+                        if oxygen_count != 1:
+                            continue
 
-                if not candidate_core:
+                        # Check that at least one carbon in the candidate core ring is double-bonded to an oxygen (ketone).
+                        carbonyl_found = False
+                        for i in core_ring:
+                            atom_core = mol.GetAtomWithIdx(i)
+                            if atom_core.GetAtomicNum() == 6:
+                                for nbr2 in atom_core.GetNeighbors():
+                                    # Get the bond between the carbon and its neighbor.
+                                    bond = mol.GetBondBetweenAtoms(atom_core.GetIdx(), nbr2.GetIdx())
+                                    if (nbr2.GetAtomicNum() == 8 and 
+                                        bond is not None and bond.GetBondType() == Chem.rdchem.BondType.DOUBLE):
+                                        carbonyl_found = True
+                                        break
+                            if carbonyl_found:
+                                break
+
+                        if not carbonyl_found:
+                            continue
+
+                        # If we reach here, then this core ring fits our flavanone core criteria.
+                        candidate_core_found = True
+                        break  # No need to search further for a candidate core ring.
+
+                if not candidate_core_found:
                     continue
 
-                # Now treat the candidate benzene ring as the B ring.
-                # Get the meta positions relative to the attachment atom.
+                # Once candidate core is found, use the current aromatic ring as the B ring.
+                # Find meta positions (2 bonds away in the B ring) from att_idx.
                 meta_idxs = meta_indices(ring, att_idx)
                 found_meta_OH = False
                 for midx in meta_idxs:
@@ -118,15 +137,20 @@ def is_3__hydroxyflavanones(smiles: str):
                         break
 
                 if found_meta_OH:
-                    reason = ("Molecule contains a flavanone core (chromanone with a carbonyl and ring oxygen) "
-                              "and a B ring (aromatic 6-membered ring) with a hydroxyl substituent at the meta (3') position.")
+                    reason = ("Molecule contains a flavanone core "
+                              "(a non‐aromatic six‐membered ring with one ring oxygen and a ketone) "
+                              "fused to an aromatic B ring that has an -OH substituent at the meta (3') position.")
                     return True, reason
 
     return False, "Molecule does not appear to contain a 2-phenylchroman-4-one core with an -OH at the 3' position of the B ring"
 
-# Example usage: Feel free to test with provided SMILES examples.
+# Example usage (for testing):
 if __name__ == "__main__":
-    # (2S)-3'-hydroxyflavanone (example)
-    test_smiles = "Oc1cccc(c1)[C@@H]1CC(=O)c2ccccc2O1"
-    result, explanation = is_3__hydroxyflavanones(test_smiles)
-    print(result, explanation)
+    # Try a few examples.
+    examples = [
+        ("Oc1cccc(c1)[C@@H]1CC(=O)c2ccccc2O1", "(2S)-3'-hydroxyflavanone (expected True)"),
+        ("O1C(C2=CC(=C(O)C(=C2)CC=C(C)C)CC=C(C)C)CC(=O)C3=C1C=C(O)C=C3", "Abyssinone IV (expected False)")
+    ]
+    for smi, name in examples:
+        result, explanation = is_3__hydroxyflavanones(smi)
+        print(f"SMILES: {smi}\nName: {name}\nResult: {result}\nExplanation: {explanation}\n")
