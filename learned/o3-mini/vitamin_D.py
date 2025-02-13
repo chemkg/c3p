@@ -10,19 +10,15 @@ Definition:
    and is biologically inactive and converted into the biologically active calcitriol via double
    hydroxylation in the body.”
 
-Heuristic criteria used in this improved version:
-  1. Valid molecule from SMILES.
-  2. Molecular weight between ~250 and ~600 Da.
-  3. Contains at least one hydroxyl (-OH) group.
-  4. Contains a fused ring cluster (2–5 rings) whose atoms are mostly non‐aromatic.
-  5. Has at least one extended aliphatic side chain (≥3 connected carbons) attached to a ring
-     of the fused cluster that also bears a hydroxyl group.
-  
-Note:
-  This heuristic is an approximation. Many vitamin D compounds have “seco‐steroid” cores
-  (with a broken or “cut” ring) and pendant chains that carry –OH groups. Many non‐vitamin D 
-  compounds may have a fused ring system, so we attempt to reduce false positives by requiring 
-  the extra chain feature.
+Heuristic criteria in this version:
+  1. The SMILES must parse to a valid molecule.
+  2. The molecular weight should be between ~250 and ~600 Da.
+  3. The molecule must contain at least one hydroxyl (-OH) group.
+  4. The molecule must contain a fused ring cluster (with 2–5 rings) whose atoms are mostly non‐aromatic.
+  5. There must be at least one extended aliphatic side chain (i.e. a path of at least 3 carbon atoms)
+     that is attached to an atom in the fused ring cluster and that ends in a hydroxyl group.
+     
+This version improves the side chain search by “tracing back” from hydroxyl groups external to the cluster.
 """
 
 from rdkit import Chem
@@ -33,55 +29,55 @@ def is_vitamin_D(smiles: str):
     Determines if a molecule is a vitamin D compound based on its SMILES string.
     
     Heuristic criteria:
-      - Valid molecule that can be parsed from the SMILES.
-      - Molecular weight between ~250 Da and ~600 Da.
-      - Contains at least one hydroxyl group.
-      - Contains a fused ring cluster (2–5 rings) where most atoms are non‐aromatic.
-      - Has an aliphatic side chain (≥~3 carbons) attached to the fused ring cluster that 
-        contains at least one hydroxyl group.
+      - Molecule must be valid.
+      - Molecular weight between ~250 and ~600 Da.
+      - Contains at least one hydroxyl (-OH) group.
+      - Contains a fused ring cluster (2–5 rings) that is largely non‐aromatic.
+      - Has an extended aliphatic side chain (chain of >=3 carbon atoms) attached to the fused ring
+        cluster that terminates in a hydroxyl group (outside the fused cluster).
     
     Args:
-        smiles (str): SMILES string of the molecule.
-    
+      smiles (str): SMILES string of the molecule.
+      
     Returns:
-        (bool, str): Tuple of (True, reason) if classified as vitamin D, else (False, reason).
+      (bool, str): Tuple of (True, reason) if classified as vitamin D,
+                   or (False, reason) otherwise.
     """
-    # Parse SMILES
+    # Parse SMILES into molecule.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Check molecular weight (250-600 Da is typical for vitamin D)
+    # Check molecular weight (between ~250 and ~600 Da).
     mol_wt = rdMolDescriptors.CalcExactMolWt(mol)
     if mol_wt < 250 or mol_wt > 600:
         return False, f"Molecular weight {mol_wt:.1f} Da is out of vitamin D range (250-600 Da)"
     
-    # Look for at least one hydroxyl (-OH) group
+    # Check for at least one hydroxyl group (-OH).
     hydroxyl_pattern = Chem.MolFromSmarts("[OX2H]")
-    hydroxyl_matches = mol.GetSubstructMatches(hydroxyl_pattern)
-    if len(hydroxyl_matches) < 1:
+    if not mol.HasSubstructMatch(hydroxyl_pattern):
         return False, "No hydroxyl (-OH) group found"
     
-    # Get ring information and all rings as lists of atom indices
+    # Obtain all rings.
     ring_info = mol.GetRingInfo()
     all_rings = list(ring_info.AtomRings())
     if not all_rings:
         return False, "No rings found in the molecule"
     
-    # Build a graph of rings: node for each ring; two rings are connected if they share >=2 atoms.
-    n = len(all_rings)
-    adjacency = {i: set() for i in range(n)}
-    ring_sets = [set(r) for r in all_rings]
-    for i in range(n):
-        for j in range(i+1, n):
+    # Build a graph of rings. Two rings are connected if they share >=2 atoms.
+    n_rings = len(all_rings)
+    adjacency = {i: set() for i in range(n_rings)}
+    ring_sets = [set(ring) for ring in all_rings]
+    for i in range(n_rings):
+        for j in range(i+1, n_rings):
             if len(ring_sets[i].intersection(ring_sets[j])) >= 2:
                 adjacency[i].add(j)
                 adjacency[j].add(i)
     
-    # Find connected components (clusters) of rings using DFS
+    # Find connected components (clusters) of rings using DFS.
     visited = set()
     clusters = []
-    for i in range(n):
+    for i in range(n_rings):
         if i not in visited:
             stack = [i]
             comp = set()
@@ -94,20 +90,18 @@ def is_vitamin_D(smiles: str):
                 stack.extend(adjacency[curr])
             clusters.append(comp)
     
-    # Get the largest ring cluster
+    # Select the largest fused ring cluster.
     largest_cluster = max(clusters, key=lambda comp: len(comp))
     cluster_ring_count = len(largest_cluster)
-    
-    # Accept clusters with 2 to 5 rings (allowing for secosteroid cores that lost one ring)
     if cluster_ring_count < 2 or cluster_ring_count > 5:
         return False, f"Fused ring cluster has {cluster_ring_count} rings; expected between 2 and 5 for a vitamin D secosteroid core"
     
-    # Gather all atom indices in the largest cluster
+    # Get all atom indices that are part of the fused ring cluster.
     cluster_atoms = set()
     for idx in largest_cluster:
         cluster_atoms.update(ring_sets[idx])
     
-    # Check aromaticity of the fused cluster. Vitamin D cores are mostly non‐aromatic.
+    # Check that the fused ring cluster is mostly non‐aromatic.
     arom_count = 0
     for atom_idx in cluster_atoms:
         if mol.GetAtomWithIdx(atom_idx).GetIsAromatic():
@@ -116,67 +110,75 @@ def is_vitamin_D(smiles: str):
     if aromatic_ratio > 0.5:
         return False, f"Fused ring cluster is predominantly aromatic (ratio {aromatic_ratio:.2f}); not consistent with vitamin D secosteroid core"
     
-    # Now search for an extended aliphatic side chain attached to the fused cluster.
-    # We require a branch (found on an atom in the cluster) that is at least 3 carbon atoms long
-    # and has at least one hydroxyl group (that is not part of the fused cluster).
-    def branch_has_oh_and_min_c(start_idx, min_c=3, max_depth=8):
-        """Explore branch starting from start_idx (which is not in the cluster)
-           and coming off a cluster atom. Return True if a chain with at least min_c carbon atoms 
-           and containing an -OH is found.
+    # Now, search for an extended aliphatic side chain (with >= 3 carbons) attached to the fused cluster.
+    # We look for hydroxyl groups (-OH) that are not part of the fused ring cluster.
+    # For each such hydroxyl, we attempt to trace an aliphatic (carbon-only) path from a carbon attached to
+    # the hydroxyl back to the fused cluster.
+    def path_to_cluster_from(start_idx, visited_local):
         """
-        visited_atoms = set()
-        stack = [(start_idx, 0, 0)]  # (atom_index, current depth, carbon_count)
-        while stack:
-            atom_idx, depth, c_count = stack.pop()
-            if depth > max_depth:
-                continue
-            if atom_idx in visited_atoms:
-                continue
-            visited_atoms.add(atom_idx)
-            atom = mol.GetAtomWithIdx(atom_idx)
-            # Increment carbon count if carbon
-            if atom.GetAtomicNum() == 6:
-                c_count += 1
-            # Check if this atom is a hydroxyl oxygen (with H)
-            if atom.GetAtomicNum() == 8:
-                # A simple check for -OH: oxygen attached to at least one hydrogen.
-                for nb in atom.GetNeighbors():
-                    if nb.GetAtomicNum() == 1:
-                        if c_count >= min_c:
-                            return True
-            # Continue traversal: avoid jumping into any atom already in the fused cluster.
-            for nb in atom.GetNeighbors():
-                nb_idx = nb.GetIdx()
-                if nb_idx in cluster_atoms:
-                    continue
-                stack.append((nb_idx, depth+1, c_count))
-        return False
-
-    branch_found = False
-    # For each atom in the fused cluster, check neighbors not in the cluster.
-    for atom_idx in cluster_atoms:
-        atom = mol.GetAtomWithIdx(atom_idx)
+        Recursive DFS that traverses only through carbon atoms (atomic number 6) not in cluster_atoms.
+        Returns the number of carbon atoms counted along the path if a path connecting to any fused cluster
+        atom is found; otherwise returns None.
+        """
+        # Check neighbors for connection to fused cluster.
+        atom = mol.GetAtomWithIdx(start_idx)
+        for nb in atom.GetNeighbors():
+            nb_idx = nb.GetIdx()
+            if nb_idx in cluster_atoms:
+                return 1  # path length of one (current carbon will be counted in caller)
+        # Otherwise, traverse neighbors that are carbons and not visited.
         for nb in atom.GetNeighbors():
             nb_idx = nb.GetIdx()
             if nb_idx in cluster_atoms:
                 continue
-            # Only search branch if the neighbor is aliphatic (carbon or oxygen is acceptable)
-            if nb.GetAtomicNum() not in (6, 8):
+            if nb.GetAtomicNum() != 6:
                 continue
-            if branch_has_oh_and_min_c(nb_idx):
+            if nb_idx in visited_local:
+                continue
+            visited_local.add(nb_idx)
+            ret = path_to_cluster_from(nb_idx, visited_local)
+            if ret is not None:
+                return ret + 1
+        return None
+
+    branch_found = False
+    # For every hydroxyl oxygen not in cluster, check if it is part of an extended side chain.
+    hydroxyl_atoms = mol.GetSubstructMatches(hydroxyl_pattern)
+    for match in hydroxyl_atoms:
+        oh_idx = match[0]
+        if oh_idx in cluster_atoms:
+            continue  # skip hydroxyls that are part of the fused cluster
+        oh_atom = mol.GetAtomWithIdx(oh_idx)
+        # Check that this oxygen actually is -OH (attached to at least one hydrogen)
+        has_hydrogen = any(nb.GetAtomicNum() == 1 for nb in oh_atom.GetNeighbors())
+        if not has_hydrogen:
+            continue
+        # For each neighbor of the hydroxyl oxygen that is carbon and not in the cluster,
+        # try to trace back to the fused cluster.
+        for nb in oh_atom.GetNeighbors():
+            nb_idx = nb.GetIdx()
+            if nb.GetAtomicNum() != 6:
+                continue
+            if nb_idx in cluster_atoms:
+                continue  # if the hydroxyl is directly attached to the cluster, it is not considered an extended chain.
+            # Use DFS to find a path back to the cluster. Count the number of carbons in the path.
+            visited_local = set([nb_idx])
+            path_length = path_to_cluster_from(nb_idx, visited_local)
+            if path_length is not None and path_length >= 3:
                 branch_found = True
                 break
         if branch_found:
             break
+
     if not branch_found:
         return False, "No extended aliphatic side chain (with at least 3 carbons and a hydroxyl) attached to the fused ring cluster"
     
-    # If all tests pass, classify as a vitamin D compound.
-    return True, "Matches vitamin D criteria: fused non‐aromatic secosteroid core with hydroxyl group(s) and appropriate side chain"
+    # If all checks pass, classify as vitamin D.
+    return True, "Matches vitamin D criteria: fused non‐aromatic secosteroid core with hydroxyl and appropriate side chain"
 
 # Example usage (for testing purposes)
 if __name__ == "__main__":
-    # Testing with one example: 24-fluoro-25-hydroxyvitamin D3
+    # Test with one example: 24-fluoro-25-hydroxyvitamin D3
     test_smiles = "FC(CC[C@H]([C@@H]1[C@@]2([C@@H](CC1)/C(/CCC2)=C/C=C\\3/C[C@@H](O)CCC3=C)C)C)C(O)(C)C"
     result, reason = is_vitamin_D(test_smiles)
     print(result, reason)
