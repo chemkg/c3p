@@ -1,67 +1,103 @@
 """
 Classifies: CHEBI:61384 sulfolipid
 """
-#!/usr/bin/env python
 """
 Classifies: sulfolipid
-Definition: A compound containing a sulfonic acid residue joined (via an appropriate linkage)
-            to a lipid (i.e., having a long aliphatic chain).
+Definition: A compound containing a sulfonic acid residue (–OS(=O)(=O)O or its deprotonated variant)
+            joined by a carbon–sulfur bond to a lipid (here defined as having at least 10 contiguous aliphatic carbons).
             
-This function uses RDKit to verify that the molecule contains a sulfo group (–OS(=O)(=O)O or
-its deprotonated variant) and a long chain (a substructure match of 10 consecutive carbon atoms).
+The strategy is:
+  1. Parse the SMILES.
+  2. Look for a sulfonic acid group that is attached to a carbon (using two SMARTS patterns).
+  3. For each candidate, perform a depth-first search (DFS) to find the longest contiguous chain of non‐aromatic,
+     sp3 (aliphatic) carbons connected by single bonds. The chain must contain at least 10 carbons.
+  4. Return True if any candidate passes these criteria.
+  
+If either the sulfo group is missing or no candidate carbon is directly attached to a long aliphatic chain,
+the function returns False with a reason.
 """
 
 from rdkit import Chem
-from rdkit.Chem import rdMolDescriptors
 
 def is_sulfolipid(smiles: str):
     """
-    Determines if the given SMILES string corresponds to a sulfolipid.
-    
-    The strategy is:
-      1. Parse the SMILES.
-      2. Look for a sulfonic acid (sulfo) moiety. Here we look for either the protonated
-         form "OS(=O)(=O)O" or the deprotonated form "OS(=O)(=O)[O-]".
-      3. Look for a lipid chain. We require a long contiguous carbon chain (here 10 carbons in sequence).
+    Determines if a molecule is a sulfolipid by verifying that:
+      (a) a sulfonic acid group (–OS(=O)(=O)O or its deprotonated variant) is present,
+      (b) the sulfonic acid group is attached via a carbon–sulfur bond,
+      (c) the connecting carbon is part of a long aliphatic chain (>= 10 contiguous sp3 carbons).
       
     Args:
         smiles (str): SMILES string of the molecule.
         
     Returns:
-        bool: True if the molecule is classified as a sulfolipid, False otherwise.
+        bool: True if the molecule is classified as a sulfolipid, otherwise False.
         str: Explanation for the decision.
     """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string."
+    
+    # Define SMARTS patterns for sulfonic acid group attached to a carbon.
+    # We require a carbon directly connected to a sulfur that is in a sulfonic acid (protonated or deprotonated) state.
+    # Two patterns: one for deprotonated and one for protonated forms.
+    sulfo_deprot = Chem.MolFromSmarts("[#6]-S(=O)(=O)[O-]")
+    sulfo_prot   = Chem.MolFromSmarts("[#6]-S(=O)(=O)O")
+    
+    # Collect candidate matches: each is a tuple (C_idx, S_idx) where the carbon is the first atom.
+    candidate_matches = []
+    for pattern in (sulfo_deprot, sulfo_prot):
+        matches = mol.GetSubstructMatches(pattern)
+        for match in matches:
+            # We assume the pattern is defined such that the first atom is the carbon.
+            candidate_matches.append(match)
+    
+    if not candidate_matches:
+        return False, "No sulfonic acid group attached to a carbon (C–S bond) found."
+    
+    # For each candidate match, the first atom (index match[0]) is the carbon attached to the sulfonic group.
+    # Now check if that carbon is part of a long aliphatic chain.
+    # We define a DFS that traverses only contiguous sp3 (non-aromatic) carbons connected by SINGLE bonds.
+    
+    def dfs(atom, visited):
+        """
+        Recursively finds the length of the longest path (chain) in the subgraph of allowed carbon atoms.
+        Allowed atoms: atomic number 6, NOT aromatic.
+        Allowed bonds: SINGLE bonds.
         
-    # Define SMARTS pattern(s) for sulfo group.
-    # Many sulfolipids show a sulfo group as –OS(=O)(=O)O or –OS(=O)(=O)[O-]
-    sulfo_protonated = Chem.MolFromSmarts("OS(=O)(=O)O")
-    sulfo_deprotonated = Chem.MolFromSmarts("OS(=O)(=O)[O-]")
-    
-    has_sulfo = False
-    if mol.HasSubstructMatch(sulfo_protonated):
-        has_sulfo = True
-    elif mol.HasSubstructMatch(sulfo_deprotonated):
-        has_sulfo = True
-        
-    if not has_sulfo:
-        return False, "No sulfonic acid (sulfo) group found."
-    
-    # Define a pattern for a long aliphatic chain.
-    # Here we use a simple SMARTS for 10 consecutive aliphatic carbons.
-    long_chain_pattern = Chem.MolFromSmarts("CCCCCCCCCC")
-    if not mol.HasSubstructMatch(long_chain_pattern):
-        return False, "No long aliphatic (lipid) chain found."
-    
-    # Optionally, you might want to check some overall molecular properties (such as molecular weight,
-    # rotatable bonds etc.) to further support the lipid character. For now, we only apply the two substructure
-    # searches.
-    
-    return True, "Contains a sulfonic acid (sulfo) moiety and a long aliphatic (lipid) chain."
+        Args:
+            atom: current RDKit atom.
+            visited: set of atom indices already visited (to avoid cycles).
+        Returns:
+            int: Maximum chain-length (number of carbon atoms) found starting from this atom.
+        """
+        max_length = 1  # count self
+        for nbr in atom.GetNeighbors():
+            bond = mol.GetBondBetweenAtoms(atom.GetIdx(), nbr.GetIdx())
+            if nbr.GetAtomicNum() == 6 and (not nbr.GetIsAromatic()) \
+               and bond.GetBondType() == Chem.BondType.SINGLE \
+               and nbr.GetIdx() not in visited:
+                new_visited = visited.copy()
+                new_visited.add(nbr.GetIdx())
+                chain_length = 1 + dfs(nbr, new_visited)
+                if chain_length > max_length:
+                    max_length = chain_length
+        return max_length
 
-# The module can be tested by calling is_sulfolipid with known sulfolipid SMILES.
-# For example:
-# result, reason = is_sulfolipid("CCCCCCCCCCCCCCCC(=O)O[C@H]1...")  # (example SMILES)
+    # For each candidate carbon that is directly attached to a sulfo group, measure the length of its carbon chain.
+    for match in candidate_matches:
+        carbon_idx = match[0]
+        carbon_atom = mol.GetAtomWithIdx(carbon_idx)
+        # Only consider aliphatic carbons
+        if carbon_atom.GetAtomicNum() != 6 or carbon_atom.GetIsAromatic():
+            continue
+        # Start DFS from this carbon; mark it as visited.
+        chain_length = dfs(carbon_atom, {carbon_idx})
+        if chain_length >= 10:
+            return True, f"Contains sulfonic acid group attached via C–S bond to a lipid chain of {chain_length} carbons."
+    
+    return False, "No sulfolipid candidate found: sulfonic acid group is not attached to a sufficiently long aliphatic chain."
+    
+# Optionally, you can test the function with SMILES strings.
+# e.g.:
+# result, reason = is_sulfolipid("CCCCCCCCCCCCCCC(=O)O[C@H]1...")  # (example SMILES)
 # print(result, reason)
