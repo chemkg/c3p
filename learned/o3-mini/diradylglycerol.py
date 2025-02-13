@@ -1,40 +1,39 @@
 """
 Classifies: CHEBI:76578 diradylglycerol
 """
+#!/usr/bin/env python3
 """
 Classifies: Diradylglycerol
 Definition: Any lipid that is glycerol bearing two substituent groups – either acyl, alkyl,
-or alk-1-enyl – at any two of the three possible positions. In other words, a diacyl (or
-di-alkyl/alk-1-enyl) glycerol should have a glycerol backbone where exactly two oxygen substituents 
-are acylated/alkylated while the third hydroxyl remains free.
-Heuristic (improved):
-  1. Parse the molecule from the SMILES.
-  2. Loop over all carbons and try to find a candidate glycerol backbone:
-       • The candidate “central” carbon is sp3 and is bonded to exactly two other carbon atoms.
-       • Each of those two carbons (terminals) is bonded to the central carbon as its only carbon neighbor.
-  3. For each of the three backbone carbons you expect to see (at least) one oxygen attached via a single bond,
-     where the oxygen is not part of the backbone. If a backbone carbon does not have any oxygen substituent,
-     or has more than one, then this candidate is rejected.
-  4. For each backbone oxygen substituent, decide if it is “free” (–OH) or “substituted” (esterified/etherified)
-     by the following logic:
-         – In many cases a free –OH will show one or more (implicit) hydrogen.
-         – However, if no H is reported, we also check the connectivity: if the oxygen is attached (besides its
-           backbone carbon) to another heavy atom then, if that atom is a carbon that is double-bonded to an O,
-           we judge it as substituted.
-         – Otherwise the oxygen is flagged as free.
-  5. Finally, if exactly one of the three oxygens is considered free and the other two are substituted,
-     then return True.
-     
-If any step fails we return False with an explanation.
+or alk-1-enyl – at any two of the three possible positions. That is, a diacyl (or di-alkyl/alk-1-enyl)
+glycerol should have a glycerol backbone in which exactly two of its oxygen groups are esterified (or etherified)
+while the third remains a free hydroxyl.
+Heuristic:
+  1. Parse the molecule from the SMILES string.
+  2. Loop over all atoms to find a candidate glycerol backbone.
+     For a candidate central carbon:
+       - It must be sp3 and have exactly two carbon neighbors.
+       - Each of its two attached (terminal) carbons must have the central carbon as its only carbon neighbor.
+  3. For each of the three glycerol backbone carbons (central + two terminals),
+     look for exactly one oxygen substituent (via a single bond) that is not itself part of the backbone.
+  4. For each oxygen in the backbone substituents, classify it as “free” (–OH) or “substituted” (acyl/alkyl)
+     via the following improved logic:
+         • If it has any attached hydrogen, call it free.
+         • Otherwise, check the non-backbone neighbors.
+             – If any neighbor is phosphorus, reject this candidate (phospholipid-like).
+             – If a neighbor is carbon that bears a double bond to another oxygen (a carbonyl) then mark as substituted.
+         • If no hydrogen is found and no convincing carbonyl is found, assume it is substituted.
+  5. Finally, if exactly one oxygen is free and two are substituted, we classify the input as a diradylglycerol.
+If no candidate passes, return False with a summary reason.
 """
 
 from rdkit import Chem
 
 def is_diradylglycerol(smiles: str):
     """
-    Determines if a molecule is a diradylglycerol (diacyl/di-alkyl/di-alk-1-enyl glycerol)
-    based on its SMILES string according to an improved heuristic.
-    
+    Determines if a molecule is a diradylglycerol (a diacyl/di-alkyl/di-alk-1-enyl glycerol)
+    based on its SMILES string using a heuristic for a glycerol backbone and analysis of oxygen substituents.
+
     Args:
         smiles (str): SMILES string of the molecule.
 
@@ -45,91 +44,101 @@ def is_diradylglycerol(smiles: str):
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-
-    # Function to decide if an oxygen attached to a backbone carbon is free.
+    
+    # Improved function to decide if an oxygen atom (attached to a backbone carbon) is free (OH) or substituted.
     def oxygen_is_free(oxy, backbone_idx):
         """
-        Decide if oxygen 'oxy' is a free hydroxyl.
-        First, we try the standard method: if the oxygen carries any implicit or explicit H, we call it free.
-        If not, we check its other heavy-atom neighbor (if any) to see if it is part of an acyl (ester) linkage.
+        Determine if the oxygen 'oxy' is a free hydroxyl (returns True) or is substituted (returns False).
+        Additionally, if the oxygen is attached to a phosphorus atom, we mark this candidate as not a DG.
         """
-        # Check for hydrogens: This counts both explicit and implicit H.
-        if oxy.GetTotalNumHs() > 0:
+        # Use explicit and implicit hydrogen count.
+        num_H = oxy.GetNumExplicitHs() + oxy.GetNumImplicitHs()
+        if num_H > 0:
+            # Likely a free hydroxyl.
             return True
-        # Otherwise, get heavy neighbors other than the backbone carbon.
-        heavy_neighbors = [nbr for nbr in oxy.GetNeighbors() 
-                           if nbr.GetAtomicNum() > 1 and nbr.GetIdx() != backbone_idx]
-        # If no heavy neighbor beyond the backbone carbon exists, consider it free.
-        if not heavy_neighbors:
-            return True
-        # If there is a heavy neighbor, check if it is a carbonyl carbon.
-        for nbr in heavy_neighbors:
+        
+        # Examine non-backbone neighbors.
+        for nbr in oxy.GetNeighbors():
+            if nbr.GetIdx() == backbone_idx:
+                continue
+            # If the oxygen is attached to phosphorus, then it belongs to e.g. a phosphate headgroup.
+            if nbr.GetAtomicNum() == 15:
+                # Signal an ambiguous situation by returning None.
+                return None
             if nbr.GetSymbol() == 'C':
-                # Check if any bond from the neighbor is a double bond to an oxygen.
+                # Look at bonds from the neighbor to see if it bears a carbonyl.
                 for bond in nbr.GetBonds():
+                    # Identify a double bond to another oxygen from this neighbor.
                     if bond.GetBondType() == Chem.BondType.DOUBLE:
                         other = bond.GetOtherAtom(nbr)
-                        if other.GetSymbol() == 'O':
-                            return False  # Likely esterified (substituted)
-        # Default to free if no carbonyl pattern found.
-        return True
-
+                        if other.GetSymbol() == 'O' and other.GetIdx() != oxy.GetIdx():
+                            return False  # This oxygen is part of an ester linkage.
+        # No hydrogen and no clear carbonyl detected: assume substituted (e.g. an ether or vinyl linkage).
+        return False
+    
     last_reason = "No candidate glycerol backbone was found."
-    # Loop over all atoms looking for a candidate for the central carbon.
+    # Loop over all atoms to search for a candidate central carbon of a glycerol backbone.
     for atom in mol.GetAtoms():
+        # We require the candidate central atom to be carbon.
         if atom.GetSymbol() != "C":
             continue
-        # We require the candidate central carbon to be sp3 and have exactly two carbon neighbors.
+        # The candidate must be sp3 hybridized.
         if atom.GetHybridization() != Chem.HybridizationType.SP3:
             continue
+        # The candidate central carbon should have exactly two carbon neighbors.
         carbon_neighbors = [nbr for nbr in atom.GetNeighbors() if nbr.GetSymbol() == "C"]
         if len(carbon_neighbors) != 2:
-            continue  # This is not a candidate central carbon.
+            continue
         central = atom
         term1, term2 = carbon_neighbors
 
-        # For the terminal carbons, require that their only carbon neighbor is the central one.
+        # For each terminal carbon, its only carbon neighbor should be the central carbon.
         valid_terminals = True
         for term in (term1, term2):
-            # Count carbon neighbors besides the central.
-            other_carbons = [nbr for nbr in term.GetNeighbors() if nbr.GetSymbol() == "C" and nbr.GetIdx() != central.GetIdx()]
-            if other_carbons:
+            others = [nbr for nbr in term.GetNeighbors() if nbr.GetSymbol() == "C" and nbr.GetIdx() != central.GetIdx()]
+            if others:
                 valid_terminals = False
                 break
         if not valid_terminals:
             continue
 
-        # At this stage we have a candidate glycerol backbone: central, term1, and term2.
+        # We have a candidate glycerol backbone (central, term1, term2).
         backbone_idxs = {central.GetIdx(), term1.GetIdx(), term2.GetIdx()}
-        oxy_info = []  # list of tuples (backbone_atom_idx, oxygen_atom_idx, is_free)
+        oxy_info = []  # Each entry: (backbone_atom_idx, oxygen_atom_idx, is_free)
         valid_backbone = True
 
-        # For each backbone carbon, we expect exactly one oxygen substituent (via a single bond) that is not in the backbone.
+        # For each backbone carbon we expect exactly one oxygen connected by a single (non-backbone) bond.
         for b_idx in backbone_idxs:
             carbon_atom = mol.GetAtomWithIdx(b_idx)
             oxygen_subs = []
             for bond in carbon_atom.GetBonds():
-                # Only consider single bonds
+                # Only consider single bonds.
                 if bond.GetBondType() != Chem.BondType.SINGLE:
                     continue
                 nbr = bond.GetOtherAtom(carbon_atom)
+                # Exclude atoms that belong to the backbone.
                 if nbr.GetSymbol() == "O" and nbr.GetIdx() not in backbone_idxs:
                     oxygen_subs.append(nbr)
             if len(oxygen_subs) != 1:
                 valid_backbone = False
-                last_reason = ("Backbone carbon (idx {}) does not have exactly one oxygen substituent "
-                               "(found {}).".format(b_idx, len(oxygen_subs)))
+                last_reason = ("Backbone carbon (idx {}) does not have exactly one oxygen substituent (found {})."
+                               .format(b_idx, len(oxygen_subs)))
                 break
             oxy = oxygen_subs[0]
-            # Determine if this oxygen is free (hydroxyl) or substituted (ester/ether).
             free = oxygen_is_free(oxy, b_idx)
+            # If our oxygen assessment returns None, then the candidate backbone is part of a phospholipid.
+            if free is None:
+                valid_backbone = False
+                last_reason = ("Backbone oxygen (idx {}) attached to carbon (idx {}) is connected to phosphorus."
+                               .format(oxy.GetIdx(), b_idx))
+                break
             oxy_info.append((b_idx, oxy.GetIdx(), free))
         if not valid_backbone:
             continue
 
-        # Count free versus substituted oxygens.
+        # In a diradylglycerol we expect exactly one free hydroxyl and two substituted oxygens.
         free_count = sum(1 for (_, _, is_free) in oxy_info if is_free)
-        sub_count = sum(1 for (_, _, is_free) in oxy_info if not is_free)
+        sub_count  = sum(1 for (_, _, is_free) in oxy_info if not is_free)
         if free_count == 1 and sub_count == 2:
             msg = ("Found glycerol backbone (central carbon idx {}) with two substituted positions and one free hydroxyl. "
                    "Backbone oxygen details: {}").format(central.GetIdx(), oxy_info)
