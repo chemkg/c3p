@@ -3,19 +3,23 @@ Classifies: CHEBI:47787 11-oxo steroid
 """
 """
 Classifies: CHEBI/Custom: 11-oxo steroid
-Definition: Any oxo steroid that has an oxo substituent at position 11.
+Definition: An oxo steroid must have a fused steroid nucleus with exactly 17 carbons 
+            and at least one ring-bound ketone group (C(=O)) situated in that nucleus.
 Heuristic implementation:
-  1. The SMILES is parsed.
-  2. We require that the molecule contains a fused steroid nucleus – here defined
-     as a set of four fused “carbon‐only” rings (typically one five-membered ring and three six-membered rings,
-     or four six‐membered rings) that share bonds (we require an overlap of at least two atoms between rings).
-  3. The molecule must contain at least one candidate ring‐bound ketone group.
-     For a ketone (C(=O)) to be acceptable:
-       (a) the carbonyl carbon must be in the fused nucleus (i.e. belong to at least 2 rings in the nucleus),
-       (b) the bond to oxygen must be a double bond (forming a C=O),
-       (c) the two other substituents on that carbon are carbons and are in the fused nucleus.
-  4. If these criteria are met, then we classify the molecule as an 11-oxo steroid.
-Note: This heuristic does not perform full stereochemical or explicit numbering assignment.
+  1. Parse the SMILES.
+  2. Identify all rings that contain only carbons.
+  3. Build a “fusion” graph where rings are connected if they share at least 2 atoms.
+  4. From the connected components, select the one with the most nucleus atoms.
+  5. Require that the nucleus (the union of atoms in that fused component) contains exactly 17 carbon atoms.
+  6. Then, look for a candidate ketone:
+       - It must be a carbon atom in the nucleus that is part of at least 2 rings from that nucleus.
+       - It must be double-bonded to an oxygen.
+       - Its two other neighbors (aside from the oxygen) must be carbons in the nucleus.
+       - At least one of the rings containing this candidate should be 6-membered.
+       
+  If these conditions are met, we classify the molecule as an 11-oxo steroid.
+  
+Note: This heuristic does not perform full stereochemical assignment or explicit numbering.
 """
 
 from rdkit import Chem
@@ -27,11 +31,13 @@ def is_11_oxo_steroid(smiles: str):
     Determines if a molecule is an 11-oxo steroid based on its SMILES string.
     The heuristic:
       - Parse the molecule.
-      - Determine all carbon-only rings and find connected sets of rings that are fused
-        (sharing at least 2 atoms). Accept only if one connected component has exactly 4 rings.
-      - Identify at least one candidate ketone group (C(=O)) on a carbon that is in at least 2 rings
-        of the fused nucleus and whose other two substituents are carbons in the fused nucleus.
-    
+      - Identify all carbon-only rings and build a fusion graph (rings are fused if they share at least 2 atoms).
+      - Determine the largest connected component (the steroid nucleus candidate) and require it
+        to have exactly 17 carbon atoms.
+      - Within that nucleus, search for a ketone group (C(=O)) on a carbon that belongs to at least 
+        two nucleus rings, with both additional substituents being carbons of the nucleus. Also, require 
+        at least one associated ring to be six-membered (since position 11 lies on a six-membered ring).
+      
     Args:
       smiles (str): SMILES string of the molecule.
       
@@ -43,116 +49,132 @@ def is_11_oxo_steroid(smiles: str):
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-    
-    # Ensure stereochemistry assignment and ring perception
+
+    # Assign stereochemistry and compute 2D coordinates (helps with ring perception)
     Chem.AssignStereochemistry(mol, cleanIt=True)
     AllChem.Compute2DCoords(mol)
     
-    # Gather ring information and restrict to rings with only carbon atoms.
     ring_info = mol.GetRingInfo()
-    all_rings = ring_info.AtomRings()
-    
+    all_rings = ring_info.AtomRings()  # each ring is a tuple of atom indices
+
+    # Find rings that are exclusively carbons
     carbon_rings = []
     for ring in all_rings:
         if all(mol.GetAtomWithIdx(idx).GetAtomicNum() == 6 for idx in ring):
-            carbon_rings.append(set(ring))  # store as set for intersection tests
-            
+            # Save as set for easy intersection computation and preserve the ring size
+            carbon_rings.append(set(ring))
+    
     if not carbon_rings:
         return False, "No carbon-only rings found; not a steroid-like nucleus."
     
-    # Build connectivity graph among rings: two rings are fused if they share at least 2 atoms.
-    # Represent the graph as an adjacency list, indexed by ring index.
-    graph = {i: set() for i in range(len(carbon_rings))}
-    for i in range(len(carbon_rings)):
-        for j in range(i+1, len(carbon_rings)):
+    # Build a graph among rings: rings are fused if they share at least 2 atoms.
+    n_rings = len(carbon_rings)
+    graph = {i: set() for i in range(n_rings)}
+    for i in range(n_rings):
+        for j in range(i+1, n_rings):
             if len(carbon_rings[i].intersection(carbon_rings[j])) >= 2:
                 graph[i].add(j)
                 graph[j].add(i)
-    
-    # Find connected components of the graph.
+                
+    # Find connected components of the ring graph via DFS.
     seen = set()
-    fused_components = []
-    for i in graph:
-        if i not in seen:
-            # simple DFS
-            stack = [i]
-            comp = set()
-            while stack:
-                cur = stack.pop()
-                if cur in comp:
-                    continue
-                comp.add(cur)
-                for nbr in graph[cur]:
-                    if nbr not in comp:
-                        stack.append(nbr)
-            seen.update(comp)
-            fused_components.append(comp)
-    
-    # The typical steroid nucleus is 4 fused rings.
-    # We look for a component which consists exactly of 4 rings.
-    steroid_component = None
-    for comp in fused_components:
-        if len(comp) == 4:
-            steroid_component = comp
-            break
-    if steroid_component is None:
-        return False, ("Fused ring system does not match typical steroid nucleus: "
-                       "expected one connected set of 4 carbon-only fused rings, but found fused components of sizes: " +
-                       ", ".join(str(len(comp)) for comp in fused_components))
-    
-    # Gather all atom indices that belong to the steroid nucleus.
-    steroid_atom_idxs = set()
-    for ring_idx in steroid_component:
-        steroid_atom_idxs.update(carbon_rings[ring_idx])
-        
-    # Check that the fused nucleus has a reasonable number of carbons.
-    nucleus_carbons = [atom for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6 and atom.GetIdx() in steroid_atom_idxs]
-    if len(nucleus_carbons) < 15:
-        return False, "Fused ring nucleus has too few carbon atoms to be steroid-like"
-    
-    # Now look for a suitable ketone group within the steroid nucleus.
-    ketone_found = False
-    ketone_details = []
-    
-    # Iterate over atoms in the nucleus that are carbon.
-    for atom in mol.GetAtoms():
-        if atom.GetAtomicNum() != 6:
+    components = []
+    for i in range(n_rings):
+        if i in seen:
             continue
-        # For our purposes the ketone carbon should be part of at least 2 rings from the steroid nucleus.
-        rings_here = [r for r in carbon_rings if atom.GetIdx() in r and r.issubset(steroid_atom_idxs)]
+        stack = [i]
+        comp = set()
+        while stack:
+            cur = stack.pop()
+            if cur in comp:
+                continue
+            comp.add(cur)
+            for nbr in graph[cur]:
+                if nbr not in comp:
+                    stack.append(nbr)
+        seen.update(comp)
+        components.append(comp)
+    
+    # For each connected component, take the union of all atom indices in its rings.
+    nucleus_candidates = []
+    for comp in components:
+        nucleus_atoms = set()
+        for ring_idx in comp:
+            nucleus_atoms.update(carbon_rings[ring_idx])
+        # Count how many carbons in this nucleus.
+        nucleus_carbon_count = sum(1 for idx in nucleus_atoms if mol.GetAtomWithIdx(idx).GetAtomicNum() == 6)
+        nucleus_candidates.append((comp, nucleus_atoms, nucleus_carbon_count))
+    
+    # Choose the candidate with the most nucleus atoms.
+    nucleus_candidates.sort(key=lambda x: x[2], reverse=True)
+    if not nucleus_candidates:
+        return False, "No fused ring nucleus candidate found."
+    chosen_comp, nucleus_atom_idxs, nucleus_carbon_count = nucleus_candidates[0]
+    
+    # For a typical steroid nucleus, we expect exactly 17 carbon atoms.
+    if nucleus_carbon_count != 17:
+        return False, f"Fused nucleus has {nucleus_carbon_count} carbons; expected 17 for a steroid nucleus."
+    
+    # For each ring in the chosen component, record its size (for later reference)
+    nucleus_rings = []
+    for ring_idx in chosen_comp:
+        ring_set = carbon_rings[ring_idx]
+        # Only consider rings fully contained in the nucleus (they should be, by construction)
+        if ring_set.issubset(nucleus_atom_idxs):
+            nucleus_rings.append((ring_idx, ring_set, len(ring_set)))
+    
+    # Now search for a candidate ketone group within the nucleus.
+    # The ketone candidate must:
+    #   - be a carbon (atomic number 6) present in the nucleus
+    #   - be bonded by a double bond to an oxygen (atomic number 8)
+    #   - have exactly two other neighbors; both must be carbons and in the nucleus.
+    #   - be in at least two nucleus rings; and at least one of these rings should be six-membered.
+    ketone_found = False
+    ketone_details = ""
+    
+    for atom in mol.GetAtoms():
+        if atom.GetAtomicNum() != 6 or atom.GetIdx() not in nucleus_atom_idxs:
+            continue
+        # Find all nucleus rings (by index) that contain this atom.
+        rings_here = []
+        for ring_idx, ring_set, ring_size in nucleus_rings:
+            if atom.GetIdx() in ring_set:
+                rings_here.append((ring_idx, ring_size))
         if len(rings_here) < 2:
-            continue  # not situated in two fused rings
+            continue  # must belong to at least 2 rings in the nucleus
         
+        # Look for a double bond to oxygen.
         for bond in atom.GetBonds():
-            # Look for a double bond
+            # Check the bond is a double bond.
             if bond.GetBondTypeAsDouble() != 2:
                 continue
             other = bond.GetOtherAtom(atom)
             if other.GetAtomicNum() != 8:
-                continue  # must be an oxygen (C=O)
-            # Now check that aside from the oxygen, the carbonyl carbon has exactly 2 other neighbors.
+                continue
+            # Now check that aside from this oxygen, the carbonyl carbon has exactly 2 other neighbors.
             other_neighbors = [nbr for nbr in atom.GetNeighbors() if nbr.GetIdx() != other.GetIdx()]
             if len(other_neighbors) != 2:
                 continue
-            # Both other neighbors must be carbons and must be part of the steroid nucleus.
-            if not all(nbr.GetAtomicNum() == 6 and nbr.GetIdx() in steroid_atom_idxs for nbr in other_neighbors):
+            # Both other neighbors must be carbons in the nucleus.
+            if not all(nbr.GetAtomicNum() == 6 and nbr.GetIdx() in nucleus_atom_idxs for nbr in other_neighbors):
                 continue
-            # This appears to be a candidate ketone in the steroid nucleus.
+            # Also check that at least one of the rings (among those that contain the ketone carbon) is six-membered.
+            if not any(ring_size == 6 for (_, ring_size) in rings_here):
+                continue
+            # If all criteria are met, we presume this is the 11-oxo.
             ketone_found = True
-            ketone_details.append(
-                f"Carbon {atom.GetIdx()} (in {len(rings_here)} rings) forms a ketone with oxygen {other.GetIdx()}"
-            )
-            # We only need one correct candidate ketone.
+            ketone_details = (f"Atom {atom.GetIdx()} forms a ketone (C=O with atom {other.GetIdx()}) "
+                              f"and is in {len(rings_here)} nucleus rings (ring sizes: " +
+                              ", ".join(str(ring_size) for (_, ring_size) in rings_here) + ")")
             break
         if ketone_found:
             break
 
     if not ketone_found:
-        return False, "No suitable ring-bound ketone (in the fused steroid nucleus) found – an 11-oxo is required."
+        return False, "No suitable ring-bound ketone (11-oxo) found in the steroid nucleus."
     
-    reason = ("Molecule contains a steroid-like fused ring system (4 fused carbon-only rings) "
-              f"with {len(nucleus_carbons)} nucleus carbons and a candidate ketone group: " +
-              "; ".join(ketone_details))
+    reason = ("Molecule contains a steroid nucleus with 17 carbons and a candidate 11-oxo group: " +
+              ketone_details)
     return True, reason
 
 # Example usage (for testing):
