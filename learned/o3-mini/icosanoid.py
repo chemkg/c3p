@@ -4,106 +4,79 @@ Classifies: CHEBI:23899 icosanoid
 """
 Classifies: Icosanoid
 Definition: Any member of the group of signalling molecules arising from oxidation
-of the three C20 essential fatty acids (EFAs): icosapentaenoic acid (EPA), arachidonic
-acid (AA) and dihomo-gamma-linolenic acid (DGLA).
+of the three C20 essential fatty acids (EFAs) icosapentaenoic acid (EPA), arachidonic acid (AA) 
+and dihomo-gamma-linolenic acid (DGLA).
 
-Heuristic improvements:
-  - Carbon count between 15 and 60.
-  - Require an oxygenated carbonyl group (as in acids/esters).
-  - Look for at least one core motif:
-       • a cyclopentane ring (using ring information),
-       • or a polyene chain of at least three consecutively conjugated double bonds,
-       • or a phosphorus atom (commonly seen in phosphorylated derivatives).
-  - Relax total ring count restrictions if a cyclopentane ring or phosphate is present;
-       otherwise, reject if the number of rings exceeds 5.
-  - If no phosphate is present, very heavy molecules (>1000 Da) are unlikely to be icosanoids.
+Heuristic approach:
+ - Parse the SMILES using RDKit.
+ - Count the number of carbons; require an extended range (15–60) to allow for conjugates.
+ - Check for the presence of oxygenated functional groups by looking for either a carboxylic acid (or carboxylate)
+   or an ester moiety using the SMARTS "[CX3](=O)[OX2,H1]".
+ - Look for one of two characteristic substructures:
+        • a cyclopentane ring (SMARTS "C1CCCC1")
+        • a polyene chain (SMARTS "C=C/C=C/C=C") indicating several conjugated double bonds.
+If these conditions are met, we classify the molecule as a potential icosanoid.
 """
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
 
 def is_icosanoid(smiles: str):
     """
-    Determines whether a molecule is a potential icosanoid based on its SMILES string.
-    
-    Heuristics used:
-      1. Carbon count must be between 15 and 60.
-      2. Molecule must contain an oxygenated carbonyl group (e.g. carboxylic acid or ester).
-      3. At least one of these core motifs should be present:
-           - A cyclopentane ring (found from ring info),
-           - A polyene chain with at least three conjugated C=C bonds (using a modified SMARTS pattern),
-           - Or a phosphorus atom (indicative of phosphorylated derivatives).
-      4. If neither a cyclopentane ring nor phosphate is present then:
-            - the overall ring count should not be excessive (here, > 5 is taken as too many),
-            - and the molecular weight must be below 1000 Da.
+    Determines if a molecule is an icosanoid based on its SMILES string.
+    (Heuristics: the molecule should be derived from a C20 polyunsaturated fatty acid oxidation,
+     and may have further modifications. Thus a relaxed carbon count is used (15–60) and the molecule
+     must contain evidence of oxygenation along with either a cyclopentane ring (as found in prostaglandins)
+     or a long polyene chain of conjugated double bonds.)
     
     Args:
-        smiles (str): SMILES string of the molecule.
+        smiles (str): SMILES string of the molecule
         
     Returns:
-        bool: True if the molecule is classified as an icosanoid candidate, False otherwise.
-        str: A string detailing the reasoning behind the classification.
+        bool: True if molecule is predicted to be an icosanoid, False otherwise.
+        str: Reason for classification decision.
     """
-    # Parse SMILES
+    # Parse the SMILES string into an RDKit molecule
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-    
-    # Count carbons (atomic number 6) and check range 15-60.
-    c_count = sum(1 for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6)
-    if not (15 <= c_count <= 60):
-        return False, f"Carbon count ({c_count}) is not in the expected range (15–60)"
-    
-    # Check for an oxygenated carbonyl group.
-    # SMARTS pattern [CX3](=O)[OX2,H1] should cover carboxylic acids, esters, etc.
-    oxy_pattern = Chem.MolFromSmarts("[CX3](=O)[OX2,H1]")
-    if not mol.HasSubstructMatch(oxy_pattern):
-        return False, "No oxygenated carbonyl (e.g. carboxylic acid or ester) found"
-    
-    # Check for a phosphorus atom (atomic number 15)
-    has_phosphate = any(atom.GetAtomicNum() == 15 for atom in mol.GetAtoms())
-    
-    # Check for cyclopentane ring: Look at ring info for any ring of exactly 5 atoms.
-    ring_info = mol.GetRingInfo().AtomRings()
-    has_cyclopentane = any(len(ring) == 5 for ring in ring_info)
-    
-    # Check for a polyene chain: Use a SMARTS pattern for 3 consecutive double bonds.
-    # This pattern is written generically (without explicit stereochemical markers)
-    # so that molecules with three conjugated C=C bonds are matched.
-    polyene_pattern = Chem.MolFromSmarts("[#6]=[#6]-[#6]=[#6]-[#6]=[#6]")
-    has_polyene = mol.HasSubstructMatch(polyene_pattern)
-    
-    # Compute total number of rings
-    n_rings = rdMolDescriptors.CalcNumRings(mol)
-    
-    # Apply restrictions if neither cyclopentane nor phosphate is present.
-    if not (has_cyclopentane or has_phosphate):
-        if n_rings > 5:
-            return False, f"Too many rings present ({n_rings}) for a typical icosanoid structure without a cyclopentane or phosphate core"
-        mol_wt = rdMolDescriptors.CalcExactMolWt(mol)
-        if mol_wt > 1000:
-            return False, f"Molecular weight ({mol_wt:.1f} Da) is too high for a typical non-phosphorylated icosanoid"
-    else:
-        mol_wt = rdMolDescriptors.CalcExactMolWt(mol)
-    
-    # Decide on a core motif.
-    if has_cyclopentane:
-        core_motif = "contains a cyclopentane ring characteristic of prostaglandin cores"
-    elif has_polyene:
-        core_motif = ("contains a polyene chain indicating several conjugated double bonds typical of oxidized fatty acids")
-    elif has_phosphate:
-        core_motif = ("contains a phosphate group suggesting it is a phosphorylated icosanoid derivative")
-    else:
-        # This branch should not be reached because our filtering above would have caught this.
-        return False, "No cyclopentane ring, sufficient polyene chain, or phosphate group was detected"
-    
-    reason = (f"Carbon count {c_count} within range, oxygenated functionality present, " +
-              f"molecular weight {mol_wt:.1f} Da, and molecule {core_motif}.")
-    return True, reason
 
-# Example usage (for testing):
+    # Count carbons manually
+    c_count = sum(1 for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6)
+    # Accept an extended range up to 60 carbons to allow for esterifications/conjugations.
+    if not (15 <= c_count <= 60):
+        return False, f"Carbon count ({c_count}) is not in the expected range (15–60) for an icosanoid"
+
+    # Check for oxygenated groups. Note: many icosanoids possess carboxylic acid or ester carbonyl groups.
+    # SMARTS: any carbonyl where the oxygen is connected to H or another heavy atom (i.e. ester) 
+    oxy_pattern = Chem.MolFromSmarts("[CX3](=O)[OX2,H1]")
+    has_oxygen_feature = mol.HasSubstructMatch(oxy_pattern)
+
+    # Check for the cyclopentane ring, characteristic of prostaglandin cores.
+    cyclopentane = Chem.MolFromSmarts("C1CCCC1")
+    has_cyclopentane = mol.HasSubstructMatch(cyclopentane)
+
+    # Check for a polyene chain (at least three conjugated double bonds)
+    polyene = Chem.MolFromSmarts("C=C/C=C/C=C")
+    has_polyene = mol.HasSubstructMatch(polyene)
+
+    # If no oxygenated functional group is found then the oxidized fatty acid origin is in doubt.
+    if not has_oxygen_feature:
+        return False, "No oxygenated carbonyl (carboxylic acid, ester, or similar group) found"
+
+    # At least one of the two core motifs is expected.
+    if has_cyclopentane:
+        core_reason = "contains a cyclopentane ring characteristic of prostaglandin cores"
+    elif has_polyene:
+        core_reason = "contains a polyene chain indicating conjugated double bonds typical of oxidized fatty acids"
+    else:
+        return False, "No cyclopentane ring or sufficient polyene chain was detected"
+
+    return True, (f"Carbon count {c_count} is within range, oxygenated functionality present, and molecule {core_reason}.")
+
+# Example usage (for testing purposes):
 if __name__ == "__main__":
-    # Test using one of the known icosanoid samples: Cloprostenol
-    test_smiles = "ClC=1C=C(OC[C@H](O)\\C=C\\[C@@H]2[C@H]([C@@H](O)C[C@H]2O)C/C=C\\CCCC(O)=O)C=CC1"
-    result, explanation = is_icosanoid(test_smiles)
+    # Example SMILES: 20-hydroxyprostaglandin A1
+    smiles_example = "[C@H]1([C@H](C=CC1=O)/C=C/[C@H](CCCCCO)O)CCCCCCC(O)=O"
+    result, reason = is_icosanoid(smiles_example)
     print("Is icosanoid:", result)
-    print("Reason:", explanation)
+    print("Reason:", reason)
