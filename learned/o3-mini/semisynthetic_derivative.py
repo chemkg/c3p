@@ -3,14 +3,15 @@ Classifies: CHEBI:72588 semisynthetic derivative
 """
 #!/usr/bin/env python3
 """
-Classifies: semisynthetic derivative (any organic molecular entity derived from a natural product by partial chemical synthesis)
-Heuristic:
-  1. The molecule must be valid and contain carbon.
-  2. A Murcko scaffold is extracted; natural products (and their semisynthetic derivatives) tend to have complex ring systems.
-  3. Most natural products are stereochemically rich so the presence of chiral centers is expected.
-  4. Semisynthetic derivatives are typically modified relative to the natural core. A significant number of atoms
-     outside of the scaffold (e.g. >10% of the total heavy atoms) is taken as tentative evidence of a modification.
-Note that this function uses several heuristic rules that will not catch all cases.
+Classifies: semisynthetic derivative 
+Definition: Any organic molecular entity derived from a natural product by partial chemical synthesis
+
+Improvements over the previous heuristic:
+  • Require at least 2 rings, but if the ring system is very complex, lack of chiral centers is less penalized.
+  • Adjust the minimal required side-chain modifications (atoms outside the Murcko scaffold) dynamically 
+    based on the overall heavy atom count.
+  • Enforce a minimum heavy atom count.
+Note: This heuristic uses several rules that will not catch all edge cases.
 """
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
@@ -28,48 +29,62 @@ def is_semisynthetic_derivative(smiles: str):
         bool: True if molecule is (likely) a semisynthetic derivative, False otherwise.
         str: Reason for classification.
     """
-    # Parse SMILES string
+    # Parse and check SMILES
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Check if molecule is organic (has carbon atoms)
+    # Ensure molecule is organic (has carbon atoms) and has enough heavy atoms
     if not any(atom.GetAtomicNum() == 6 for atom in mol.GetAtoms()):
         return False, "Molecule does not appear to be organic (no carbon atoms detected)"
-    
-    # Extract the Murcko scaffold; natural products often have complex polycyclic cores.
-    scaffold = MurckoScaffold.GetScaffoldForMol(mol)
-    
-    # Calculate the number of heavy atoms (non-hydrogen) in full molecule and its scaffold.
     mol_heavy = rdMolDescriptors.CalcNumHeavyAtoms(mol)
+    if mol_heavy < 15:
+        return False, "Molecule has too few heavy atoms to be a typical natural product derivative"
+    
+    # Extract Murcko scaffold as a proxy for the natural product core
+    scaffold = MurckoScaffold.GetScaffoldForMol(mol)
     scaffold_heavy = rdMolDescriptors.CalcNumHeavyAtoms(scaffold)
     side_chain_atoms = mol_heavy - scaffold_heavy
+    # Use a dynamic threshold: for smaller molecules require ~10% modification;
+    # for larger molecules (>40 heavy atoms) allow a lower ratio (5%)
+    modification_threshold = 0.10 if mol_heavy < 40 else 0.05
     side_chain_ratio = side_chain_atoms / mol_heavy if mol_heavy > 0 else 0
+
+    # Count ring systems (overall molecule ring count)
+    ring_info = mol.GetRingInfo()
+    mol_ring_count = ring_info.NumRings()
     
-    # Count rings in the full molecule (complex cores typically have several rings)
-    mol_ring_count = mol.GetRingInfo().NumRings()
-    
-    # Count chiral centers (found via '@' symbols in SMILES); most natural products are stereochemically complex.
+    # Count chiral centers
     chiral_centers = Chem.FindMolChiralCenters(mol, includeUnassigned=True)
     num_chiral = len(chiral_centers)
     
-    # Heuristic checks:
-    # 1. The molecule should have a significant ring system (at least 2 rings is a minimal requirement).
-    # 2. It should have one or more chiral centers.
-    # 3. There should be a significant amount of substitution/modification relative to the core;
-    #    here we check if at least 10% of heavy atoms lie outside the scaffold.
     reasons = []
+    # Rule 1. Check for complex ring system.
     if mol_ring_count < 2:
         reasons.append("Insufficient ring complexity (fewer than 2 rings), which is unusual for natural product cores")
-    if num_chiral == 0:
-        reasons.append("No chiral centers detected, while natural products are typically stereochemically complex")
-    if side_chain_ratio < 0.10:
-        reasons.append("Only minimal modifications detected outside the core scaffold (side chain ratio < 10%)")
     
-    # If any heuristic is not met, we assume it is not a semisynthetic derivative.
+    # Rule 2. Check stereochemical complexity: if the molecule has only 1 or 2 rings,
+    # then require at least one chiral center. For more complex ring systems, allow a low chiral count.
+    if mol_ring_count < 3 and num_chiral == 0:
+        reasons.append("No chiral centers detected in a low-ring-count system; natural products are usually stereochemically complex")
+    
+    # Rule 3. Check that a reasonable fraction of atoms lie outside the scaffold.
+    if side_chain_ratio < modification_threshold:
+        reasons.append("Only minimal modifications detected outside the core scaffold "
+                       f"(side chain ratio {side_chain_ratio:.2f} is below the threshold of {modification_threshold:.2f})")
+    
+    # If any heuristic is violated, label as not semisynthetic derivative.
     if reasons:
         return False, "; ".join(reasons)
     
-    # If all checks are met, we tentatively classify the molecule as a semisynthetic derivative.
-    return True, ("Molecule has a complex polycyclic scaffold with stereocenters and a significant proportion of extra atoms "
-                  "indicating modifications to a natural product core; this is consistent with a semisynthetic derivative.")
+    # Otherwise, classify as semisynthetic derivative.
+    return True, ("Molecule has a sufficiently complex ring system and (if needed) chiral centers, "
+                  f"with {side_chain_ratio:.2f} of its heavy atoms in modifications; "
+                  "this is consistent with a semisynthetic derivative derived from a natural product core.")
+
+# Example usage:
+if __name__ == "__main__":
+    # You may test the function with one of the provided SMILES strings.
+    test_smiles = "COc1cc2[nH]c3c(C)nccc3c2cc1Br"  # 6-bromoharmine (previously missed due to no chiral centers)
+    result, explanation = is_semisynthetic_derivative(test_smiles)
+    print(f"Result: {result}\nExplanation: {explanation}")
