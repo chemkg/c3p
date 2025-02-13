@@ -4,10 +4,14 @@ Classifies: CHEBI:35627 beta-lactam
 """
 Classifies: Beta-lactam
 A beta-lactam is defined as a lactam in which the amide bond is contained 
-within a four-membered ring. In this context the ring should contain exactly
-one nitrogen and three carbons, and one of those carbons (the carbonyl carbon)
-must be bonded to a nitrogen (inside the ring) while also bearing an exocyclic
-carbonyl (C=O) group. This improved approach is aimed at reducing false positives.
+within a four-membered ring. In our approach the ring must contain exactly
+one nitrogen and three carbons. Moreover, one of the carbon atoms in the ring 
+(the “beta‐lactam carbonyl”) must:
+   - be connected within the ring to a nitrogen,
+   - possess an exocyclic double bond to an oxygen atom (i.e. the oxygen is not part 
+     of the ring), and
+   - have a total degree of 3 (ensuring that it is not decorated with extra substituents).
+This extra check is intended to reduce false positive classifications.
 """
 
 from rdkit import Chem
@@ -16,11 +20,13 @@ def is_beta_lactam(smiles: str):
     """
     Determines if a molecule is a beta-lactam based on its SMILES string.
     
-    A beta-lactam must contain a four-membered ring composed exactly of one 
-    nitrogen and three carbons. In this ring, at least one of the carbon atoms 
-    (the carbonyl carbon) must:
-       - be directly bonded to a nitrogen atom (within the ring) and 
-       - have an external double bond to an oxygen (i.e. an exocyclic carbonyl group)
+    A beta-lactam must contain at least one four-membered ring consisting
+    of exactly one nitrogen and three carbons. In that ring one carbon (the 
+    beta-lactam carbonyl) must:
+       (a) be bonded inside the ring to a nitrogen atom and a carbon atom,
+       (b) have an exocyclic double bond to an oxygen atom (the oxygen not in 
+           the ring), and
+       (c) have a total degree (number of bonded neighbors) equal to 3.
     
     Args:
         smiles (str): SMILES string of the molecule.
@@ -29,86 +35,82 @@ def is_beta_lactam(smiles: str):
         bool: True if the molecule is classified as beta-lactam, False otherwise.
         str: Reason for the classification.
     """
-    # Parse SMILES and check if valid.
+    # Parse the SMILES string.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # If the molecule consists of multiple fragments, check each one.
+    # Many molecules contain more than one fragment. Process each fragment.
     frags = Chem.GetMolFrags(mol, asMols=True)
     if not frags:
         frags = [mol]
     
-    # Iterate over each fragment.
+    # Loop over each fragment.
     for frag in frags:
-        # It is often useful to try kekulization to make double bonds explicit.
+        # Attempt kekulization so that bond orders (especially double bonds) are explicit.
         try:
             Chem.Kekulize(frag, clearAromaticFlags=True)
         except Exception:
             pass
-        
+            
         ring_info = frag.GetRingInfo()
-        atom_rings = ring_info.AtomRings()
-        
-        # Loop over each detected ring.
-        for ring in atom_rings:
+        # Iterate over all rings.
+        for ring in ring_info.AtomRings():
             if len(ring) != 4:
-                continue  # only interested in 4-membered rings
-            # Get atoms in ring.
+                continue  # we are only interested in 4-membered rings
+            
+            # Get the atoms in the ring.
             atoms_in_ring = [frag.GetAtomWithIdx(idx) for idx in ring]
             # Count nitrogen and carbon atoms.
             n_count = sum(1 for atom in atoms_in_ring if atom.GetAtomicNum() == 7)
             c_count = sum(1 for atom in atoms_in_ring if atom.GetAtomicNum() == 6)
             if n_count != 1 or c_count != 3:
-                continue  # does not match beta-lactam ring composition
+                continue  # the ring composition does not match a beta-lactam
             
-            # Now look for a carbon atom in the ring that meets our criteria:
-            # (a) It is bound inside the ring to a nitrogen atom.
-            # (b) It has a double bond to an oxygen that is not part of the ring.
+            # For each carbon in the ring, check if it can be the beta-lactam carbonyl.
             for idx in ring:
                 atom = frag.GetAtomWithIdx(idx)
-                if atom.GetAtomicNum() != 6:  # consider only carbon atoms
+                if atom.GetAtomicNum() != 6:
+                    continue  # only consider carbon atoms
+                
+                # Check that this carbon has a ring neighbor that is nitrogen.
+                ring_nitrogen_found = False
+                ring_neighbors = [nbr.GetIdx() for nbr in atom.GetNeighbors() if nbr.GetIdx() in ring]
+                for nbr in atom.GetNeighbors():
+                    if nbr.GetIdx() in ring and nbr.GetAtomicNum() == 7:
+                        ring_nitrogen_found = True
+                        break
+                if not ring_nitrogen_found:
+                    continue  # this carbon is not directly bonded to the ring nitrogen
+                
+                # Now check for an exocyclic double bond to an oxygen.
+                # Also, verify that the carbon's degree is exactly 3 
+                # (i.e. it has no extra substituents beyond the ring and the carbonyl oxygen).
+                if atom.GetDegree() != 3:
                     continue
                 
-                # Check that at least one neighbor within the ring is the nitrogen.
-                neighbors = atom.GetNeighbors()
-                has_ring_nitrogen = False
-                for nbr in neighbors:
-                    if nbr.GetIdx() in ring and nbr.GetAtomicNum() == 7:
-                        has_ring_nitrogen = True
-                        break
-                if not has_ring_nitrogen:
-                    continue  # this carbon is not connected to a ring nitrogen
-                
-                # Now look for a double bond to oxygen on this carbon
-                carbonyl_found = False
+                exocyclic_oxygens = []
                 for bond in atom.GetBonds():
-                    # We require a double bond.
-                    if bond.GetBondType() != Chem.BondType.DOUBLE:
-                        continue
-                    # Get the neighbor bonded by the double bond.
+                    # Skip bonds to atoms that are in the ring.
                     nbr = bond.GetOtherAtom(atom)
-                    # Check that it is oxygen.
-                    if nbr.GetAtomicNum() != 8:
-                        continue
-                    # and ensure that the oxygen atom is outside the ring.
                     if nbr.GetIdx() in ring:
                         continue
-                    # If all conditions hold, then we consider this carbon as the beta-lactam carbonyl.
-                    carbonyl_found = True
-                    break
-                
-                # If we found such a carbon atom, then we have a valid beta-lactam ring.
-                if carbonyl_found:
+                    # We require the bond to be a double bond.
+                    if bond.GetBondType() != Chem.BondType.DOUBLE:
+                        continue
+                    # Check that the neighbor is an oxygen.
+                    if nbr.GetAtomicNum() == 8:
+                        exocyclic_oxygens.append(nbr)
+                # If we found at least one double-bonded exocyclic oxygen, return True.
+                if exocyclic_oxygens:
                     return True, ("Found beta-lactam ring: a 4-membered ring with exactly one nitrogen and three carbons, "
-                                  "in which a carbon (bonded to an in‐ring nitrogen) bears an exocyclic carbonyl group")
-                    
-    # If no valid beta-lactam ring was discovered:
-    return False, "No beta-lactam ring (4-membered lactam with one N and three C having an external carbonyl) found"
+                                  "where a carbon (bonded to an in‐ring nitrogen) bears an exocyclic carbonyl group "
+                                  "and shows no extra substituents (degree 3)")
+    return False, "No beta-lactam ring (4-membered lactam with one N and three C having the correct carbonyl) found"
 
-# Example usage:
+# Example usage (for testing):
 if __name__ == "__main__":
-    # Test with oxacillin(1-) SMILES (should be True)
+    # Using oxacillin(1-) as a test (should be classified as beta-lactam):
     test_smiles = "[H][C@]12SC(C)(C)[C@@H](N1C(=O)[C@H]2NC(=O)c1c(C)onc1-c1ccccc1)C([O-])=O"
     result, reason = is_beta_lactam(test_smiles)
     print("Result:", result)
