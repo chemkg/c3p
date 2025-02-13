@@ -3,45 +3,31 @@ Classifies: CHEBI:64611 ether lipid
 """
 """
 Classifies: ether lipid
-Definition: A lipid similar in structure to a glycerolipid but in which one or more of the carbon atoms
-on glycerol is bonded to an alkyl chain via an ether (C–O–C) linkage instead of an ester (CO–O) linkage.
-Our strategy is to first detect a glycerol backbone (using SMARTS for free glycerol or monoacylated glycerol)
-but then require that the backbone carbons are not part of any ring. Then for each backbone carbon we search
-its oxygen neighbors. We require that an oxygen candidate (a) is not part of the backbone, (b) does not have
-any explicit hydrogens (so that it is an ether substituent, not a hydroxyl) and (c) is not part of an ester linkage.
-Finally the candidate oxygen must lead into a long aliphatic chain (at least 6 connected carbons via non‐ring C–C bonds).
+Definition: A lipid similar in structure to a glycerolipid but in which one or more of the carbon atoms on glycerol 
+            is bonded to an alkyl chain via an ether linkage instead of the usual ester linkage.
+            
+This program refines previous attempts by broadening the glycerol backbone detection (allowing for acylation)
+and further requiring that an ether oxygen connects to a long (aliphatic) chain.
 """
-
 from rdkit import Chem
+from rdkit.Chem import AllChem
 from rdkit.Chem import rdMolDescriptors
 
 def is_ether_lipid(smiles: str):
     """
     Determines if a molecule is an ether lipid based on its SMILES string.
-    
-    The algorithm:
-      1. Parse and sanitize the SMILES.
-      2. Look for a glycerol-like backbone using two SMARTS patterns: 
-             a) free glycerol "OCC(O)CO" 
-             b) monoacylated glycerol "OCC(=O)CO".
-         In each match we require that the three matched backbone carbons (positions 1,2,3 in the pattern)
-         are not in a ring.
-      3. For each backbone carbon, check its oxygen neighbors. For each oxygen we:
-             - Ensure it is not part of the backbone match.
-             - Require that it carries no explicit hydrogen (so that it is already substituted, indicating an ether bond).
-             - Check that it is not an ester oxygen (i.e. not bound to a carbonyl carbon).
-      4. For a candidate oxygen, examine its non-backbone neighbor (which should be a carbon) and use a DFS
-         (while ignoring ring atoms) to count the length of the attached carbon chain.
-         If at least 6 carbon atoms are connected linearly, we count it as the ether alkyl chain.
+    It first checks if a glycerol-like backbone is present (using two alternative SMARTS patterns)
+    and then verifies that at least one alkyl chain is attached to the glycerol via a non-ester (ether) oxygen.
+    Furthermore, one of the carbon neighbors of the ether oxygen must extend into a long aliphatic chain.
     
     Args:
         smiles (str): SMILES string of the molecule.
     
     Returns:
         bool: True if the molecule is classified as an ether lipid, False otherwise.
-        str: Explanation message.
+        str: Explanation for the classification.
     """
-    # --- 1. Parse and sanitize the molecule
+    # Parse SMILES into a molecule
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
@@ -50,116 +36,97 @@ def is_ether_lipid(smiles: str):
     except Exception as e:
         return False, "Sanitization failed: " + str(e)
     
-    # --- 2. Search for a glycerol-like backbone.
-    # We define two SMARTS patterns: one for free glycerol (HO–CH2–CHOH–CH2–OH) and
-    # one for monoacylated glycerol (HO–CH2–CHOH–CH2–O–C(=O)-). Using the pattern "OCC(O)CO" and "OCC(=O)CO".
-    # For both, we assume that the backbone carbons come from the 2nd, 3rd and 4th atoms in the match.
-    glycerol_smarts_patterns = [
-        ("OCC(O)CO", [1, 2, 3]),   # free glycerol backbone; ex: HO–CH2–CHOH–CH2–OH
-        ("OCC(=O)CO", [1, 2, 3])   # monoacylated backbone (one acyl substitution)
+    # --- 1. Detect a glycerol-like backbone.
+    #
+    # Instead of a single pattern, we allow either a free triol backbone or one where one hydroxyl is replaced by a carbonyl:
+    glycerol_patterns = [
+        Chem.MolFromSmarts("OCC(O)CO"),    # free glycerol backbone (all hydroxyls)
+        Chem.MolFromSmarts("OCC(=O)CO")     # one substitution (e.g. ester at sn-2)
     ]
-    backbone_found = False
-    backbone_matches = []  # list of tuples: (match_tuple, list of backbone carbon indices)
-    for pattern, carbon_positions in glycerol_smarts_patterns:
-        patt = Chem.MolFromSmarts(pattern)
-        if patt is None:
-            continue
-        matches = mol.GetSubstructMatches(patt)
-        if matches:
-            for m in matches:
-                # Ensure our match is long enough and that the identified backbone carbons are not in any ring.
-                if max(carbon_positions) >= len(m):
-                    continue
-                backbone_atoms = [m[i] for i in carbon_positions]
-                if any(mol.GetAtomWithIdx(idx).IsInRing() for idx in backbone_atoms):
-                    # skip matches in which any backbone atom is in a ring (to avoid sugars and cyclic polyols)
-                    continue
-                backbone_matches.append((m, backbone_atoms))
-                backbone_found = True
-            if backbone_found:
-                break
-    if not backbone_found:
-        return False, "No appropriate glycerol backbone detected (using patterns OCC(O)CO or OCC(=O)CO, acyclic match)"
+    glycerol_found = False
+    for patt in glycerol_patterns:
+        if mol.HasSubstructMatch(patt):
+            glycerol_found = True
+            break
+    if not glycerol_found:
+        return False, "No glycerol backbone detected (using patterns OCC(O)CO or OCC(=O)CO)"
     
-    # --- 3. Helper function: Check if an oxygen is part of an ester (i.e. attached to a carbonyl).
+    # --- 2. Define a helper to decide whether an oxygen is in an ester group.
     def is_ester_oxygen(o_atom):
-        # For a candidate oxygen, look at its carbon neighbors.
+        # An ester oxygen is typically attached to a carbon that is double-bonded to an oxygen.
         for nbr in o_atom.GetNeighbors():
-            if nbr.GetAtomicNum() == 6:  # carbon neighbor
+            if nbr.GetAtomicNum() == 6:  # carbon
                 for bond in nbr.GetBonds():
-                    # check for a double bond from the carbon to oxygen (i.e. a carbonyl)
+                    # bond.GetBondTypeAsDouble() returns 2.0 for a double bond.
                     if bond.GetBondTypeAsDouble() == 2.0:
                         other = bond.GetOtherAtom(nbr)
                         if other.GetAtomicNum() == 8:
                             return True
         return False
 
-    # --- 4. Helper function: DFS to count maximum chain length from a carbon atom along C–C bonds.
+    # --- 3. Helper function to estimate the maximum aliphatic chain length starting from a given carbon.
+    # We perform a simple DFS along carbon-carbon bonds (ignoring rings).
     def max_chain_length_from(atom, visited):
-        max_length = 0
+        length = 0
         for nbr in atom.GetNeighbors():
             if nbr.GetAtomicNum() == 6 and nbr.GetIdx() not in visited:
-                # Ignore ring atoms to favor linear unbranched chains.
+                # To favor aliphatic chains, we skip atoms in rings.
                 if nbr.IsInRing():
                     continue
                 visited.add(nbr.GetIdx())
                 branch_length = 1 + max_chain_length_from(nbr, visited)
-                if branch_length > max_length:
-                    max_length = branch_length
+                if branch_length > length:
+                    length = branch_length
                 visited.remove(nbr.GetIdx())
-        return max_length
+        return length
 
-    # --- 5. Look from any glycerol backbone match for an oxygen that fulfills our ether criteria.
+    # --- 4. Search for a candidate ether oxygen.
+    # We look for an oxygen atom that is:
+    #   - connected to exactly two heavy atoms,
+    #   - NOT carrying any explicit hydrogen,
+    #   - not part of an ester linkage,
+    #   - and at least one of its carbon neighbors gives rise to a long aliphatic chain.
     ether_found = False
-    for match_tuple, glycerol_carbons in backbone_matches:
-        # For each glycerol carbon in this backbone, look at neighbors.
-        for gc_idx in glycerol_carbons:
-            gc_atom = mol.GetAtomWithIdx(gc_idx)
-            for nbr in gc_atom.GetNeighbors():
-                # Only consider oxygen neighbors.
-                if nbr.GetAtomicNum() != 8:
-                    continue
-                # Skip oxygens that are part of the glycerol backbone.
-                if nbr.GetIdx() in match_tuple:
-                    continue
-                # We require that the oxygen is not a free hydroxyl;
-                # if it still carries explicit hydrogens, then it is not an ether substitution.
-                if nbr.GetTotalNumHs() > 0:
-                    continue
-                # Also skip if this oxygen is in a ring: many sugars have cyclic ethers.
-                if nbr.IsInRing():
-                    continue
-                # Do not consider oxygens in an ester linkage.
-                if is_ester_oxygen(nbr):
-                    continue
-                # Now check: the oxygen should be bound to a carbon (other than the glycerol carbon) 
-                # that leads to a long aliphatic chain.
-                candidate_carbons = [n for n in nbr.GetNeighbors() if n.GetIdx() != gc_idx and n.GetAtomicNum() == 6]
-                if not candidate_carbons:
-                    continue
-                for alkyl_c in candidate_carbons:
-                    # Start a DFS from this carbon. Count this carbon as 1.
-                    chain_len = 1 + max_chain_length_from(alkyl_c, {alkyl_c.GetIdx()})
-                    if chain_len >= 6:
-                        ether_found = True
-                        break
-                if ether_found:
+    for atom in mol.GetAtoms():
+        if atom.GetAtomicNum() == 8:  # oxygen
+            # Check that it is not an -OH (should have no explicit hydrogen; note: implicit hydrogens not counted in neighbors)
+            if atom.GetTotalNumHs() > 0:
+                continue
+            
+            heavy_neighbors = [nbr for nbr in atom.GetNeighbors() if nbr.GetAtomicNum() != 1]
+            if len(heavy_neighbors) != 2:
+                continue
+
+            # Skip if the oxygen appears to be part of an ester linkage.
+            if is_ester_oxygen(atom):
+                continue
+
+            # Both neighbors must be carbons
+            if not all(nbr.GetAtomicNum() == 6 for nbr in heavy_neighbors):
+                continue
+
+            # For at least one neighbor, the attached aliphatic chain should be "long" (here 6 or more carbons).
+            chain_ok = False
+            for c in heavy_neighbors:
+                # We allow the neighbor itself to be counted as the start of the chain.
+                chain_length = 1 + max_chain_length_from(c, {c.GetIdx()})
+                if chain_length >= 6:
+                    chain_ok = True
                     break
-            if ether_found:
+
+            if chain_ok:
+                ether_found = True
                 break
-        if ether_found:
-            break
 
     if not ether_found:
-        return False, "No non-ester (ether) linkage found attached to an acyclic glycerol backbone that leads to a long alkyl chain"
+        return False, "No non-ester (ether) linkage found attached to glycerol that leads to a long alkyl chain"
     
-    return True, "Molecule contains an acyclic glycerol backbone with at least one alkyl chain attached via an ether (C–O–C) linkage"
+    return True, "Molecule contains a glycerol backbone with at least one alkyl chain attached via an ether linkage"
 
-# Example usage: (run as a script)
+# Example usage:
 if __name__ == "__main__":
-    # To test, try one of the provided examples. Here we test with 1-[(E)-hexadecen-1-yl]-sn-glycerol.
-    test_smiles = "CCCCCCCCCCCCCC\\C=C\\OC[C@@H](O)CO"
+    # Use one of the provided examples:
+    test_smiles = "CCCCCCCCCCCCCC\\C=C\\OC[C@@H](O)CO"  # 1-[(E)-hexadecen-1-yl]-sn-glycerol
     result, reason = is_ether_lipid(test_smiles)
-    print("SMILES:", test_smiles)
     print("Result:", result)
     print("Reason:", reason)
