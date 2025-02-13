@@ -5,18 +5,18 @@ Classifies: CHEBI:46874 alpha-amino acid ester
 """
 Classifies: alpha-amino acid ester
 Definition:
-  "The amino acid ester derivative obtained the formal condensation of an alpha‐amino acid with an alcohol."
+  "The amino acid ester derivative obtained by the formal condensation of an alpha‐amino acid with an alcohol."
+
+Our improved strategy:
+  • Iterate over candidate carbons (sp3) that have at least one hydrogen (thus allowing CH and CH2 centers).
+  • For each candidate, check that it is directly bonded to at least one nitrogen that carries at least one hydrogen.
+  • Also require that the candidate is bonded to a carbonyl carbon that is part of an ester: 
+    the carbonyl carbon must have (i) at least one oxygen in a double bond (C=O) and (ii) at least one oxygen in a single bond
+    (O–R) that carries no hydrogen.
+  • If such a motif exists, we return True along with the candidate atom index.
   
-Our strategy is not to rely solely on a single SMARTS string because the desired fragment
-(CH(NH2)–C(=O)O–R) can be hidden in complex connectivity. Instead, we loop over candidate “alpha carbons”
-and verify that:
-  (1) The candidate alpha carbon is sp3 and has a single hydrogen (which is typical for an α‐carbon).
-  (2) It is bonded to a nitrogen (which should have at least one hydrogen).
-  (3) It is bonded to a carbonyl carbon that is esterified. For the carbonyl,
-      we find at least one oxygen bonded by a double bond (the C=O) and one oxygen
-      bonded by a single bond that does not carry a hydrogen (the O–R part).
-      
-If such a motif is found we classify the molecule as an alpha–amino acid ester.
+This version is designed to reduce false negatives (by allowing CH2 in glycine derivatives)
+and false positives (by strictly verifying the ester carbonyl fragment).
 """
 
 from rdkit import Chem
@@ -26,12 +26,13 @@ def is_alpha_amino_acid_ester(smiles: str):
     """
     Determines if a molecule is an alpha-amino acid ester based on its SMILES string.
 
-    The function searches for a fragment corresponding to:
-      H‐C*(N–H)–C(=O)O–R 
-    where the alpha carbon (C*) is an sp3 carbon with one hydrogen, it is bonded to a nitrogen (with at least one H),
-    and it is bonded to a carbonyl carbon that (i) displays a double-bonded oxygen and (ii) is esterified 
-    (i.e. bonded by a single bond to an oxygen which does not have a hydrogen attached).
-
+    The function searches for a fragment corresponding roughly to:
+      Hx–C*(N–H)–C(=O)O–R 
+    where the alpha carbon (C*) is an sp3 carbon with at least one hydrogen,
+    is bonded to at least one nitrogen (with at least one hydrogen), and is bonded to
+    a carbonyl carbon that has a double-bonded oxygen and is esterified with a single-bonded oxygen
+    (which should not carry any hydrogen).
+    
     Args:
         smiles (str): SMILES string of the molecule
 
@@ -42,60 +43,58 @@ def is_alpha_amino_acid_ester(smiles: str):
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-        
-    # Loop over atoms to search for a candidate alpha carbon
+    
+    # Loop over atoms to search for candidate alpha carbon
     for atom in mol.GetAtoms():
-        # Check if the atom is a carbon and is sp3
+        # Must be a carbon and sp3 hybridized
         if atom.GetAtomicNum() != 6:
             continue
         if atom.GetHybridization() != rdchem.HybridizationType.SP3:
             continue
-        # Check that the candidate alpha carbon has exactly one (implicit or explicit) hydrogen
-        # Note: GetTotalNumHs() returns both implicit and explicit hydrogens.
-        if atom.GetTotalNumHs() != 1:
+        # Candidate alpha carbon should have at least one hydrogen (allows CH or CH2)
+        if atom.GetTotalNumHs() < 1:
             continue
-
+        
         neighbors = atom.GetNeighbors()
+        # We require at least 2 neighbors: one for the amino group and one for the carbonyl carbon.
         if len(neighbors) < 2:
-            continue  # need at least one neighbor for amino and one for carbonyl
-
-        # Flags to indicate we found the required neighbors
+            continue  
+        
         has_amino = False
         has_ester_carbonyl = False
 
-        # Look among neighbors for an amino group and an esterified carbonyl
+        # Check all neighboring atoms
         for nbr in neighbors:
-            # Check for amino neighbor: must be a nitrogen with at least one hydrogen
+            # Check for amino neighbor: must be nitrogen and carry at least one hydrogen.
             if nbr.GetAtomicNum() == 7:
                 if nbr.GetTotalNumHs() >= 1:
                     has_amino = True
 
-            # Check for carbonyl neighbor: is carbon and not the alpha carbon
+            # Check for a possible carbonyl group: a carbon not equal to our alpha candidate.
             if nbr.GetAtomicNum() == 6:
-                # Look for double-bonded oxygen (C=O) and also an oxygen that is single-bonded (esterified part)
-                double_oxygens = 0
-                single_oxygens = 0
-                for subnbr in nbr.GetNeighbors():
-                    # Skip the connection back to the candidate alpha carbon
-                    if subnbr.GetIdx() == atom.GetIdx():
+                # For safety, ensure we don't re-read hydrogens that are implicit/explicit issues.
+                # Look for oxygen neighbors of this carbon (nbr) that define the ester function.
+                doubleBondOxygens = 0
+                singleBondOxygens = 0
+                for oxy in nbr.GetNeighbors():
+                    # Skip connection back to candidate alpha carbon.
+                    if oxy.GetIdx() == atom.GetIdx():
                         continue
-                    # Check if neighbor is oxygen
-                    if subnbr.GetAtomicNum() == 8:
-                        bond = mol.GetBondBetweenAtoms(nbr.GetIdx(), subnbr.GetIdx())
-                        # Count based on bond type: double for C=O and single for the ester oxygen
-                        if bond is not None:
-                            if bond.GetBondType() == rdchem.BondType.DOUBLE:
-                                double_oxygens += 1
-                            elif bond.GetBondType() == rdchem.BondType.SINGLE:
-                                # For the ester oxygen we require that it is not carrying a hydrogen,
-                                # which is typical for an alkoxy group.
-                                if subnbr.GetTotalNumHs() == 0:
-                                    single_oxygens += 1
-                # A proper carbonyl in an ester should have at least one double-bonded oxygen
-                # and one single-bonded oxygen (making the ester function).
-                if double_oxygens >= 1 and single_oxygens >= 1:
+                    if oxy.GetAtomicNum() == 8:
+                        bond = mol.GetBondBetweenAtoms(nbr.GetIdx(), oxy.GetIdx())
+                        if bond is None:
+                            continue
+                        if bond.GetBondType() == rdchem.BondType.DOUBLE:
+                            doubleBondOxygens += 1
+                        elif bond.GetBondType() == rdchem.BondType.SINGLE:
+                            # Expect the ester oxygen to be alkoxy, i.e. usually no hydrogen.
+                            if oxy.GetTotalNumHs() == 0:
+                                singleBondOxygens += 1
+                # For an ester carbonyl we need at least one C=O and at least one O–R.
+                if doubleBondOxygens >= 1 and singleBondOxygens >= 1:
                     has_ester_carbonyl = True
 
+        # If both required neighbors are found, we assume the alpha-amino acid ester motif exists.
         if has_amino and has_ester_carbonyl:
             return True, "Molecule contains an alpha-amino acid ester motif (via candidate alpha carbon index %d)" % atom.GetIdx()
             
