@@ -4,100 +4,112 @@ Classifies: CHEBI:28966 chlorophyll
 #!/usr/bin/env python3
 """
 Classifies: Chlorophyll – magnesium porphyrins with an extra (fifth) ring and a long phytol chain.
-Improved criteria:
-  1. Molecule must have a non‐negative net formal charge.
-  2. Contains at least one magnesium (Mg).
-  3. At least one Mg must be “coordinated” to ring nitrogen atoms; we now accept a shortest path length ≤3 
-     (instead of ≤2) for counting nearby ring-N atoms, and require at least 3.
-  4. The molecule must contain at least 5 rings.
-  5. The molecule must include a long acyclic alkyl chain representing the phytol side chain. 
-     We use a SMARTS pattern that allows any bond type between 8 connected, non‐ring C atoms.
+Criteria used are:
+  1. The molecule must have a magnesium atom.
+  2. At least one Mg should be coordinated to at least 3 nitrogen atoms that lie in rings 
+     (a relaxed proxy for a porphyrin macrocycle).
+  3. The molecule must contain at least 5 rings (the porphyrin system [nominally 4 rings] plus one extra ring).
+  4. The molecule must have a long, acyclic alkyl chain (at least 8 connected non‐ring carbon atoms)
+     that represents the phytol side chain.
+  5. In order to avoid mis‐classifying ionic derivatives (e.g. “chlorophyll a(1-)”), we reject molecules 
+     with net negative charge.
 """
-
 from rdkit import Chem
-from rdkit.Chem import rdmolops
+from rdkit.Chem import rdMolDescriptors
 
 def is_chlorophyll(smiles: str):
     """
     Determines if a molecule belongs to the chlorophyll family based on its SMILES string.
-    
-    Criteria applied:
-      - Molecule must not be an anion (net formal charge >= 0).
-      - Contains at least one magnesium (Mg).
-      - At least one Mg has at least 3 ring nitrogen atoms (as determined by a shortest-path 
-        distance ≤ 3, to allow for nonstandard depictions of the porphyrin core).
-      - The molecule has at least 5 rings (e.g. the four pyrrole-like rings plus an extra ring).
-      - Contains a long acyclic alkyl chain (phytol side chain). We search for 8 connected 
-        non‐ring carbons using a SMARTS pattern that accepts any bond type (~).
-    
+
+    The criteria are:
+        - Contains a magnesium atom.
+        - At least one magnesium atom is coordinated to at least 3 nitrogen atoms that are part
+          of rings (serving as a proxy for the porphyrin core).
+        - The molecule has at least 5 rings (porphyrin core plus an extra “fifth” ring).
+        - It possesses a long acyclic alkyl chain (a chain of at least 8 non‐ring carbons) representing
+          the phytol side chain.
+        - The overall molecule must not be an anion.
+
     Args:
         smiles (str): SMILES string of the molecule.
-    
+
     Returns:
         bool: True if the molecule meets the chlorophyll criteria, False otherwise.
         str: Explanation of the classification outcome.
     """
-    # Parse the molecule from the SMILES string
+    # Parse the SMILES string.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Sanitize the molecule to catch valence or kekulization issues
-    try:
-        Chem.SanitizeMol(mol)
-    except Exception as e:
-        return False, f"Sanitization failed: {e}"
-    
-    # 1. Check that the molecule is not an anion (net formal charge < 0)
+    # Reject if the overall molecule has a net negative charge.
     net_charge = Chem.GetFormalCharge(mol)
     if net_charge < 0:
         return False, f"Molecule has net charge {net_charge}; likely a negatively charged derivative."
-    
-    # 2. Check for the presence of magnesium
+
+    # 1. Check for the presence of magnesium.
     mg_atoms = [atom for atom in mol.GetAtoms() if atom.GetSymbol() == "Mg"]
     if not mg_atoms:
         return False, "No magnesium present: not a magnesium porphyrin"
     
-    # 3. For each Mg, check if there are at least 3 ring nitrogen atoms within a shortest-path length ≤ 3.
-    mg_has_core = False
+    # 2. Check that at least one Mg is coordinated to at least 3 nitrogen atoms that are in rings.
+    mg_in_porhyrin = False
     for mg in mg_atoms:
-        mg_idx = mg.GetIdx()
-        count_ring_N = 0
-        for atom in mol.GetAtoms():
-            # Consider only nitrogen atoms that are in a ring
-            if atom.GetSymbol() == "N" and atom.IsInRing():
-                try:
-                    path = rdmolops.GetShortestPath(mol, mg_idx, atom.GetIdx())
-                except Exception:
-                    continue
-                # path length is number of bonds: len(path)-1
-                if 0 < (len(path) - 1) <= 3:
-                    count_ring_N += 1
-        if count_ring_N >= 3:
-            mg_has_core = True
+        # Get neighbors that are nitrogen and are in a ring.
+        n_neighbors = [nbr for nbr in mg.GetNeighbors() if nbr.GetSymbol() == "N" and nbr.IsInRing()]
+        if len(n_neighbors) >= 3:
+            mg_in_porhyrin = True
             break
-    if not mg_has_core:
-        return False, "Magnesium center not bound (directly or within 3 bonds) to at least 3 ring-nitrogen atoms (porphyrin core missing)"
+    if not mg_in_porhyrin:
+        return False, "Magnesium center not bound to at least 3 ring-nitrogen atoms (porphyrin core missing)"
     
-    # 4. Check that there are at least 5 rings (using RDKit's ring information)
+    # 3. Count the total number of rings in the molecule.
     ring_info = mol.GetRingInfo()
     rings = ring_info.AtomRings()
     if len(rings) < 5:
-        return False, f"Only {len(rings)} rings were found; expected at least 5 (four for the porphyrin core plus one extra ring)"
-    
-    # 5. Look for a long acyclic alkyl chain representing the phytol side chain.
-    # The previous pattern used '-' (single bond) but here we use '~' to accept any bond type.
-    # This pattern matches 8 connected non‐ring carbons.
-    long_chain_smarts = "[#6;!r]~[#6;!r]~[#6;!r]~[#6;!r]~[#6;!r]~[#6;!r]~[#6;!r]~[#6;!r]"
-    chain_pattern = Chem.MolFromSmarts(long_chain_smarts)
-    if not mol.HasSubstructMatch(chain_pattern):
-        return False, "No long acyclic carbon chain (>=8 non‐ring carbons) found for the phytol side chain"
-    
-    return True, "Molecule has a magnesium-centered porphyrin core (with Mg coordinated to ring N atoms within 3 bonds), at least 5 rings overall, and a long phytol chain."
+        return False, f"Only {len(rings)} rings found; expected at least 5 (four for the porphyrin core plus one extra ring)"
 
-# For testing purposes, run this module as a script.
+    # 4. Determine the length of the longest acyclic carbon chain.
+    # We consider only non-ring carbons.
+    nonring_carbons = {}
+    for atom in mol.GetAtoms():
+        if atom.GetSymbol() == "C" and not atom.IsInRing():
+            idx = atom.GetIdx()
+            nonring_carbons[idx] = []
+    
+    # Build connectivity among these non-ring carbons.
+    for bond in mol.GetBonds():
+        a1 = bond.GetBeginAtom()
+        a2 = bond.GetEndAtom()
+        idx1, idx2 = a1.GetIdx(), a2.GetIdx()
+        if idx1 in nonring_carbons and idx2 in nonring_carbons:
+            nonring_carbons[idx1].append(idx2)
+            nonring_carbons[idx2].append(idx1)
+    
+    # DFS function to find longest simple path in the graph of non-ring carbons.
+    def dfs(node, visited):
+        best = 1
+        for neighbor in nonring_carbons[node]:
+            if neighbor not in visited:
+                path_len = 1 + dfs(neighbor, visited | {neighbor})
+                if path_len > best:
+                    best = path_len
+        return best
+    
+    longest_chain = 0
+    for node in nonring_carbons:
+        chain_len = dfs(node, {node})
+        if chain_len > longest_chain:
+            longest_chain = chain_len
+
+    if longest_chain < 8:
+        return False, f"Longest acyclic carbon chain is only {longest_chain} atoms long, expected at least 8 for the phytol side chain"
+    
+    return True, "Molecule has a magnesium-centered porphyrin core (with at least 3 coordinated ring N atoms), at least 5 rings overall, and a long phytol chain."
+
+# For testing, you may uncomment the code block below.
 if __name__ == "__main__":
-    # Example test: chlorophyll a (a known true positive)
+    # Example: chlorophyll a SMILES (one known true positive)
     example_smiles = "CCC1=C(C)C2=Cc3c(C=C)c(C)c4C=C5[C@@H](C)[C@H](CCC(=O)OC\\C=C(/C)CCC[C@H](C)CCC[C@H](C)CCCC(C)C)C6=[N+]5[Mg--]5(n34)n3c(=CC1=[N+]25)c(C)c1C(=O)[C@H](C(=O)OC)C6=c31"
     result, reason = is_chlorophyll(example_smiles)
     print(result, reason)
