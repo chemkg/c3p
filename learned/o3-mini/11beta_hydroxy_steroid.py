@@ -3,10 +3,10 @@ Classifies: CHEBI:35346 11beta-hydroxy steroid
 """
 """
 Classifies: 11β-hydroxy steroid
-Definition: A fused polycyclic (predominantly carbocyclic) steroid nucleus (with at least 3 rings and ≥17 carbons)
-with a beta-configured hydroxy group. The beta-configured hydroxy is approximated by detecting a chiral center
-that is described by the SMARTS pattern "[C@@H]([O])", but only if that chiral carbon is part of a steroid-like core.
-Note: This is still only an approximate test.
+Definition: A fused, polycyclic, predominantly carbocyclic steroid nucleus – ideally the classic tetracyclic (cyclopentanoperhydrophenanthrene) system –
+which consists of four fused rings (typically three six‐membered and one five‐membered, or an aromatic variant) 
+with at least 17 carbons in the fused system, along with at least one beta‑configured hydroxy group (detected by a chiral center with –OH in beta configuration).
+Note: This is still an approximate test.
 """
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
@@ -14,17 +14,18 @@ from rdkit.Chem import rdMolDescriptors
 def is_11beta_hydroxy_steroid(smiles: str):
     """
     Determines if a molecule is an 11β-hydroxy steroid.
-    The algorithm:
-      1. Parses the SMILES and checks that there are enough carbon atoms.
-      2. Extracts all rings and builds fused (connected) ring systems.
-      3. Among fused systems, selects one that is predominantly carbocyclic,
-         contains at least 17 carbon atoms AND is made up of at least 3 rings.
-      4. Searches for beta-configured hydroxy groups using the SMARTS pattern "[C@@H]([O])".
-      5. For any candidate chiral carbon, confirms that
-           - it belongs to the selected steroid core,
-           - it is in a ring (and one of its rings is typical in size for steroids, i.e. 5 or 6 members),
-           - and it has at least two carbon neighbors that are also in the core.
-      
+    
+    The algorithm is as follows:
+      1. Parse the SMILES and ensure the molecule has enough carbons (≥17).
+      2. Extract ring data and build fused ring systems. A fused system is a set of rings sharing at least one atom.
+      3. Among the fused systems, look for one that is most likely the steroid nucleus – ideally a tetracyclic core.
+         We require that one fused system contains exactly four rings whose union has at least 17 carbon atoms.
+         Moreover, the rings should represent either the classic 3 six‐membered + 1 five‐membered steroid skeleton,
+         or – in cases such as aromatic estrogens – 4 six‐membered rings.
+      4. Use a SMARTS pattern "[C@@H][OX2H]" to detect a beta‑configured hydroxy group and then check that
+         the candidate chiral carbon is part of the steroid core (in a ring of size 5 or 6 that is completely within said core)
+         and has at least two neighbors (that are carbons) in the core.
+    
     Args:
       smiles (str): SMILES string of the molecule.
       
@@ -32,122 +33,129 @@ def is_11beta_hydroxy_steroid(smiles: str):
       bool: True if the molecule qualifies as an 11β-hydroxy steroid, False otherwise.
       str: A reason text for the classification.
     """
-    # Parse the SMILES
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-
-    # Global check: count total carbons; steroids normally have many carbons.
+    
+    # Global carbon count check.
     total_carbons = sum(1 for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6)
     if total_carbons < 17:
-        return False, f"Too few carbon atoms ({total_carbons}) to be a steroid"
-
-    # Obtain ring information: list of tuples of atom indices for every ring.
+        return False, f"Too few carbons ({total_carbons}) to be a steroid"
+    
+    # Get ring information.
     ring_info = mol.GetRingInfo()
     rings = ring_info.AtomRings()
     if not rings:
-        return False, "No rings detected; not steroid-like."
+        return False, "No rings found; not steroid-like."
     
-    # Build fused ring systems: each fused system is a set containing all atom indices in connected rings.
+    # Build fused ring systems (each is a set of atom indices from connected rings).
     fused_systems = []
     for ring in rings:
         ring_set = set(ring)
         merged = False
         for comp in fused_systems:
-            if ring_set & comp:  # if overlap exists
+            if ring_set & comp:  # if share any atoms, merge
                 comp.update(ring_set)
                 merged = True
                 break
         if not merged:
             fused_systems.append(ring_set)
-    # It is possible that some systems need further merging.
+    # Further merge any overlapping systems.
     changed = True
     while changed:
         changed = False
         new_systems = []
         while fused_systems:
             comp = fused_systems.pop(0)
-            merged_found = False
+            merge_found = False
             for i, other in enumerate(fused_systems):
                 if comp & other:
                     fused_systems[i] = comp | other
-                    merged_found = True
+                    merge_found = True
                     changed = True
                     break
-            if not merged_found:
+            if not merge_found:
                 new_systems.append(comp)
         fused_systems = new_systems[:]
     
-    # From the fused systems, look for one that could represent a steroid nucleus.
+    # Look among fused systems for a steroid nucleus candidate.
     steroid_core = None
     for comp in fused_systems:
-        # Count how many carbons are present in the fused system.
-        carbons_in_comp = [idx for idx in comp if mol.GetAtomWithIdx(idx).GetAtomicNum() == 6]
-        if len(carbons_in_comp) < 17:
+        # Identify rings fully inside this fused system.
+        core_rings = [ring for ring in rings if set(ring).issubset(comp)]
+        if len(core_rings) != 4:
+            continue  # prefer tetracyclic systems
+        # Count carbons in the fused system.
+        comp_carbons = [idx for idx in comp if mol.GetAtomWithIdx(idx).GetAtomicNum() == 6]
+        if len(comp_carbons) < 17:
             continue
-        # Additionally, require the system to incorporate at least 3 rings.
-        ring_count = 0
-        for ring in rings:
-            if set(ring).issubset(comp):
-                ring_count += 1
-        if ring_count < 3:
-            continue
-        # Optionally allow very few heteroatoms in the core.
-        non_carbons = len(comp) - len(carbons_in_comp)
-        if non_carbons > 2:
-            continue
-        steroid_core = set(comp)
-        break
+        # Determine ring sizes within the core.
+        ring_sizes = [len(ring) for ring in core_rings]
+        count5 = ring_sizes.count(5)
+        count6 = ring_sizes.count(6)
+        # Accept if either the classical steroid (1 five-membered and 3 six-membered) or a variant (4 six-membered).
+        if (count5 == 1 and count6 == 3) or (count5 == 0 and count6 == 4):
+            steroid_core = comp
+            break
+    
+    # Fallback: if no tetracyclic core is found, try any fused system with at least 3 rings.
+    if steroid_core is None:
+        for comp in fused_systems:
+            core_rings = [ring for ring in rings if set(ring).issubset(comp)]
+            if len(core_rings) < 3:
+                continue
+            comp_carbons = [idx for idx in comp if mol.GetAtomWithIdx(idx).GetAtomicNum() == 6]
+            if len(comp_carbons) < 17:
+                continue
+            steroid_core = comp
+            break
 
     if steroid_core is None:
-        return False, "No fused ring system with a predominantly carbocyclic core (≥17 carbons and ≥3 rings) found"
-
-    # Prepare the SMARTS for beta-configured hydroxy: chiral carbon with an -OH.
-    beta_oh_smarts = "[C@@H]([O])"
+        return False, "No suitable fused ring system (steroid nucleus) found with enough carbons and rings."
+    
+    # Prepare the SMARTS for beta-configured hydroxyl (the beta-OH is approximated with a chiral carbon [C@@H] directly bonded to –OH).
+    beta_oh_smarts = "[C@@H][OX2H]"
     beta_oh_pat = Chem.MolFromSmarts(beta_oh_smarts)
     if beta_oh_pat is None:
-        return False, "Error creating SMARTS pattern for beta-configured hydroxyl"
-
+        return False, "Error compiling SMARTS for beta-configured hydroxyl."
+    
     matches = mol.GetSubstructMatches(beta_oh_pat)
     if not matches:
-        return False, "No beta-configured hydroxy group ([C@@H]([O])) detected"
-
-    # Check if any matching chiral carbon appears in the steroid core.
-    # Additionally, require that the candidate is in a ring (of size 5 or 6) and has ≥2 core carbon neighbors.
-    # This should reduce false positives where the beta-OH occurs in non-steroidal contexts.
-    for match in matches:
-        carbon_idx = match[0]
-        if carbon_idx not in steroid_core:
-            continue
-        atom = mol.GetAtomWithIdx(carbon_idx)
-        if not atom.IsInRing():
-            continue
-
-        # Check if the candidate belongs to a ring of plausible steroid size (5 or 6 members)
-        candidate_in_valid_ring = False
-        for ring in rings:
-            if carbon_idx in ring and (len(ring) == 5 or len(ring) == 6):
-                # further require that the entire ring is within the steroid core
-                if set(ring).issubset(steroid_core):
-                    candidate_in_valid_ring = True
-                    break
-        if not candidate_in_valid_ring:
-            continue
-
-        # Count the number of neighbors from the steroid core that are carbons.
-        core_neighbors = 0
-        for nbr in atom.GetNeighbors():
-            if nbr.GetIdx() in steroid_core and nbr.GetAtomicNum() == 6:
-                core_neighbors += 1
-        if core_neighbors >= 2:
-            return True, ("Molecule has a fused, predominantly carbocyclic steroid nucleus (≥3 rings, ≥17 carbons) "
-                          "and a beta-configured hydroxy group on a ring carbon (candidate for 11β-hydroxy).")
+        return False, "No beta‑configured –OH (pattern [C@@H][OX2H]) detected."
     
-    return False, "Found beta-configured hydroxy group(s), but none appear in a suitable steroid nucleus"
+    # For each candidate beta‑OH, verify that the chiral carbon is in a valid position in the steroid core.
+    for match in matches:
+        candidate_idx = match[0]  # the chiral carbon index
+        if candidate_idx not in steroid_core:
+            continue  # candidate not in the steroid core
+        candidate_atom = mol.GetAtomWithIdx(candidate_idx)
+        if not candidate_atom.IsInRing():
+            continue  # must be part of a ring
+        # Check that the candidate is part of a ring which is fully inside the steroid core and is of plausible size.
+        found_valid_ring = False
+        for ring in rings:
+            if candidate_idx in ring and (len(ring) == 5 or len(ring) == 6):
+                if set(ring).issubset(steroid_core):
+                    found_valid_ring = True
+                    break
+        if not found_valid_ring:
+            continue
+        
+        # Check that the candidate carbon has at least two neighboring carbons from the core.
+        core_neighbor_count = 0
+        for nbr in candidate_atom.GetNeighbors():
+            if nbr.GetIdx() in steroid_core and nbr.GetAtomicNum() == 6:
+                core_neighbor_count += 1
+        if core_neighbor_count >= 2:
+            return True, ("Molecule has a tetracyclic (or near‐tetracyclic) steroid nucleus "
+                          "and a beta‑configured –OH group "
+                          "located in a valid position within that nucleus.")
+    
+    return False, "Found beta‑configured –OH group(s) but none in a suitable steroid nucleus context."
 
 # Example usage:
 if __name__ == "__main__":
-    # Test with one example (cortisol):
+    # Here we test the function with one example (cortisol) from the list.
     test_smiles = "[H][C@@]12CCC3=CC(=O)CC[C@]3(C)[C@@]1([H])[C@@H](O)C[C@@]1(C)[C@@]2([H])CC[C@]1(O)C(=O)CO"
     result, reason = is_11beta_hydroxy_steroid(test_smiles)
     print(f"Result: {result}\nReason: {reason}")
