@@ -2,15 +2,14 @@
 Classifies: CHEBI:16219 cucurbitacin
 """
 """
-Classifies: Cucurbitacin-type compounds (tetracyclic triterpenoids derived from cucurbitane)
-
-Heuristic notes (updated):
-1. Cucurbitacins have a tetracyclic (≥4 rings) core. Many glycosylated derivatives have extra rings (≥5).
-2. They have a high carbon count; typical aglycones have around 30 carbons. Including sugars can raise that number.
-3. They are oxygenated.
-4. Many (but not all) cucurbitacins display an enone motif (an α,β-unsaturated carbonyl, as in C=CC(=O)).
-5. Because glycosylation may “mask” the free enone motif, if the enone is not found we require additional rings (≥5)
-   and a higher carbon count (≥25) to capture plausible glycosides while excluding most false positives.
+Classifies: Cucurbitacin-type compounds
+Heuristic improvements:
+ - The molecule must parse and should consist only of C, H, and O (cucurbitacins are triterpenoids).
+ - It must contain at least 4 rings (a tetracyclic core). Glycosylated variants usually display ≥5 rings.
+ - It must have a sufficiently high carbon count (≥25 carbons).
+ - Its molecular weight should be above ~300 Da.
+ - Typically an α,β–unsaturated ketone (enone; SMARTS "C=CC(=O)") is present. If not, then extra rings (≥5) are required.
+ - The molecule must be oxygenated.
 """
 
 from rdkit import Chem
@@ -19,65 +18,67 @@ from rdkit.Chem import rdMolDescriptors
 def is_cucurbitacin(smiles: str):
     """
     Determines if a molecule is a cucurbitacin-type compound based on its SMILES string.
-    
-    Heuristics used:
-      - The molecule must be parsable.
-      - It should contain at least 4 rings (a tetracyclic core). Glycosylated compounds often have ≥5 rings.
-      - It should have a sufficiently high carbon count (≥25 atoms) to be consistent with the core cucurbitacin skeleton
-        (or its glycosylated variants).
-      - Its molecular weight should be above ~300 Da.
-      - Many cucurbitacins contain a conjugated enone motif (C=CC(=O)). If the enone motif is not found,
-        then we require the molecule to have extra rings (≥5) to allow for glycosylated derivatives.
+
+    Uses the heuristics:
+      - Must be parseable.
+      - Only allowed atoms: C (6), H (1), and O (8) (this excludes many false positives).
+      - Has at least 4 rings (≥4) (if lacking a free enone, then ≥5 rings are required).
+      - Has a minimum carbon count (≥25) and molecular weight (≥300 Da).
+      - Many cucurbitacins have a conjugated enone motif (SMARTS: "C=CC(=O)").
       - The molecule must be oxygenated.
       
+    Args:
+        smiles (str): Input SMILES string.
+    
     Returns:
-        (bool, str): True with a reason if the molecule passes the criteria; otherwise False with an explanation.
+        (bool, str): True with reason if the criteria pass; else False with an explanation.
     """
-    # Parse SMILES
+    # Parse the SMILES
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Count rings using RDKit's ring info.
+    # Reject molecules that contain atoms other than C, H, or O.
+    allowed_atomic_nums = {1, 6, 8}
+    for atom in mol.GetAtoms():
+        if atom.GetAtomicNum() not in allowed_atomic_nums:
+            return False, (f"Contains heteroatom {atom.GetSymbol()} (atomic number {atom.GetAtomicNum()}) "
+                           "which is not typical for cucurbitacin-type compounds")
+    
+    # Count rings using the RDKit ring info.
     ring_info = mol.GetRingInfo()
     total_rings = ring_info.NumRings()
     if total_rings < 4:
         return False, f"Only {total_rings} rings detected; cucurbitacins typically are tetracyclic (>=4 rings)"
     
-    # Count carbon atoms.
+    # Count the number of carbon atoms.
     carbon_count = sum(1 for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6)
     if carbon_count < 25:
-        return False, f"Only {carbon_count} carbon atoms detected; too few for a typical cucurbitacin core or derivative"
+        return False, f"Only {carbon_count} carbon atoms detected; too few for a cucurbitacin skeleton or derivative"
     
-    # Calculate molecular weight.
+    # Calculate the molecular weight.
     mol_wt = rdMolDescriptors.CalcExactMolWt(mol)
     if mol_wt < 300:
         return False, f"Molecular weight ({mol_wt:.1f} Da) is too low for a cucurbitacin derivative"
     
-    # Check for enone motif via SMARTS search.
-    # This SMARTS looks for a conjugated α,β-unsaturated carbonyl: C=C-C(=O)
-    enone_smarts = "C=CC(=O)"
-    enone_pattern = Chem.MolFromSmarts(enone_smarts)
-    enone_found = mol.HasSubstructMatch(enone_pattern)
-    
-    # If no enone motif is found, require extra rings to allow for glycosylated variants
-    if not enone_found:
-        if total_rings < 5:
-            return False, "No conjugated enone motif detected and insufficient rings (<5) to suggest a glycosylated cucurbitacin"
-    
-    # Check for the presence of oxygen atoms.
+    # Check for presence of oxygen atoms.
     oxygen_count = sum(1 for atom in mol.GetAtoms() if atom.GetAtomicNum() == 8)
     if oxygen_count < 1:
         return False, "No oxygen atoms detected; cucurbitacins are oxygenated compounds"
     
-    reason = ("Molecule has {0} rings, {1} carbons, molecular weight {2:.1f} Da, "
-              "{3} an enone motif, and is oxygenated, consistent with cucurbitacin-type compounds."
-             ).format(
-                 total_rings,
-                 carbon_count,
-                 mol_wt,
-                 "contains" if enone_found else "lacks a free enone but appears to be glycosylated (≥5 rings)"
-             )
+    # Look for the conjugated enone motif.
+    # This SMARTS looks for a C=C-C(=O) fragment.
+    enone_smarts = "C=CC(=O)"
+    enone_pattern = Chem.MolFromSmarts(enone_smarts)
+    enone_found = mol.HasSubstructMatch(enone_pattern)
+    
+    # If no free enone motif is found, require extra rings (≥5) to allow for glycosylated variants.
+    if not enone_found and total_rings < 5:
+        return False, "No conjugated enone motif detected and insufficient rings (<5) to suggest a glycosylated cucurbitacin"
+    
+    status = "contains a conjugated enone motif" if enone_found else "lacks a free enone but appears glycosylated (>=5 rings)"
+    reason = (f"Molecule has {total_rings} rings, {carbon_count} carbons, molecular weight {mol_wt:.1f} Da, "
+              f"{status}, and is oxygenated, consistent with cucurbitacin-type compounds.")
     
     return True, reason
 
