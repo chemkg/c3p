@@ -3,9 +3,8 @@ Classifies: CHEBI:59644 oxo fatty acid
 """
 """
 Classifies: Oxo Fatty Acid
-Definition: Any fatty acid containing at least one additional aldehydic or ketonic (oxo) group 
-in addition to a terminal free carboxylic acid group. Additionally, the molecule should exhibit 
-a predominantly acyclic (or contiguous) alkyl chain.
+Definition: Any fatty acid containing at least one aldehydic or ketonic (oxo) group, in addition to the carboxylic acid group.
+The molecule should have a terminal (free) carboxylic acid group and exhibit a long, predominantly acyclic alkyl chain.
 """
 
 from rdkit import Chem
@@ -14,113 +13,148 @@ from rdkit.Chem import rdMolDescriptors
 def is_oxo_fatty_acid(smiles: str):
     """
     Determines if a molecule is an oxo fatty acid based on its SMILES string.
-    An oxo fatty acid in this context is defined as a (possibly short‐ or long‐chain) fatty acid 
-    with a terminal (free) carboxylic acid group and at least one extra oxo group (ketone or aldehyde)
-    not belonging to the carboxylic acid functionality. In addition the contiguous acyclic chain emanating 
-    from the acid should be a large fraction of the molecule’s carbons.
-    
+    An oxo fatty acid, in this context, is defined as a long-chain (predominantly acyclic) fatty acid that contains
+    at least one additional aldehyde or ketone group outside of a terminal carboxylic acid functionality.
+
     Args:
-        smiles (str): SMILES representation of the molecule.
-        
+        smiles (str): SMILES string of the molecule
+
     Returns:
-        bool: True if molecule meets oxo fatty acid criteria, False otherwise.
-        str: Explanation of the decision.
+        bool: True if molecule meets the oxo fatty acid criteria, False otherwise.
+        str: A reason explaining the classification decision.
     """
+
+    # Parse the SMILES string.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-    
-    # (A) Look for a terminal free carboxylic acid.
-    # Standard SMARTS for carboxylic acid: [CX3](=O)[OX2H1]
+
+    # ---------------------------------------------
+    # (A) Check for a carboxylic acid group.
+    # We require a free carboxylic acid group. The standard SMARTS pattern for carboxylic acid is:
+    # [CX3](=O)[OX2H1]
     acid_pattern = Chem.MolFromSmarts("[CX3](=O)[OX2H1]")
     acid_matches = mol.GetSubstructMatches(acid_pattern)
     if not acid_matches:
         return False, "No carboxylic acid group detected; not a fatty acid"
-    
-    # Identify terminal acid groups.
-    # We require that the acid carbon (first atom in SMARTS) is terminal, meaning it is bonded to exactly one carbon.
-    terminal_acid_indices = []  # store acid carbon indices that qualify
+
+    # For each acid group match, check if the acid carbon is terminal.
+    # We get the set of indices that are carboxyl carbons which are terminal, i.e. they have only one carbon neighbor.
+    terminal_acid_indices = set()
     for match in acid_matches:
-        acid_carbon_idx = match[0]
-        acid_atom = mol.GetAtomWithIdx(acid_carbon_idx)
-        # Count neighboring carbon atoms (ignore oxygens).
-        carbon_neighbors = [nbr.GetIdx() for nbr in acid_atom.GetNeighbors() if nbr.GetAtomicNum() == 6]
-        if len(carbon_neighbors) == 1:
-            terminal_acid_indices.append((acid_carbon_idx, carbon_neighbors[0]))
-    
+        acid_carbon = match[0]  # first atom in the SMARTS: the carbon of the acid
+        # Count neighboring atoms which are carbon (atomic number 6);
+        # ignore oxygen neighbors.
+        carbon_neighbor_count = 0
+        for nbr in mol.GetAtomWithIdx(acid_carbon).GetNeighbors():
+            if nbr.GetAtomicNum() == 6:
+                carbon_neighbor_count += 1
+        # A terminal carboxylic acid should have exactly one carbon neighbor.
+        if carbon_neighbor_count == 1:
+            terminal_acid_indices.add(acid_carbon)
+            
     if not terminal_acid_indices:
         return False, "Carboxylic acid group is not terminal; fatty acids require a free (terminal) acid group"
     
-    # For further analysis, choose the first terminal acid. Its unique neighbor (acyl chain start) is:
-    acid_carbon_idx, chain_start_idx = terminal_acid_indices[0]
-    
-    # (B) Check that there is at least one additional oxo group (aldehyde or ketone) outside the acid.
-    # SMARTS for ketone: a carbonyl with carbons on both sides.
+    # ---------------------------------------------
+    # (B) Identify additional oxo groups (aldehyde or ketone) that lie outside of the acid.
+    # Define SMARTS patterns for ketone and aldehyde.
     ketone_pattern = Chem.MolFromSmarts("[#6][CX3](=O)[#6]")
-    # SMARTS for aldehyde: a carbonyl with at least one hydrogen attached to the carbonyl carbon.
     aldehyde_pattern = Chem.MolFromSmarts("[#6][CX3H](=O)")
     
     ketone_matches = mol.GetSubstructMatches(ketone_pattern)
     aldehyde_matches = mol.GetSubstructMatches(aldehyde_pattern)
     
+    # Check that at least one oxo group has its carbonyl carbon not in a carboxylic acid.
     additional_oxo_found = False
-    # For any ketone, ensure that the carbonyl carbon is not our terminal acid carbon.
     for match in ketone_matches:
-        # In our ketone pattern the 2nd atom is the carbonyl carbon.
-        if match[1] != acid_carbon_idx:
+        # match[1] is the carbonyl carbon in the SMARTS.
+        if match[1] not in terminal_acid_indices:
             additional_oxo_found = True
             break
     if not additional_oxo_found:
         for match in aldehyde_matches:
-            if match[1] != acid_carbon_idx:
+            if match[1] not in terminal_acid_indices:
                 additional_oxo_found = True
                 break
     if not additional_oxo_found:
         return False, "No additional oxo (aldehyde/ketone) group detected outside the acid"
 
-    # (C) Examine the acyclic alkyl chain.
-    # Count total carbon atoms in the molecule.
-    total_carbons = sum(1 for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6)
-    if total_carbons < 6:
+    # ---------------------------------------------
+    # (C) Check that the molecule is “fatty” via its acyclic carbon chain.
+    # We require a minimum number of carbon atoms and a long contiguous acyclic carbon chain.
+    total_carbons = 0
+    for atom in mol.GetAtoms():
+        if atom.GetAtomicNum() == 6:
+            total_carbons += 1
+    if total_carbons < 12:
         return False, "Too few carbon atoms to be considered a fatty acid"
-    
-    # Now, from the chain starting point (neighboring the acid carbon), extract the contiguous acyclic carbon chain.
-    # We restrict our DFS to carbon atoms that are not in any ring.
-    acyclic_chain_set = set()
-    stack = [chain_start_idx]
-    
-    while stack:
-        current_idx = stack.pop()
-        if current_idx in acyclic_chain_set:
-            continue
-        atom = mol.GetAtomWithIdx(current_idx)
-        # Only consider carbon atoms not in a ring.
-        if atom.GetAtomicNum() == 6 and not atom.IsInRing():
-            acyclic_chain_set.add(current_idx)
-            # Add neighbors that are carbons (if not the acid carbon which we already used).
-            for nbr in atom.GetNeighbors():
-                if nbr.GetAtomicNum() == 6 and (nbr.GetIdx() not in acyclic_chain_set):
-                    # Continue only if neighbor is non-ring.
-                    if not nbr.IsInRing():
-                        stack.append(nbr)
-    chain_length = len(acyclic_chain_set)
-    
-    # Many fatty acids have a long contiguous chain. 
-    # To allow even medium-chain oxo fatty acids we use a moderate lower bound (~4 carbons in the chain)
-    # and require that the chain comprises at least 50% of all carbons.
-    if chain_length < 4:
-        return False, f"Contiguous acyclic chain is too short ({chain_length} carbons found)"
-    if chain_length / total_carbons < 0.5:
-        return False, ("The acyclic chain only represents {:.0%} of all carbons; a fatty acid should be predominantly "
-                       "aliphatic".format(chain_length / total_carbons))
-    
-    return True, ("Contains a terminal free carboxylic acid group, an additional oxo (aldehyde/ketone) group "
-                  "outside that acid, and a sufficiently long acyclic carbon chain ({} of {} carbons)".format(chain_length, total_carbons))
 
+    # Build a graph of acyclic carbon atoms (carbons not in rings).
+    # Only include carbons that are not in any ring.
+    acyclic_carbons = [atom.GetIdx() for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6 and not atom.IsInRing()]
+    if not acyclic_carbons:
+        return False, "No acyclic carbon chain detected; expected a long aliphatic chain"
+
+    # Build an adjacency list among these acyclic carbon atoms.
+    acyclic_adj = {idx: set() for idx in acyclic_carbons}
+    for bond in mol.GetBonds():
+        a1 = bond.GetBeginAtomIdx()
+        a2 = bond.GetEndAtomIdx()
+        # Only consider bonds between acyclic carbons.
+        if a1 in acyclic_adj and a2 in acyclic_adj:
+            acyclic_adj[a1].add(a2)
+            acyclic_adj[a2].add(a1)
+
+    # Find connected components among acyclic carbons and compute the "chain length" (diameter) for each component.
+    visited = set()
+    longest_chain = 0
+    for node in acyclic_adj:
+        if node in visited:
+            continue
+        # Get the connected component using DFS.
+        component = set()
+        stack = [node]
+        while stack:
+            current = stack.pop()
+            if current not in component:
+                component.add(current)
+                for neighbor in acyclic_adj[current]:
+                    if neighbor not in component:
+                        stack.append(neighbor)
+        visited.update(component)
+        # For the (acyclic) connected component, compute the diameter (longest shortest-path distance).
+        # Use two passes of BFS (first pass: pick any node; second pass: from farthest node, measure distance).
+        def bfs(start, nodes):
+            dist = {start: 0}
+            queue = [start]
+            while queue:
+                curr = queue.pop(0)
+                for nn in acyclic_adj[curr]:
+                    if nn in nodes and nn not in dist:
+                        dist[nn] = dist[curr] + 1
+                        queue.append(nn)
+            return dist
+        arbitrary = next(iter(component))
+        first_dist = bfs(arbitrary, component)
+        farthest = max(first_dist, key=first_dist.get)
+        second_dist = bfs(farthest, component)
+        comp_diameter = max(second_dist.values())
+        if comp_diameter > longest_chain:
+            longest_chain = comp_diameter
+
+    # For a fatty acid, expect a long chain. Here we require a minimum chain length of 8 bonds (9 carbons).
+    if longest_chain < 8:
+        return False, "Longest contiguous acyclic carbon chain is too short to be a fatty acid"
+    
+    # ---------------------------------------------
+    # Passed all tests.
+    return True, ("Contains a terminal carboxylic acid group, an additional oxo group "
+                  "outside that acid, and a sufficiently long acyclic carbon chain typical of fatty acids")
 
 # Example usage:
 if __name__ == "__main__":
-    # Test example: (6E,8Z)-5-oxooctadecadienoic acid
+    # One test example: (6E,8Z)-5-oxooctadecadienoic acid
     test_smiles = "O=C(CCCC(O)=O)/C=C/C=C\\CCCCCCCCC"
     result, reason = is_oxo_fatty_acid(test_smiles)
     print("Test molecule classification:", result)
