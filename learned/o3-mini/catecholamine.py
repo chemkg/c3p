@@ -4,120 +4,160 @@ Classifies: CHEBI:33567 catecholamine
 """
 Classifies: Catecholamine (4-(2-Aminoethyl)pyrocatechol and substitution derivatives)
 
-A catecholamine is defined here as a molecule containing a benzene (aromatic 6-membered) ring with two adjacent hydroxyl (–OH) groups 
-(i.e. a catechol moiety) AND an exocyclic ethylamine chain (–CH2–CH2–NHx) attached to one of the ring atoms.
+A catecholamine is defined here as a molecule that contains an aromatic benzene ring (a 6-membered aromatic ring)
+that carries a catechol-like motif – that is, two adjacent substituents that are oxygen atoms (they can be –OH or 
+derivatized such as –OSO3H, –OCH3, etc.), plus an attached ethylamine chain (or a close analogue) originating from one of 
+the ring atoms.
 """
 
 from rdkit import Chem
 
 def is_catecholamine(smiles: str):
     """
-    Determines if a molecule is a catecholamine derivative (e.g. dopamine, adrenaline, dobutamine, etc.) 
-    based on its SMILES string. It does so by checking for the presence of a benzene ring that has 
-    adjacent hydroxyl substituents (a catechol group) and an ethylamine chain attached to that ring.
+    Determines if a molecule is a catecholamine derivative 
+    (e.g., dopamine, adrenaline, dobutamine, etc.) based on its SMILES string.
+    It does so by detecting two local features:
+      1. The presence of a benzene (aromatic 6-membered) ring in which two adjacent ring atoms have a substituent
+         that is an oxygen atom (the catechol motif). The oxygen substituents can be modified (e.g. sulfate, methoxy, etc.).
+      2. The presence of an attached ethylamine-like chain; that is a short chain of 2–3 bonds from a ring atom leading to a nitrogen.
     
     Args:
         smiles (str): SMILES string of the molecule.
     
     Returns:
-        (bool, str): True and a reason if the molecule qualifies as a catecholamine derivative;
-                     False and a reason otherwise.
+        tuple(bool, str): True with a classification reason if the molecule qualifies as a catecholamine derivative;
+                          False with a reason otherwise.
     """
+    # Parse the SMILES string
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Sanitize the molecule (adjust hydrogens, valences, etc.)
-    Chem.SanitizeMol(mol)
+    # Sanitize molecule
+    try:
+        Chem.SanitizeMol(mol)
+    except Exception as e:
+        return False, "Molecule sanitization failed: " + str(e)
     
+    # Get ring information. We are interested in aromatic 6-membered rings.
     ring_info = mol.GetRingInfo().AtomRings()
+    
     catechol_found = False
     chain_found = False
+    
+    # Helper function: from a starting atom (which is an exocyclic neighbor to a ring atom), 
+    # search for a path (of length at most max_depth) that leads to a nitrogen atom.
+    # We require that at least 2 bonds (non-zero depth) are traversed.
+    def has_ethylamine_chain(start_atom, max_depth=3):
+        from collections import deque
+        # each item: (atom, depth, came_from_idx)
+        queue = deque()
+        queue.append((start_atom, 1, None))
+        while queue:
+            atom, depth, prev = queue.popleft()
+            # if we have traversed at least two bonds and find a nitrogen, we say found chain.
+            if depth >= 2 and atom.GetAtomicNum() == 7:
+                return True
+            if depth < max_depth:
+                for nbr in atom.GetNeighbors():
+                    # avoid going back along the bond we came from
+                    if nbr.GetIdx() == prev:
+                        continue
+                    # We restrict the search to aliphatic atoms (or at least not aromatic since chain atoms are usually not aromatic)
+                    # However, we allow heteroatoms in the chain if needed.
+                    # We do not traverse into rings (to avoid accidental ring-closing to an aromatic ring).
+                    if nbr.GetIdx() in current_ring:
+                        continue
+                    queue.append((nbr, depth+1, atom.GetIdx()))
+        return False
 
-    # For each ring in the molecule
+    # Loop over aromatic rings of size 6.
     for ring in ring_info:
-        # We only consider rings of size 6
         if len(ring) != 6:
             continue
-
-        # Check that the ring is aromatic
+        
+        # Check that every atom in the ring is aromatic.
         if not all(mol.GetAtomWithIdx(idx).GetIsAromatic() for idx in ring):
             continue
         
-        # For each atom in the ring, mark if it has an -OH substituent
-        # (we decide an -OH is an oxygen attached to the ring atom that has at least one implicit hydrogen)
-        oh_atoms = set()
+        # First, check for catechol motif: at least one pair of adjacent ring atoms (in the ring order) 
+        # must have an exocyclic oxygen substituent.
+        adjacent_oxy = False
+        # record for later chain search: the ring atoms that have an oxygen substituent.
+        oxy_ring_atoms = set()
+        # iterate over atoms in the ring
         for idx in ring:
             atom = mol.GetAtomWithIdx(idx)
+            # check each neighbor that is not in the ring:
             for nbr in atom.GetNeighbors():
-                # Only consider substituents not in the ring
                 if nbr.GetIdx() in ring:
                     continue
-                # Check if this neighbor is oxygen and has at least one hydrogen (using total H count)
-                if nbr.GetAtomicNum() == 8 and nbr.GetTotalNumHs() > 0:
-                    oh_atoms.add(idx)
-                    break  # one -OH is enough
-
-        # Now check if at least two adjacent ring atoms (neighbors in the ring cycle) both have -OH.
-        adjacent_oh = False
-        ring_list = list(ring)  # ordered list of indices for the ring atoms
+                # if neighbor is oxygen (atomic num 8), we count it.
+                if nbr.GetAtomicNum() == 8:
+                    oxy_ring_atoms.add(idx)
+                    break  # one oxygen substituent is enough
+        
+        # Now check if there exists a pair of adjacent ring atoms (cyclically adjacent in the ring) 
+        # that both have an oxygen substituent.
+        ring_list = list(ring)
         n_atoms = len(ring_list)
         for i in range(n_atoms):
-            curr_idx = ring_list[i]
-            next_idx = ring_list[(i + 1) % n_atoms]  # cyclic adjacent
-            if curr_idx in oh_atoms and next_idx in oh_atoms:
-                adjacent_oh = True
+            a1 = ring_list[i]
+            a2 = ring_list[(i+1) % n_atoms]  # adjacent in the cycle
+            if a1 in oxy_ring_atoms and a2 in oxy_ring_atoms:
+                adjacent_oxy = True
                 break
-
-        if not adjacent_oh:
-            continue  # this ring doesn't appear to have a catechol motif
         
-        # Mark that we have found a catechol ring.
+        if not adjacent_oxy:
+            continue  # this ring does not have the catechol motif
+        
+        # Mark that we have a catechol (or catechol-derivative) ring.
         catechol_found = True
-
-        # Now check for the side chain: an ethylamine chain attached to any ring atom.
-        # We search for a branch: RingAtom -- CH2 (aliphatic carbon) -- CH2 (aliphatic carbon) -- N (any amino)
+        
+        # Save this ring as 'current_ring' for chain search (so that we do not traverse into other ring atoms)
+        current_ring = set(ring)
+        
+        # Next, look for an ethylamine chain attached to this ring.
+        # For each ring atom, examine its exocyclic neighbors.
         for idx in ring:
             ring_atom = mol.GetAtomWithIdx(idx)
             for nbr in ring_atom.GetNeighbors():
-                if nbr.GetIdx() in ring:
-                    continue  # only consider exocyclic substituents
-                # The first chain atom must be a carbon and not aromatic.
-                if nbr.GetAtomicNum() != 6 or nbr.GetIsAromatic():
+                if nbr.GetIdx() in current_ring:
+                    continue  # ignore neighbors inside the ring
+                # we require that the chain starts from a carbon (usually)
+                if nbr.GetAtomicNum() != 6:
                     continue
-                chain1 = nbr
-                # Look for a second chain carbon attached to chain1 (not going back to ring_atom)
-                for nbr2 in chain1.GetNeighbors():
-                    if nbr2.GetIdx() == ring_atom.GetIdx():
-                        continue  # do not backtrack
-                    if nbr2.GetAtomicNum() != 6 or nbr2.GetIsAromatic():
-                        continue
-                    chain2 = nbr2
-                    # Now, from chain2, check for a neighbor that is a nitrogen (any substitution is allowed).
-                    for nbr3 in chain2.GetNeighbors():
-                        # Exclude backtracking to chain1.
-                        if nbr3.GetIdx() == chain1.GetIdx():
-                            continue
-                        if nbr3.GetAtomicNum() == 7:
-                            chain_found = True
-                            break
-                    if chain_found:
-                        break
-                if chain_found:
+                # We also prefer that this first neighbor is not aromatic (i.e. an aliphatic carbon).
+                if nbr.GetIsAromatic():
+                    continue
+                # Now, perform a limited-depth search from this neighbor to see if we can hit a nitrogen (chain end).
+                if has_ethylamine_chain(nbr, max_depth=3):
+                    chain_found = True
                     break
             if chain_found:
                 break
-
-        # If we found both motifs in this ring, we classify as catecholamine.
+        
+        # If for this ring we found both the catechol motif and an attached ethylamine chain, classify as catecholamine.
         if catechol_found and chain_found:
-            return True, "Molecule contains a catechol ring (adjacent hydroxyl groups) with an attached ethylamine chain"
-
-    # If none of the rings satisfied both conditions:
+            return True, "Molecule contains a catechol aromatic ring (adjacent oxygen substituents) with an attached short chain leading to a nitrogen"
+    
+    # If no ring satisfied both conditions, construct a reason
     reasons = []
     if not catechol_found:
-        reasons.append("No aromatic six-membered ring with adjacent hydroxyl groups (catechol group) was found")
+        reasons.append("No aromatic six‐membered ring with two adjacent oxygen‐bearing substituents (catechol motif) was found")
     elif not chain_found:
-        reasons.append("No attached ethylamine (–CH2–CH2–NHx) chain was found on the catechol ring")
-        
-    reason_str = "; ".join(reasons)
-    return False, reason_str
+        reasons.append("Catechol ring found but no attached ethylamine (chain that reaches a nitrogen) was found")
+    return False, "; ".join(reasons)
+    
+# Example usage (for testing):
+if __name__ == '__main__':
+    # List some test SMILES strings with names for debugging
+    test_molecules = [
+        ("(S)-dobutamine", "C[C@@H](CCc1ccc(O)cc1)NCCc1ccc(O)c(O)c1"),
+        ("Epinephrine sulfate", "S(OC1=C(O)C=C([C@@H](O)CNC)C=C1)(O)(=O)=O"),
+        ("Normetanephrine", "C=1(C=C(C(=CC1)O)OC)C(O)CN"),
+        ("Dopamine", "NCCc1ccc(O)c(O)c1"),
+    ]
+    for name, smi in test_molecules:
+        result, reason = is_catecholamine(smi)
+        print(f"{name}: {result} - {reason}")
