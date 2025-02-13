@@ -4,82 +4,76 @@ Classifies: CHEBI:32877 primary amine
 """
 Classifies: Primary Amine
 Definition: A compound formally derived from ammonia by replacing one hydrogen atom by a hydrocarbyl group.
-For this classifier, the molecule is considered a primary amine if it contains at least one primary amine group.
-A valid primary amine group is defined as an –NH2 group (with exactly two hydrogens) bonded to one non-hydrogen atom 
-(that is, derived from ammonia by replacing one hydrogen by a hydrocarbyl group) and not being involved in an amide bond.
-Also, if the molecule contains any amide bonds (indicative of peptides or similar compounds), the molecule is rejected.
+The program looks for an –NH2 group (i.e. primary amine) that is attached to at least one carbon and is not part of an amide.
 """
 from rdkit import Chem
 
 def is_primary_amine(smiles: str):
     """
     Determines if a molecule is a primary amine based on its SMILES string.
-    A primary amine (R–NH2) is derived from ammonia by replacing one hydrogen with a hydrocarbyl group.
-    For our purposes, the molecule is considered a primary amine if it meets the following criteria:
-      - It does NOT contain any amide bonds (the presence of a pattern "C(=O)N" is grounds for rejection).
-      - It contains at least one primary amine group. 
-        A primary amine group is found by matching the SMARTS pattern "[NX3;H2;!$(NC=O)]":
-            • NX3: a trivalent nitrogen,
-            • H2: exactly two hydrogens attached,
-            • !$(NC=O): not directly bonded to a carbonyl carbon.
+    A primary amine has an –NH2 group where nitrogen is bound to one hydrocarbyl substituent.
     
     Args:
         smiles (str): SMILES string of the molecule.
     
     Returns:
-        bool: True if the molecule is classified as a primary amine, False otherwise.
+        bool: True if molecule is classified as a primary amine, False otherwise.
         str: Reason for the classification.
     """
-    # Parse SMILES into a molecule
+    # Parse the SMILES string
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Add explicit hydrogens so that hydrogen counts are accessible.
-    mol = Chem.AddHs(mol)
+    # SMARTS pattern for a nitrogen with exactly two attached hydrogens (i.e. potentially an NH2 group).
+    # This pattern will match both aliphatic and aromatic primary amines.
+    primary_amine_smarts = "[NX3;H2]"
+    primary_amine_pattern = Chem.MolFromSmarts(primary_amine_smarts)
+    if primary_amine_pattern is None:
+        return False, "Error in generating SMARTS pattern"
     
-    # First, reject molecules that contain an amide bond.
-    amide_smarts = Chem.MolFromSmarts("C(=O)N")
-    if amide_smarts is None:
-        return False, "Error generating amide SMARTS pattern"
-    if mol.HasSubstructMatch(amide_smarts):
-        return False, "Molecule contains amide bond(s) typical of peptides/amides"
+    # Find all matches of the primary amine pattern in the molecule.
+    matches = mol.GetSubstructMatches(primary_amine_pattern)
+    if not matches:
+        return False, "No primary amine (-NH2) substructure found"
     
-    # Define the SMARTS for a primary amine:
-    # [NX3;H2] means trigonal nitrogen with exactly two hydrogens.
-    # !$(NC=O) ensures that the nitrogen is not bonded to a carbonyl group.
-    primary_amine_smarts = Chem.MolFromSmarts("[NX3;H2;!$(NC=O)]")
-    if primary_amine_smarts is None:
-        return False, "Error generating primary amine SMARTS pattern"
-    
-    # Look for a match of the primary amine group in the molecule.
-    if mol.HasSubstructMatch(primary_amine_smarts):
-        return True, "Molecule contains a valid primary amine (R–NH2) group."
-    
-    return False, "No valid primary amine group (with two hydrogens and one substituent not involved in an amide) found."
+    # Check each matched nitrogen for required features:
+    # It must be attached to at least one carbon atom (i.e. the hydrocarbyl group),
+    # and it must not be part of an amide (i.e. attached to a carbonyl carbon, C(=O)-).
+    for match in matches:
+        # match is a tuple of atom indices that match the pattern.
+        # Our pattern only covers one atom (the nitrogen) so take the first index.
+        n_idx = match[0]
+        n_atom = mol.GetAtomWithIdx(n_idx)
+        # Flag to check if this nitrogen is attached to at least one carbon atom.
+        attached_to_carbon = False
+        amide_flag = False
+        
+        for neighbor in n_atom.GetNeighbors():
+            # Check if the neighbor atom is carbon (atomic number 6) to represent a hydrocarbyl group.
+            if neighbor.GetAtomicNum() == 6:
+                attached_to_carbon = True
+                # Further check if this carbon is part of a carbonyl (C=O) bond,
+                # which would indicate an amide group.
+                for bond in neighbor.GetBonds():
+                    # If the bond is to an oxygen and is a double bond, then it is likely a carbonyl.
+                    other_atom = bond.GetOtherAtom(neighbor)
+                    if other_atom.GetAtomicNum() == 8 and bond.GetBondTypeAsDouble() == 2.0:
+                        amide_flag = True
+                        break
+            # If we already detected an amide connection for this candidate, break early.
+            if amide_flag:
+                break
 
-# Example test calls (you may remove these before deployment)
-if __name__ == "__main__":
-    test_smiles_list = [
-        # acid fuchsin (free acid form)
-        "Cc1cc(cc(c1N)S(O)(=O)=O)C(=C1\\C=CC(=N)C(=C1)S(O)(=O)=O)\\c1ccc(N)c(c1)S(O)(=O)=O",
-        # N-[(3-methoxyphenyl)methyl]-N-methyl-1-[1-[2-(2-methylphenyl)ethyl]-3-piperidinyl]methanamine
-        "CC1=CC=CC=C1CCN2CCCC(C2)CN(C)CC3=CC(=CC=C3)OC",
-        # (R)-clenbuterol
-        "CC(C)(C)NC[C@H](O)c1cc(Cl)c(N)c(Cl)c1",
-        # 2-Methylbutylamine
-        "NC[C@H](CC)C",
-        # clenbuterol
-        "CC(C)(C)NCC(O)c1cc(Cl)c(N)c(Cl)c1",
-        # Phenelzine
-        "NNCCc1ccccc1",
-        # methylamine (a simple primary amine)
-        "CN",
-        # aniline
-        "Nc1ccccc1",
-        # pentan-1-amine
-        "CCCCCN"
-    ]
-    for smi in test_smiles_list:
-        result, reason = is_primary_amine(smi)
-        print(f"SMILES: {smi}\nResult: {result}\nReason: {reason}\n")
+        if amide_flag:
+            # This matched amine group appears to be part of an amide.
+            continue
+        
+        if not attached_to_carbon:
+            # If not bound to any carbon, it is not derived from ammonia by replacing a hydrogen with a hydrocarbyl group.
+            continue
+        
+        # Found a valid primary amine substructure.
+        return True, "Molecule contains a primary amine (R–NH2) group."
+    
+    return False, "No valid primary amine group (bound to a hydrocarbyl moiety and not part of an amide) found."
