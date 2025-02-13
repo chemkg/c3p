@@ -2,86 +2,96 @@
 Classifies: CHEBI:38077 polypyrrole
 """
 #!/usr/bin/env python
-# polypyrrole.py
 """
 Classifies: A compound composed of two or more pyrrole units.
-A pyrrole unit is defined here as a five-membered aromatic ring 
-that contains exactly one nitrogen and four carbon atoms.
+The definition here is that a pyrrole unit is a five‐membered aromatic ring 
+that contains exactly one nitrogen atom (which may be substituted) and four carbon atoms.
+In addition to finding at least two pyrrole units, we require that a significant fraction
+of the molecule’s heavy atoms (i.e. non‐hydrogens) are in those pyrrole rings.
+This extra condition aims to reduce mis‐classification of compounds with isolated pyrrole-like substructures.
 """
 
 from rdkit import Chem
 
 def is_polypyrrole(smiles: str):
     """
-    Determines if a molecule is a polypyrrole, i.e. contains two or more pyrrole units,
+    Determines if a molecule is a polypyrrole; i.e. it is composed largely of pyrrole units,
     based on its SMILES string.
     
-    A pyrrole ring is defined as a 5-membered ring in which:
-      - All atoms are marked as aromatic.
-      - There is exactly one nitrogen atom (atomic number 7).
-      - The other four atoms are carbons (atomic number 6).
+    Here a pyrrole unit is defined as a five-membered aromatic ring in which:
+      - The ring is aromatic.
+      - Exactly one atom is a nitrogen (atomic number 7), and the remaining four atoms are carbons (atomic number 6).
+    
+    In order to avoid false positives (e.g. compounds that merely contain a small pyrrole fragment),
+    we also measure what fraction of the heavy (non‐hydrogen) atoms are part of the pyrrole matches.
+    Only if the molecule has at least 2 pyrrole matches and if the union of all atoms in these matches 
+    represents a sufficiently high fraction (here, 40%) of the molecule’s heavy atoms, 
+    will it be classified as a polypyrrole.
     
     Args:
         smiles (str): SMILES string of the molecule.
         
     Returns:
-        bool: True if molecule is a polypyrrole, False otherwise.
-        str: Detailed reason for classification.
+        bool: True if the molecule qualifies as a polypyrrole, False otherwise.
+        str: Detailed reason for the classification decision.
     """
     
-    # Parse the SMILES string into an RDKit molecule.
+    # Attempt to parse the SMILES.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Note: Ensure that aromaticity is set (usually done automatically by RDKit).
-    Chem.SanitizeMol(mol)
+    # Sanitize (this sets aromaticity, etc.).
+    try:
+        Chem.SanitizeMol(mol)
+    except Exception as e:
+        return False, f"Sanitization failed: {e}"
     
-    # Obtain ring information.
-    ring_info = mol.GetRingInfo()
-    atom_rings = ring_info.AtomRings()
+    # Count heavy atoms.
+    heavy_atoms = [atom for atom in mol.GetAtoms() if atom.GetAtomicNum() > 1]
+    if not heavy_atoms:
+        return False, "No heavy atoms found in molecule"
+    n_heavy = len(heavy_atoms)
     
-    pyrrole_unit_count = 0
+    # Define a SMARTS that matches a pyrrole unit:
+    # [n;a,r] means an aromatic nitrogen in a ring;
+    # followed by four aromatic carbon atoms [c;a,r]. 
+    # The ring closure "1" ensures a five-membered ring.
+    pyrrole_smarts = "[n;a,r]1[c;a,r][c;a,r][c;a,r][c;a,r]1"
+    pyrrole_query = Chem.MolFromSmarts(pyrrole_smarts)
+    if pyrrole_query is None:
+        return None, None  # Cannot compile SMARTS; unlikely
     
-    # Iterate over each ring in the molecule.
-    for ring in atom_rings:
-        # Check for 5-membered rings.
-        if len(ring) != 5:
-            continue
-        
-        # Get the atoms corresponding to the ring indices.
-        ring_atoms = [mol.GetAtomWithIdx(idx) for idx in ring]
-        
-        # Check if every atom in the ring is aromatic.
-        if not all(atom.GetIsAromatic() for atom in ring_atoms):
-            continue
-        
-        # Count nitrogen atoms and verify that other atoms are carbon.
-        n_nitrogen = 0
-        non_carbon_present = False
-        for atom in ring_atoms:
-            atomic_num = atom.GetAtomicNum()
-            if atomic_num == 7:  # Nitrogen
-                n_nitrogen += 1
-            elif atomic_num != 6:  # Not carbon
-                non_carbon_present = True
-                break
-        
-        # For a pyrrole, we expect exactly 1 nitrogen and 4 carbons.
-        if non_carbon_present:
-            continue
-        if n_nitrogen == 1:
-            pyrrole_unit_count += 1
+    # Find all pyrrole substructure matches.
+    pyrrole_matches = mol.GetSubstructMatches(pyrrole_query, uniquify=True)
+    match_count = len(pyrrole_matches)
     
-    # Classify according to the count of pyrrole units.
-    if pyrrole_unit_count >= 2:
-        return True, f"Contains {pyrrole_unit_count} pyrrole units (>=2); qualifies as a polypyrrole."
-    else:
-        return False, f"Found {pyrrole_unit_count} pyrrole unit(s); at least 2 are required for polypyrrole classification."
+    # If less than 2 pyrrole matches, then we do not have a polypyrrole.
+    if match_count < 2:
+        return False, f"Found {match_count} pyrrole unit(s); at least 2 are required for polypyrrole classification."
+    
+    # Now, accumulate all atom indices (even if overlapping) that occur in any pyrrole match.
+    pyrrole_atoms = set()
+    for match in pyrrole_matches:
+        pyrrole_atoms.update(match)
+    
+    # Compute the fraction of heavy atoms that are part of a pyrrole ring:
+    fraction = len(pyrrole_atoms) / n_heavy
+    
+    # We choose a threshold that requires a significant portion of the molecule to be composed of pyrrole atoms.
+    threshold = 0.4  # 40% of heavy atoms must be in matched pyrrole rings
+    if fraction < threshold:
+        return False, (f"Found {match_count} pyrrole unit(s), but only {fraction:.2f} "
+                       f"of heavy atoms are in pyrrole rings (threshold {threshold}); "
+                       "molecule is not predominantly composed of pyrrole units.")
+    
+    # If both conditions are satisfied, we classify as polypyrrole.
+    return True, (f"Contains {match_count} pyrrole unit(s) and {fraction:.2f} fraction of heavy atoms are in pyrrole rings; "
+                  "qualifies as a polypyrrole.")
 
-# Example usage (if running as a script):
+# Example usage:
 if __name__ == "__main__":
-    # You can test with a known polypyrrole-like molecule; for instance, porphyrins contain 4 pyrrole rings.
-    test_smiles = "CC1=C(C)C2=C(C3=CC=CC=C3N2)N1"  # This is just a dummy SMILES for testing.
+    # Test with a known polypyrrole-like molecule (e.g. a porphyrin which has 4 pyrrole units).
+    test_smiles = "C1(=CC=2NC(=C(C2C)CCC(=O)O)C=C3NC(C(=C3CCC(=O)O)C)=O)NC(C(=C1C)C=C)=O"  # biotripyrrin-a (example)
     result, reason = is_polypyrrole(test_smiles)
     print(result, reason)
