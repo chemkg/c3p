@@ -1,15 +1,18 @@
 """
 Classifies: CHEBI:35343 17beta-hydroxy steroid
 """
-#!/usr/bin/env python
 """
-Classifies: 17beta-hydroxy steroid
+Classifies: CHEBI:17beta-hydroxy steroid
 Definition: A 17-hydroxy steroid in which the hydroxy group at position 17 has a beta-configuration.
-Heuristic:
-  1. Identify the fused steroid nucleus by extracting rings of size 5 and 6 and looking for a connected cluster
-     having at least one 5-membered and three 6-membered rings.
-  2. Within that fused core, search for a chiral carbon that bears an –OH and that belongs to a 5-membered ring.
-     (We assume that if a stereocenter is defined on such a candidate it is interpreted as beta.)
+Heuristic update:
+  1. Identify the steroid nucleus by considering only carbocyclic rings (rings with all carbons)
+     of size 5 or 6.
+  2. Build a “fused” ring component from those rings (rings sharing at least 2 atoms).
+  3. Accept a component only if it comprises exactly 4 rings with three 6-membered and one 5-membered ring.
+  4. Within that fused steroid core, search for a chiral carbon that bears an –OH (via a single bond)
+     and that belongs to the sole 5-membered ring.
+     
+This should help reduce false positives coming from other fused cyclic systems.
 """
 
 from rdkit import Chem
@@ -17,39 +20,43 @@ from rdkit import Chem
 def is_17beta_hydroxy_steroid(smiles: str):
     """
     Determines if a molecule is a 17beta-hydroxy steroid based on its SMILES string.
-    The algorithm checks that the molecule contains a fused steroid nucleus (at least one 5-membered and three 6-membered rings
-    that are interconnected) and that within that nucleus there is a chiral carbon in a five-membered ring bearing an –OH group.
+    The algorithm first tries to detect a fused steroid nucleus (the classic four-ring system
+    composed of three six-membered rings and one five-membered ring, all carbocyclic) and then 
+    checks if within the five-membered ring there is a chiral carbon bearing an –OH group.
     
     Args:
         smiles (str): SMILES string of the molecule.
     
     Returns:
-        bool: True if molecule is a 17beta-hydroxy steroid, False otherwise.
+        bool: True if the molecule is classified as a 17beta-hydroxy steroid, False otherwise.
         str: The explanation for the classification decision.
     """
     # Parse the SMILES string
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
+    
+    # Get ring information and focus on rings of size 5 or 6 that are *carbocyclic* (only carbon atoms)
+    ring_info = mol.GetRingInfo().AtomRings()
+    carbocyclic_rings = []
+    for ring in ring_info:
+        if len(ring) in (5, 6):
+            # Check that every atom in the ring is carbon (atomic number 6)
+            if all(mol.GetAtomWithIdx(idx).GetAtomicNum() == 6 for idx in ring):
+                carbocyclic_rings.append(set(ring))
+    if not carbocyclic_rings:
+        return False, "No 5- or 6-membered carbocyclic rings found; unlikely to be a steroid"
 
-    # Obtain ring information (list of tuples of atom indices)
-    rings = mol.GetRingInfo().AtomRings()
-    
-    # Focus only on rings of size 5 or 6 (typical for steroid nuclei)
-    steroid_rings = [set(ring) for ring in rings if len(ring) in (5, 6)]
-    if not steroid_rings:
-        return False, "No 5- or 6-membered rings found; unlikely to be a steroid"
-    
-    # Build a graph of rings: nodes = each ring; an edge between two rings exists if they share at least 2 atoms.
-    n = len(steroid_rings)
+    # Build a graph among rings: each ring is a node; an edge exists if rings share at least 2 atoms.
+    n = len(carbocyclic_rings)
     ring_graph = {i: set() for i in range(n)}
     for i in range(n):
         for j in range(i+1, n):
-            if len(steroid_rings[i].intersection(steroid_rings[j])) >= 2:
+            if len(carbocyclic_rings[i].intersection(carbocyclic_rings[j])) >= 2:
                 ring_graph[i].add(j)
                 ring_graph[j].add(i)
     
-    # Find connected components of rings from the graph.
+    # Find connected components of rings in the graph.
     visited = set()
     components = []
     for i in range(n):
@@ -64,60 +71,68 @@ def is_17beta_hydroxy_steroid(smiles: str):
             visited |= comp
             components.append(comp)
     
-    # Identify a component that approximates the fused steroid core:
-    # We want at least one 5-membered ring and at least three 6-membered rings in the connected set.
-    steroid_component_atoms = None
+    # Look through each connected component to see if any qualifies as a steroid core:
+    # classical steroid has four fused rings: three six-membered and one five-membered ring.
+    steroid_core_atoms = None
+    five_ring_indices = None   # will hold set(s) corresponding to the 5-membered ring in core
     for comp in components:
-        comp_rings = [steroid_rings[i] for i in comp]
+        comp_rings = [carbocyclic_rings[i] for i in comp]
+        # Accept only if exactly four rings are present
+        if len(comp_rings) != 4:
+            continue
         count_5 = sum(1 for ring in comp_rings if len(ring) == 5)
         count_6 = sum(1 for ring in comp_rings if len(ring) == 6)
-        if count_5 >= 1 and count_6 >= 3:
-            # Merge all atom indices in this component to represent the steroid core.
-            steroid_component_atoms = set().union(*comp_rings)
+        if count_5 == 1 and count_6 == 3:
+            # Merge all atom indices in the component to represent the fused steroid core.
+            core_atoms = set().union(*comp_rings)
+            steroid_core_atoms = core_atoms
+            # Also record the indices of the five-membered ring (should be only one)
+            for ring in comp_rings:
+                if len(ring) == 5:
+                    five_ring_indices = ring
+                    break
+            # Use the first component matching our criteria.
             break
 
-    if steroid_component_atoms is None:
+    if steroid_core_atoms is None:
         return False, ("Molecule does not contain a fused steroid core "
-                       "(expected at least one 5-membered and three 6-membered fused rings)")
+                       "(expected exactly four fused carbocyclic rings: three six-membered and one five-membered)")
     
-    # Now search within the steroid core for a candidate 17beta-hydroxy group:
-    # Look for a chiral carbon (with explicit stereochemistry) that is in the steroid core,
-    # has an -OH (an oxygen via single bond) and belongs to at least one 5-membered ring.
+    # Within the detected steroid core, look for a candidate 17beta-hydroxy group.
+    # We require a carbon in the steroid core that:
+    #   - has defined chirality (i.e. not CHI_UNSPECIFIED)
+    #   - is attached by a SINGLE bond to an oxygen (–OH)
+    #   - lies in the five-membered ring (assigned to be the D ring, where C17 is located)
     for atom in mol.GetAtoms():
         if atom.GetAtomicNum() != 6:
-            continue
-        # Require that the atom has defined chirality
+            continue  # skip non-carbons
+        if atom.GetIdx() not in steroid_core_atoms:
+            continue  # must be in the steroid nucleus
+        # Check that chirality is specified (assume if specified then configuration is defined)
         if atom.GetChiralTag() == Chem.rdchem.ChiralType.CHI_UNSPECIFIED:
             continue
-        # Ensure the atom is part of the steroid core
-        if atom.GetIdx() not in steroid_component_atoms:
+        
+        # Ensure the atom is part of the five-membered ring (the candidate D ring)
+        if five_ring_indices is None or atom.GetIdx() not in five_ring_indices:
             continue
-        # Check for an attached hydroxyl group (oxygen connected by a SINGLE bond)
+        
+        # Look for an -OH group: a single bonded oxygen neighbor.
         has_OH = False
         for nbr in atom.GetNeighbors():
             if nbr.GetAtomicNum() == 8:
+                # Check that the oxygen is connected by a single bond.
                 bond = mol.GetBondBetweenAtoms(atom.GetIdx(), nbr.GetIdx())
                 if bond is not None and bond.GetBondType() == Chem.rdchem.BondType.SINGLE:
                     has_OH = True
                     break
-        if not has_OH:
-            continue
-        # Check that this candidate atom is in at least one 5-membered ring of the molecule
-        in_five_ring = False
-        for ring in rings:
-            if len(ring) == 5 and atom.GetIdx() in ring:
-                # Optionally, make sure the entire ring is part of the steroid core
-                if steroid_component_atoms.issuperset(ring):
-                    in_five_ring = True
-                    break
-        if in_five_ring:
+        if has_OH:
             return True, "Molecule contains a fused steroid nucleus with a candidate 17beta-hydroxy group."
     
     return False, "No candidate 17beta-hydroxy group was detected in the steroid nucleus."
 
-# Example usage:
+# Example usage (for testing only):
 if __name__ == '__main__':
-    # Test with one example: 17beta-estradiol 
+    # You might test with one known example such as 17beta-estradiol:
     test_smiles = "[H][C@]12CC[C@]3(C)[C@@H](O)CC[C@@]3([H])[C@]1([H])CCc1cc(O)ccc21"
     result, reason = is_17beta_hydroxy_steroid(test_smiles)
     print("Result:", result)
