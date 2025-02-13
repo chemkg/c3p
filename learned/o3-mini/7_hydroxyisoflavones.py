@@ -4,15 +4,15 @@ Classifies: CHEBI:55465 7-hydroxyisoflavones
 #!/usr/bin/env python3
 """
 Classifies: 7-hydroxyisoflavones
-Definition: A hydroxyisoflavone compound having a hydroxy (–OH) group specifically at the 7–position of the isoflavone core.
+Definition: A hydroxyisoflavone compound having a hydroxy (–OH) group specifically at the 7–position of the isoflavone (3–phenylchromen-4-one) core.
 Heuristic algorithm:
-1. Verify that the molecule contains an isoflavone core (a 3–phenylchromen–4–one) using a SMARTS pattern.
-2. Locate the carbonyl carbon (of the chromen-4-one portion) within that core.
-3. Look for fused aromatic rings that are parts of the isoflavone core (the benzene rings in the fused bicyclic system).
-4. Among those rings, search for an aromatic carbon bearing an –OH group whose topological distance to the carbonyl is 3.
-   (In many isoflavones the 7–OH lies three bonds away from the carbonyl carbon.)
-5. If such an –OH is found, classify the molecule as a 7–hydroxyisoflavone.
-Note: This rule‐based procedure is heuristic and may miss edge cases or mis‐classify some molecules.
+1. Look for a relaxed isoflavone core using a SMARTS pattern.
+   (The SMARTS "c1ccc2c(c1)occ2=O" represents the fused bicyclic (chromen-4-one) system.)
+2. Within the matched core, identify the carbonyl carbon (one that is double-bonded to an oxygen).
+3. Iterate over the aromatic carbons in the core that bear an –OH substituent.
+4. Evaluate whether one such carbon is exactly three bonds away (topologically) from the carbonyl carbon.
+5. If so, classify as a 7-hydroxyisoflavone.
+Note: This rule‐based procedure is heuristic and may not capture all isoflavone derivatives.
 """
 
 from rdkit import Chem
@@ -21,9 +21,9 @@ from rdkit.Chem import rdmolops
 def is_7_hydroxyisoflavones(smiles: str):
     """
     Determines if a molecule is a 7-hydroxyisoflavone based on its SMILES string.
-    The function requires that the molecule contains an isoflavone core, and then it
-    checks for a hydroxyl group on the fused aromatic A ring that is three bonds away 
-    (topologically) from the carbonyl carbon.
+    The function requires that the molecule contains an isoflavone core and then
+    checks for the presence of an aromatic hydroxyl group (–OH) on the core at a location
+    that is three bonds away from the carbonyl group (heuristically corresponding to the 7–position).
     
     Args:
         smiles (str): SMILES string of the molecule.
@@ -32,81 +32,78 @@ def is_7_hydroxyisoflavones(smiles: str):
         bool: True if the molecule is classified as a 7-hydroxyisoflavone, False otherwise.
         str: Reason for the classification decision.
     """
+    # Parse the molecule
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string."
-
-    # Step 1. Check for isoflavone core.
-    # This SMARTS represents a 3-phenylchromen-4-one (isoflavone) core.
-    core_smarts = "c1ccc2c(c1)oc(=O)c3ccccc23"
-    core = Chem.MolFromSmarts(core_smarts)
-    if core is None:
+    
+    # Define a relaxed SMARTS for the isoflavone core (chromen-4-one)
+    # This pattern represents a fused bicyclic aromatic system with a lactone (carbonyl) group.
+    core_smarts = "c1ccc2c(c1)occ2=O"
+    core_query = Chem.MolFromSmarts(core_smarts)
+    if core_query is None:
         return False, "Error in SMARTS pattern for isoflavone core."
     
-    if not mol.HasSubstructMatch(core):
+    # Check if the molecule contains the core
+    if not mol.HasSubstructMatch(core_query):
         return False, "Molecule does not contain the expected isoflavone core."
     
-    # Get one match for the core.
-    core_matches = mol.GetSubstructMatches(core)
-    core_match = core_matches[0]  # use first match
+    core_matches = mol.GetSubstructMatches(core_query)
+    # Use the first match found
+    core_match = core_matches[0]
     core_match_set = set(core_match)
     
-    # Step 2. Find the carbonyl carbon in the core.
-    # We look for a pattern matching a carbon with a double-bonded oxygen: [C]=O
-    carbonyl_smarts = "[C](=O)"
-    carbonyl_query = Chem.MolFromSmarts(carbonyl_smarts)
-    carbonyl_matches = mol.GetSubstructMatches(carbonyl_query)
-    carbonyl_core = None
-    for match in carbonyl_matches:
-        # If the carbonyl carbon is part of the core match, take it.
-        if match[0] in core_match_set:
-            carbonyl_core = match[0]
-            break
-    if carbonyl_core is None:
-        return False, "Isoflavone core found but no carbonyl carbon detected."
-
-    # Step 3. Get the ring information and count ring memberships.
-    ring_info = mol.GetRingInfo()
-    rings = ring_info.AtomRings()  # each ring is a tuple of atom indices
+    # Within the core match, identify the carbonyl carbon.
+    # We search for a carbon which is double-bonded to an oxygen.
+    carbonyl_idx = None
+    for idx in core_match:
+        atom = mol.GetAtomWithIdx(idx)
+        if atom.GetAtomicNum() == 6:  # carbon
+            # Look at bonds to see if one is a double bond to oxygen
+            for bond in atom.GetBonds():
+                if bond.GetBondTypeAsDouble() == 2:
+                    nbr = bond.GetOtherAtom(atom)
+                    if nbr.GetAtomicNum() == 8:
+                        carbonyl_idx = idx
+                        break
+            if carbonyl_idx is not None:
+                break
+    if carbonyl_idx is None:
+        return False, "Isoflavone core found but no carbonyl carbon was detected in the core."
     
-    # Step 4. Look for aromatic six-membered rings that are part of the core match.
-    candidate_rings = []
-    for ring in rings:
-        # Consider 6-membered aromatic rings fully contained in the isoflavone core.
-        ring_set = set(ring)
-        if len(ring) != 6:
+    # Search within the core for an aromatic carbon that has an -OH group
+    # and check if its shortest topological distance to the carbonyl carbon is 3 bonds.
+    for idx in core_match:
+        atom = mol.GetAtomWithIdx(idx)
+        if atom.GetAtomicNum() != 6 or not atom.GetIsAromatic():
             continue
-        if not ring_set.issubset(core_match_set):
-            continue
-        # Check that all atoms in this ring are aromatic.
-        if not all(mol.GetAtomWithIdx(idx).GetIsAromatic() for idx in ring):
-            continue
-        candidate_rings.append(ring)
-    
-    if not candidate_rings:
-        return False, "Isoflavone core found but no fused aromatic ring (A ring) identified within the core."
-    
-    # Step 5. Now, for each candidate ring, search for an aromatic carbon carrying -OH
-    # and check if its shortest topological path to the carbonyl carbon is 3 bonds.
-    for ring in candidate_rings:
-        for idx in ring:
-            atom = mol.GetAtomWithIdx(idx)
-            # Look only at aromatic carbons.
-            if atom.GetAtomicNum() != 6 or not atom.GetIsAromatic():
+        # Check if this aromatic carbon is substituted with a hydroxyl group.
+        has_hydroxy = False
+        for nbr in atom.GetNeighbors():
+            # Look for oxygen atoms.
+            if nbr.GetAtomicNum() != 8:
                 continue
-            # Check neighbors for -OH (oxygen with explicit hydrogen(s))
-            for nbr in atom.GetNeighbors():
-                if nbr.GetAtomicNum() == 8 and nbr.GetTotalNumHs() > 0:
-                    # Found a hydroxyl on this aromatic carbon.
-                    # Now, compute the shortest path length between this carbon and the carbonyl carbon.
-                    path = rdmolops.GetShortestPath(mol, idx, carbonyl_core)
-                    if len(path) - 1 == 3:
-                        return True, "Molecule contains an isoflavone core and an aromatic -OH three bonds away from the carbonyl (consistent with a 7-OH)."
+            # Check if the oxygen is a hydroxyl: typically, it has at least one hydrogen (even if implicit)
+            # and is not involved in a double bond (to exclude carbonyl oxygen).
+            if nbr.GetDegree() >= 1 and nbr.GetFormalCharge() == 0:
+                # Get total H count (implicit + explicit)
+                if nbr.GetTotalNumHs() > 0:
+                    has_hydroxy = True
+                    break
+        if not has_hydroxy:
+            continue
+        
+        # Compute the shortest topological distance from this aromatic carbon to the carbonyl carbon.
+        path = rdmolops.GetShortestPath(mol, idx, carbonyl_idx)
+        # The number of bonds is (number of atoms in path - 1)
+        if len(path) - 1 == 3:
+            return True, ("Molecule contains an isoflavone core and an aromatic -OH located "
+                          "three bonds from the carbonyl (consistent with a 7-hydroxy substitution).")
     
-    return False, "Molecule contains an isoflavone core but no hydroxyl group at the expected (7-position) location was found."
+    return False, ("Molecule contains an isoflavone core but no aromatic -OH was found at the expected "
+                   "position (three bonds from the carbonyl).")
 
-
-# Example test (uncomment for local testing):
+# Example (for local testing):
 # if __name__ == "__main__":
 #     test_smiles = "Oc1ccc2c(c1)occ(-c1ccccc1)c2=O"  # 7-hydroxyisoflavone
 #     result, reason = is_7_hydroxyisoflavones(test_smiles)
