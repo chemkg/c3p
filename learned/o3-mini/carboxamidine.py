@@ -3,43 +3,47 @@ Classifies: CHEBI:35359 carboxamidine
 """
 """
 Classifies: Carboxamidine containing compounds
-Definition: Compounds having the structure RC(=NR)NR2 (commonly the -C(=NH)NH2 group, or variants thereof).
-This improved version uses a broader SMARTS pattern and inspects the immediate bonding environment 
-to avoid flagging peptide-like groups.
+Definition: Compounds having the structure RC(=NR)NR2 (commonly the -C(=NH)NH2 group,
+or variants thereof).  This version uses a refined SMARTS pattern and inspects the bonding
+environment to reduce false positives from peptide-like moieties.
 """
 from rdkit import Chem
 
 def is_carboxamidine(smiles: str):
     """
-    Determines if a molecule contains a carboxamidine group based on its SMILES string.
-    The group is defined as RC(=NR)NR2 (for example, the common -C(=NH)NH2 group) and related variants.
-    
+    Determines if a molecule contains a carboxamidine group (RC(=NR)NR2) in a valid,
+    non-peptide-like context.
+
     The algorithm is:
-      1. Parse the SMILES.
-      2. Look for a carboxamidine fragment using a more inclusive SMARTS:
-         “[CX3](=[NX2,NX3,NX4+])[NX3,NX4]”
-         This should catch neutral and charged variants.
-      3. For each SMARTS match, inspect the environment of the central carbon.
-         The carbon should be connected to exactly two nitrogens (part of the amidine) and one extra substituent.
-         If that extra substituent is directly a “peptide‐like” fragment (e.g. a carbon with a double bond to oxygen),
-         then the match is flagged as part of a peptide environment.
-      4. Additionally, if the overall molecule contains peptide‐bond fragments (using “N-C(=O)C”) and is large,
-         we flag the molecule as peptide‐like.
-    
+      1. Parse the SMILES string.
+      2. Identify possible amidine groups using a broad SMARTS pattern that captures variations,
+         including charged species.
+      3. For every match, check:
+           a. The central carbon (first atom in the match) must have exactly three bonds.
+           b. Two of these bonds should be to the amidine nitrogens (from the SMARTS match),
+              and the remaining one is the substituent (R).
+           c. If the extra substituent is a carbon that is directly double-bonded to an oxygen,
+              then it is likely in a peptide-like environment and the match is rejected.
+      4. In addition, if the molecule overall contains typical peptide bond fragments
+         (e.g. "N-C(=O)C") and has a large skeleton, the molecule is considered peptide-like.
+      5. If at least one match passes and the overall molecule does not appear peptide-like,
+         we classify the molecule as containing a carboxamidine group.
+
     Args:
         smiles (str): SMILES string of the molecule.
-    
+
     Returns:
-        bool: True if a carboxamidine group is detected in a valid (nonpeptide-like) context, False otherwise.
+        bool: True if a valid carboxamidine group is detected (and not in a peptide-like environment),
+              False otherwise.
         str: Explanation of the decision.
     """
+    # Parse SMILES string
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Define a broad SMARTS pattern to capture carboxamidine groups.
-    # This pattern accepts variations in the bonding (including the possibility of formal charges)
-    # It requires a carbon (3-connected) with a double bond to a nitrogen (which may have 2,3 or even 4 connections)
+    # Define a relatively broad SMARTS pattern for amidine groups.
+    # This pattern matches a central sp2 carbon with a double bond to a nitrogen (which can be neutral or charged)
     # and a single bond to a second nitrogen.
     pattern_amidine = Chem.MolFromSmarts("[CX3](=[NX2,NX3,NX4+])[NX3,NX4]")
     matches = mol.GetSubstructMatches(pattern_amidine)
@@ -48,42 +52,52 @@ def is_carboxamidine(smiles: str):
     
     # Define a simple SMARTS for a peptide bond fragment.
     peptide_pattern = Chem.MolFromSmarts("N-C(=O)C")
-    # If the molecule is large and contains peptide bonds, flag it as peptide-like.
+    # If the molecule contains peptide bonds and is relatively large, flag it as peptide-like.
     is_peptide_mol = mol.HasSubstructMatch(peptide_pattern) and mol.GetNumHeavyAtoms() > 30
     
     valid_match_found = False
-    
-    # Iterate over all matches for the carboxamidine group:
+    # Iterate over each match for the amidine group.
     for match in matches:
-        # By our SMARTS the first atom (match[0]) is the central carbon.
+        # Expect the match to have exactly 3 atoms: [central C, N1, N2]
+        if len(match) != 3:
+            continue
         c_idx = match[0]
         c_atom = mol.GetAtomWithIdx(c_idx)
         
-        # We expect the central carbon to have exactly three neighbors.
-        # Two of these should be the amidine nitrogens (contained in the match).
+        # The central carbon should be three-coordinate (attached to exactly 3 atoms).
+        if c_atom.GetDegree() != 3:
+            continue
+        
+        # Get all neighboring atoms for the central carbon.
         neighbor_indices = [nbr.GetIdx() for nbr in c_atom.GetNeighbors()]
+        # Identify the extra substituent that is not a nitrogen in the amidine group.
         extra_neighbors = [idx for idx in neighbor_indices if idx not in match[1:]]
         
+        # There should be exactly one such substituent.
+        if len(extra_neighbors) != 1:
+            continue
+        
+        extra_idx = extra_neighbors[0]
+        extra_atom = mol.GetAtomWithIdx(extra_idx)
+        
+        # Check if the extra substituent is a carbon that is directly double-bonded to oxygen.
         peptide_like_env = False
-        # If there is an extra substituent, inspect it:
-        for idx in extra_neighbors:
-            nbr_atom = mol.GetAtomWithIdx(idx)
-            # Check each bond from the substituent:
-            for bond in nbr_atom.GetBonds():
-                # If the bond is a double bond and the bonded atom is oxygen (carbonyl-like),
-                # mark as peptide-like.
+        if extra_atom.GetAtomicNum() == 6:
+            # Look at all bonds emanating from the substituent atom.
+            for bond in extra_atom.GetBonds():
+                # If the bond is a double bond (C=O) and the other atom is oxygen, mark as peptide-like.
                 if bond.GetBondTypeAsDouble() == 2.0:
-                    other = bond.GetOtherAtom(nbr_atom)
+                    other = bond.GetOtherAtom(extra_atom)
                     if other.GetAtomicNum() == 8:
                         peptide_like_env = True
                         break
-            if peptide_like_env:
-                break
+
+        if peptide_like_env:
+            continue  # Skip this match as it appears to be in a peptide-like context.
         
-        # Accept the match if no peptide-like extra substituent is found.
-        if not peptide_like_env:
-            valid_match_found = True
-            break
+        # If we get here, the match appears to be a valid carboxamidine fragment.
+        valid_match_found = True
+        break
 
     if valid_match_found and not is_peptide_mol:
         return True, "Carboxamidine group detected via substructure match."
@@ -93,10 +107,10 @@ def is_carboxamidine(smiles: str):
         else:
             return False, "No valid carboxamidine group detected after environmental inspection."
 
-# Example usage (for testing):
+# Example usage (for testing purposes):
 if __name__ == "__main__":
     test_cases = {
-        # True positives (from provided examples)
+        # True positives (examples from provided list)
         "4-[5-(3,5-dichlorophenyl)-5-(trifluoromethyl)-4,5-dihydro-1,2-oxazol-3-yl]-N-[(methoxyamino)methylidene]-2-methylbenzamide":
             "CON=CNC(=O)c1ccc(cc1C)C1=NOC(C1)(c1cc(Cl)cc(Cl)c1)C(F)(F)F",
         "acetamiprid":
@@ -167,4 +181,8 @@ if __name__ == "__main__":
     
     for name, smi in test_cases.items():
         res, explanation = is_carboxamidine(smi)
-        print(f"Test: {name}\nSMILES: {smi}\nResult: {res}\nReason: {explanation}\n{'-'*60}")
+        print(f"Test: {name}")
+        print(f"SMILES: {smi}")
+        print(f"Result: {res}")
+        print(f"Reason: {explanation}")
+        print("-" * 60)
