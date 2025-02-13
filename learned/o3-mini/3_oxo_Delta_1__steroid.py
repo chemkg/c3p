@@ -4,124 +4,119 @@ Classifies: CHEBI:20156 3-oxo-Delta(1) steroid
 """
 Classifies: CHEBI:3-oxo-Δ(1) steroid
 Definition: Any 3-oxo steroid that contains a double bond between positions 1 and 2.
-Heuristic improvements:
-  - Instead of using a single SMARTS pattern, iterate over candidate carbonyl carbons (ketone groups)
-    in six-membered rings.
-  - Check that the candidate carbonyl carbon (presumably the 3-oxo group) is indeed a ketone 
-    (i.e. bonded via a double bond to oxygen and to two carbon atoms).
-  - Then, for each candidate, look for an adjacent ring carbon (in the same six‐membered ring)
-    that is part of a non-carbonyl double bond (a candidate for the Δ(1) double bond, usually between C1 and C2).
-  - Also require that the molecule has at least 3 rings (typically steroids have 4 fused rings)
-    and that the candidate carbon is part of a fused ring system.
-Note: This heuristic does not cover all edge cases.
+The improved heuristic:
+  - Require that the molecule has at least 4 rings.
+  - Identify six-membered rings that are fused with at least one other 5- or 6-membered ring.
+  - In each such candidate ring, look for a ketone carbon (C=O) that is not an aldehyde.
+  - Check that the same ring contains at least one non-carbonyl C=C double bond, serving as a proxy 
+    for the Δ(1) double bond.
+Note: This heuristic does not perfectly capture all edge cases.
 """
+
 from rdkit import Chem
 
 def is_3_oxo_Delta_1__steroid(smiles: str):
     """
     Determines if a molecule is a 3-oxo-Δ(1) steroid based on its SMILES string.
-    
+
     Heuristic criteria:
-      1. The molecule must have at least 3 rings (steroid nucleus is typically 4 fused rings).
-      2. In at least one six-membered ring, there is a ketone carbon (a carbon with a C=O double bond,
-         and with at least 2 carbon neighbours, so that it is a ketone not an aldehyde).
-      3. One of the ring-neighbours of that ketone carbon participates in a non-carbonyl C=C double bond.
-         (This is used as a proxy for the Δ(1) double bond between positions 1 and 2.)
-      4. The candidate ketone should be in a fused ring system (i.e. be part of >1 ring).
+      1. The molecule must have at least 4 rings (the steroid nucleus is typically tetracyclic).
+      2. Look for six-membered rings that are fused to at least one other 5- or 6-membered ring 
+         (i.e. share 2 or more atoms).
+      3. In such a six-membered ring, search for a ketone carbon (a carbon double bonded to oxygen)
+         that is coupled to at least two other carbon atoms (to avoid aldehydes).
+      4. Also in that ring, check for at least one non-carbonyl C=C double bond (proxy for the Δ(1) bond).
     
     Args:
-       smiles (str): SMILES string of the molecule.
+       smiles (str): SMILES string representing the molecule.
     
     Returns:
-       bool: True if the molecule qualifies as a 3-oxo-Δ(1) steroid, else False.
+       bool: True if it qualifies as a 3-oxo-Δ(1) steroid, else False.
        str: Explanation for the classification decision.
     """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-    
+
+    # Get ring information from the molecule.
     ring_info = mol.GetRingInfo()
-    # Require at least 3 rings (steroids usually have 4 fused rings)
-    if ring_info.NumRings() < 3:
-        return False, "Molecule does not have enough rings (<3) to be a steroid"
-    
-    # Iterate over atoms to find candidate ketone carbons in six-membered rings.
-    for atom in mol.GetAtoms():
-        # Look for carbon atoms in a six-membered ring that might be a ketone carbon.
-        if atom.GetSymbol() != "C":
-            continue
-        # RDKit provides a helper: IsInRingSize(n)
-        try:
-            if not atom.IsInRingSize(6):
+    rings = ring_info.AtomRings()
+    if len(rings) < 4:
+        return False, "Molecule does not have at least 4 rings required for a steroid nucleus"
+
+    # We'll focus on candidate rings that are exactly six-membered.
+    candidate_rings = [r for r in rings if len(r) == 6]
+    if not candidate_rings:
+        return False, "No six-membered rings found"
+
+    # Define a helper function to test if a ring is fused with another ring.
+    def is_fused(ring):
+        ring_set = set(ring)
+        # Look for a different ring (of size 5 or 6) that shares at least 2 atoms.
+        for other in rings:
+            if other == ring:
                 continue
-        except AttributeError:
-            # if IsInRingSize is not available, alternate approach using ring_info.NumAtomRings(idx)
-            if ring_info.NumAtomRings(atom.GetIdx()) == 0:
+            if len(other) not in (5, 6):
                 continue
-        
-        # Check for carbonyl: an sp2 carbon bonded via a double bond to an oxygen.
-        carbonyl_found = False
-        o_neighbor = None
-        for bond in atom.GetBonds():
-            # Check if the bond is double and the other atom is oxygen.
-            if bond.GetBondTypeAsDouble() == 2:
-                nbr = bond.GetOtherAtom(atom)
-                if nbr.GetSymbol() == "O":
-                    carbonyl_found = True
-                    o_neighbor = nbr
-                    break
-        if not carbonyl_found:
-            continue
-        
-        # Verify that the atom is a ketone (attached to at least two carbon atoms besides the oxygen)
-        carbon_neighbors = [nbr for nbr in atom.GetNeighbors() if nbr.GetAtomicNum() == 6]
-        if len(carbon_neighbors) < 2:
-            continue  # might be an aldehyde
-        
-        # Check if this candidate is part of a fused ring system:
-        # At least one atom in the candidate's rings should be in more than one ring.
-        # We can check the candidate atom itself:
-        if ring_info.NumAtomRings(atom.GetIdx()) < 2:
-            # Optionally, one could check the ring partner atoms; here we require the ketone center
-            # to be fused.
-            continue
-        
-        # Now, look among the ring neighbors for a candidate double bond (non-carbonyl double bond)
-        found_delta = False
-        for nbr in atom.GetNeighbors():
-            # We focus on neighbors that are carbons and are in a six-membered ring.
-            if nbr.GetSymbol() != "C":
+            if len(ring_set.intersection(other)) >= 2:
+                return True
+        return False
+
+    # For each candidate six-membered ring that is fused,
+    # look for a ketone carbon and a C=C double bond (non-carbonyl) in that ring.
+    for ring in candidate_rings:
+        if not is_fused(ring):
+            continue  # skip rings that are isolated
+        ring_set = set(ring)
+
+        candidate_ketone_found = False
+        # iterate over atoms in the ring to find a ketone (C=O) center.
+        for idx in ring:
+            atom = mol.GetAtomWithIdx(idx)
+            if atom.GetSymbol() != "C":
                 continue
-            try:
-                if not nbr.IsInRingSize(6):
-                    continue
-            except AttributeError:
-                continue
-            # For the neighbor, check if any of its bonds (except the one linking back to our ketone)
-            # is a double bond between two carbons (and not involved with oxygen).
-            for bond in nbr.GetBonds():
-                # Skip the bond that connects to the candidate ketone carbon.
-                if bond.GetOtherAtom(nbr).GetIdx() == atom.GetIdx():
-                    continue
-                # Look for a double bond between carbons.
+            # Look for a double bond from this carbon to an oxygen.
+            for bond in atom.GetBonds():
+                # Check for a double bond.
                 if bond.GetBondTypeAsDouble() == 2:
-                    other = bond.GetOtherAtom(nbr)
-                    if other.GetSymbol() == "C":
-                        # Additionally, ensure that this double bond is within a ring.
-                        if bond.IsInRing():
-                            found_delta = True
+                    other = bond.GetOtherAtom(atom)
+                    if other.GetSymbol() == "O":
+                        # Ensure that the carbon is bonded to at least two carbons (ketone vs aldehyde check).
+                        carbon_neighbors = [nbr for nbr in atom.GetNeighbors() if nbr.GetAtomicNum() == 6]
+                        if len(carbon_neighbors) >= 2:
+                            candidate_ketone_found = True
                             break
-            if found_delta:
+            if candidate_ketone_found:
                 break
-        
+
+        # If no ketone candidate in this ring, go on to the next ring.
+        if not candidate_ketone_found:
+            continue
+
+        # Now, check this candidate ring for a non-carbonyl C=C double bond.
+        found_delta = False
+        # iterate over bonds in the molecule and focus on bonds where both atoms lie in this ring.
+        for bond in mol.GetBonds():
+            a1_idx = bond.GetBeginAtomIdx()
+            a2_idx = bond.GetEndAtomIdx()
+            if a1_idx in ring_set and a2_idx in ring_set:
+                # Must be a double bond.
+                if bond.GetBondTypeAsDouble() == 2:
+                    # Ensure it is a bond between two carbons.
+                    a1 = mol.GetAtomWithIdx(a1_idx)
+                    a2 = mol.GetAtomWithIdx(a2_idx)
+                    if a1.GetSymbol() == "C" and a2.GetSymbol() == "C":
+                        # Do not consider the carbonyl bond (C=O) because that was used for the ketone check.
+                        # (Since the oxygen isn't in the ring, this bond will not be counted.)
+                        found_delta = True
+                        break
         if found_delta:
-            return True, ("Molecule contains a six-membered ring ketone (likely the 3-oxo group) with an adjacent "
-                          "non-carbonyl C=C double bond (proxy for the Δ(1) bond) in a fused ring system.")
-    
-    return False, "No candidate six-membered ring ketone with adjacent non-carbonyl double bond (Δ(1) candidate) found"
+            return True, ("Molecule contains a fused steroid nucleus (>=4 rings) with a six-membered ring "
+                          "bearing a ketone (3-oxo) and a non-carbonyl C=C double bond (proxy for Δ(1) bond).")
+    return False, "No candidate 3-oxo-Δ(1) steroid nucleus found"
 
 
-# For testing purposes (you can remove or comment out the test cases)
+# Test cases (you can remove or comment these out)
 if __name__ == "__main__":
     test_smiles = [
         # paraminabeolide B (expected True)
