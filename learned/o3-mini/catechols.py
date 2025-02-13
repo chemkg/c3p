@@ -2,17 +2,21 @@
 Classifies: CHEBI:33566 catechols
 """
 """
-Classifies: Catechols (compounds containing an o‐diphenol component)
+Classifies: Catechols (compounds containing an o-diphenol component)
 A catechol is defined here as any compound that contains an aromatic ring
 bearing two hydroxyl groups in adjacent positions (i.e. a 1,2-dihydroxybenzene fragment).
+The previous approach used a rigid SMARTS which led to many false classifications.
+This implementation instead uses a more general SMARTS pattern:
+    "[c]([OX2H])c([OX2H])"
+which requires two aromatic carbons (c) connected by an aromatic bond, each bearing an –OH group.
 """
 
 from rdkit import Chem
 
 def is_catechols(smiles: str):
     """
-    Determines if a molecule contains a catechol (o-diphenol) component based on its SMILES string.
-    The approach uses a SMARTS query that matches a benzene ring with hydroxyl groups on two adjacent carbons.
+    Determines if a molecule contains an o-diphenol (catechol) component based on its SMILES string.
+    The method uses a SMARTS pattern that matches two connected aromatic atoms (c) with an -OH group each.
     
     Args:
         smiles (str): SMILES string of the molecule.
@@ -26,31 +30,32 @@ def is_catechols(smiles: str):
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Define a SMARTS pattern for an o-diphenol (catechol) substructure.
-    # The pattern "c1c(O)c(O)cc(c1)" matches a benzene ring (six-membered aromatic ring)
-    # with two hydroxyl (–OH) substituents on adjacent carbons.
-    # (Note: this pattern may not catch every edge case but focuses on the key o-diphenol motif.)
-    catechol_smarts = "c1c(O)c(O)cc(c1)"
+    # Define an improved SMARTS pattern to capture an o‐dihydroxybenzene motif.
+    # The pattern "[c]([OX2H])c([OX2H])" matches two aromatic atoms (c) directly bonded
+    # where each has an attached -OH group (represented as [OX2H]). This is the minimal requirement
+    # for an o-diphenol (catechol) moiety.
+    catechol_smarts = "[c]([OX2H])c([OX2H])"
     catechol_pattern = Chem.MolFromSmarts(catechol_smarts)
     if catechol_pattern is None:
-        return None, None  # if the SMARTS pattern fails for any reason
-    
-    # Check for the presence of the catechol pattern in the molecule.
+        return None, None  # Should not occur, but safety check.
+        
+    # Check if the molecule contains at least one match of the catechol substructure.
     if mol.HasSubstructMatch(catechol_pattern):
-        return True, "Found aromatic ring with adjacent hydroxyl groups (o-diphenol component)"
+        return True, "Found adjacent aromatic hydroxyl groups (o-diphenol component)"
     
-    # If no match was found, report that no catechol substructure was detected.
+    # If no match was found, then no catechol motif exists.
     return False, "No o-diphenol substructure found"
 
-# Example tests (uncomment to run)
-# test_cases = [
+# Uncomment the following test block to run some example tests:
+# test_smiles = [
 #     # True positives (catechols)
 #     "OC1=C(O)C=CC=C1CCCC/C=C\\C/C=C\\CCCCCCCC2=C(O)C(O)=CC=C2",  # Gerronemin F
 #     "COc1cc(CCc2ccc(O)c(O)c2)cc(O)c1O",  # dendrocandin E
 #     "O[C@@H](CC\\C=C\\c1ccccc1)CCc1ccc(O)c(O)c1",  # (-)-(3S)-1-(3,4-dihydroxyphenyl)-7-phenyl-(6E)-6-hepten-3-ol
-#     # False example (expected to not match the catechol SMARTS)
+#     # False example (catechol not present)
 #     "C1=CC=CC=C1",  # benzene without -OH groups
 # ]
-# for sm in test_cases:
-#     flag, reason = is_catechols(sm)
-#     print(f"SMILES: {sm}\nClassification: {flag}\nReason: {reason}\n")
+#
+# for s in test_smiles:
+#     flag, reason = is_catechols(s)
+#     print(f"SMILES: {s}\nClassification: {flag}\nReason: {reason}\n")
