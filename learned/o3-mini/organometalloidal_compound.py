@@ -3,8 +3,20 @@ Classifies: CHEBI:143084 organometalloidal compound
 """
 """
 Classifies: Organometalloidal Compound
-Definition: A compound having bonds between one or more metalloid (here, specifically arsenic) atoms and one or more carbon atoms of an organyl group.
-We improve upon a simple check by only considering arsenic (As, atomic number 33) and by ensuring that if an As atom is attached to more than one carbon, at least one of the carbon substituents is larger than a simple methyl group.
+Definition: A compound having bonds between one or more metalloid (here we focus on arsenic, As)
+and one or more carbon atoms belonging to an organyl group.
+Heuristic:
+  – First, we find arsenic atoms (atomic number 33).
+  – For each As atom, we get its carbon neighbors.
+  – If only one carbon is attached, we accept (e.g. methylarsonic acid).
+  – If more than one carbon is attached, we require that at least one carbon is not “simple methyl.”
+    Here, a carbon is considered “simple methyl” if it is aliphatic (non‐aromatic) and (aside from the As)
+    has only one heavy-atom neighbor.
+  – For carbons that are aromatic, we further check that the carbon belongs to a “simple” benzene ring,
+    i.e. (a) the ring is exactly six members, (b) all atoms in the ring are carbons, and (c) the carbon
+    does not belong to more than one ring (which may indicate a fused system).
+If none of the As–C bonds meets these criteria, the compound is not classified as an organometalloidal compound.
+Note: This is only a heuristic.
 """
 
 from rdkit import Chem
@@ -12,86 +24,109 @@ from rdkit import Chem
 def is_organometalloidal_compound(smiles: str):
     """
     Determines if a molecule is an organometalloidal compound based on its SMILES string.
-    For our implementation, we focus on arsenic-containing compounds. The molecule is classified as an organometalloidal compound if it contains at least one bond
-    between an arsenic atom and a carbon atom, and if the carbon (or at least one of them, when there are multiple) can be considered an organyl group.
+    We focus on arsenic-containing compounds. The molecule is classified as an organometalloidal compound
+    if it contains at least one As–C bond where, in the case of multiple carbon substituents, at least one
+    carbon is not a simple methyl group. For aromatic carbons the substituent must belong to a nonfused,
+    benzene-like ring.
     
-    An organyl group is here defined as either a solitary carbon substituent (e.g. a methyl group) OR, if an arsenic is attached to more than one carbon, at least one of the carbons 
-    should not be "methyl" (i.e. it should have more than one heavy-atom neighbor or be aromatic).
-
     Args:
         smiles (str): SMILES string of the molecule.
-
+    
     Returns:
-        bool: True if the molecule qualifies as an organometalloidal compound, False otherwise.
-        str: Reason for the classification.
+        bool: True if molecule qualifies, False otherwise.
+        str: Explanation of the classification.
     """
-
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-
-    # For our improved classification, only consider arsenic (atomic number 33)
-    AS_ATOMIC_NUM = 33
-
-    # Helper function to decide if a carbon atom is "methyl"
-    def is_methyl(carbon):
-        # A carbon will be considered a methyl if it is aliphatic (non-aromatic)
-        # and its heavy-atom degree (neighbors excluding hydrogens) is exactly 1.
-        # Note: In methylarsonic acid the only C is CH3 and that should count.
-        if not carbon.GetSymbol() == "C":
-            return False
-        # Count heavy neighbors
-        heavy_neighbors = [nbr for nbr in carbon.GetNeighbors() if nbr.GetAtomicNum() > 1]
-        # Aromatic carbons we'll treat as non-methyl (being part of a larger aromatic system).
-        if carbon.GetIsAromatic():
-            return False
-        return len(heavy_neighbors) == 1
-
-    # Flag to indicate we found a valid As-C bond with proper organyl group
-    found_valid_bond = False
-
-    # Iterate over all atoms; focus on arsenic atoms.
-    for atom in mol.GetAtoms():
-        if atom.GetAtomicNum() == AS_ATOMIC_NUM:
-            # Get all carbon neighbors of this arsenic
-            carbon_neighbors = [nbr for nbr in atom.GetNeighbors() if nbr.GetAtomicNum() == 6]
-            if not carbon_neighbors:
-                continue  # no C connected to this As
-
-            # If there is exactly one attached carbon, we accept it (even if it is a methyl)
-            if len(carbon_neighbors) == 1:
-                neighbor = carbon_neighbors[0]
-                found_valid_bond = True
-                return True, f"Found a bond between As and C ({neighbor.GetSmarts() if hasattr(neighbor, 'GetSmarts') else neighbor.GetSymbol()})."
-            else:
-                # More than one C is attached.
-                # We require that at least one of these carbons is NOT just a methyl.
-                for neighbor in carbon_neighbors:
-                    if not is_methyl(neighbor):
-                        found_valid_bond = True
-                        return True, f"Found a bond between As and C where the C is part of a larger organyl group: {neighbor.GetSymbol()}."
-                # If all attached carbons are simply methyl groups (and more than one is present) then we consider it not an organometalloidal compound.
-                # This helps to weed out cases like di­methylarsinate.
-                return False, "Arsenic is bonded to multiple only-methyl groups; does not qualify as an organyl bond."
-
-    if not found_valid_bond:
-        return False, "No bond found between arsenic and a carbon of an organyl group."
     
-    # Fallback
-    return False, "No valid organometalloidal (As–C) bond detected."
+    # Retrieve ring information from the molecule
+    ring_info = mol.GetRingInfo().AtomRings()
+    
+    AS_ATOMIC_NUM = 33  # atomic number for arsenic
+    
+    def is_simple_methyl(carbon, attached_to):
+        """
+        Checks if the given carbon atom is a "simple methyl" group.
+        A carbon is considered a methyl if:
+          - It is aliphatic (non-aromatic).
+          - Excluding the connection to the As atom, it has exactly one heavy-atom neighbor.
+        """
+        if carbon.GetSymbol() != "C":
+            return False
+        if carbon.GetIsAromatic():
+            return False  # aromatic carbons are considered more complex
+        # Count heavy (non-hydrogen) neighbors excluding the attached metal atom.
+        neighbors = [nbr for nbr in carbon.GetNeighbors() if nbr.GetAtomicNum() > 1 and nbr.GetIdx() != attached_to.GetIdx()]
+        return len(neighbors) == 1
 
-# Example usage:
+    def qualifies_aromatic(carbon):
+        """
+        For aromatic carbons, we require that the atom is part of a single six-membered ring
+        in which every member is a carbon.
+        This is our rough way to capture a simple phenyl (organyl) group.
+        """
+        # Find all rings that contain this atom.
+        rings_here = [r for r in ring_info if carbon.GetIdx() in r]
+        # Reject if the atom appears in more than one ring (i.e. likely in a fused system).
+        if len(rings_here) != 1:
+            return False
+        ring = rings_here[0]
+        if len(ring) != 6:
+            return False
+        # Check that every atom in the ring is a carbon.
+        for idx in ring:
+            if mol.GetAtomWithIdx(idx).GetSymbol() != "C":
+                return False
+        return True
+
+    # Loop over all atoms looking for arsenic
+    for atom in mol.GetAtoms():
+        if atom.GetAtomicNum() != AS_ATOMIC_NUM:
+            continue
+        
+        # Get carbon neighbors for this arsenic atom.
+        carbon_neighbors = [nbr for nbr in atom.GetNeighbors() if nbr.GetAtomicNum() == 6]
+        if not carbon_neighbors:
+            continue  # this As atom is not bonded to any carbon
+        
+        # If there is exactly one carbon neighbor, we accept the bond (e.g. methylarsonic acid).
+        if len(carbon_neighbors) == 1:
+            neigh = carbon_neighbors[0]
+            return True, f"Found a bond between As and C ({neigh.GetSymbol()}). Only one carbon substituent present."
+        
+        # More than one carbon is bonded.
+        # We now require that at least one of these carbons is not a simple methyl.
+        for cn in carbon_neighbors:
+            if cn.GetIsAromatic():
+                # For aromatic carbon, require that it belongs to a simple benzene ring.
+                if qualifies_aromatic(cn):
+                    return True, f"Found a bond between As and aromatic C from a benzene-like ring."
+            else:
+                # For aliphatic carbons, check if it is more than a methyl.
+                if not is_simple_methyl(cn, attached_to=atom):
+                    return True, f"Found a bond between As and an aliphatic C that is not a simple methyl."
+        # If all attached carbons are simple methyl groups, then we do not qualify.
+        return False, "Arsenic is bonded to multiple only-methyl groups; does not qualify as an organometalloidal compound."
+    
+    return False, "No valid As–C bond (with proper organyl group) detected."
+
+# Example usage (testing some of the examples):
 if __name__ == "__main__":
     test_examples = [
-        # True positives (should qualify):
-        ("C[As](O)(O)=O", "methylarsonic acid"),
+        # True positives
+        ("Nc1cc(ccc1O)[As]1[As]([As]1c1ccc(O)c(N)c1)c1ccc(O)c(N)c1", "arsphenamine trimer"),
         ("[As](=O)(CCCCCCCCCCCCCCCCC)(C)C", "1-dimethylarsinoyl-heptadecane"),
         ("OC(=O)C[As](O)(O)=O", "arsenoacetic acid"),
-        # False positive example: dimethylarsinate should not qualify.
-        ("C[As](C)([O-])=O", "dimethylarsinate"),
-        # False positive example: organosilicon compound should not qualify.
-        ("CC[Si](C)(C)C", "ethyl(trimethyl)silane")
+        ("C[As](O)(O)=O", "methylarsonic acid"),
+        ("O[As](O)(=O)c1ccccc1", "phenylarsonic acid"),
+        # Cases that should not qualify (e.g. only methyl groups)
+        ("C[As](C)(O)=O", "dimethylarsinic acid"),
+        ("C[As](C)O", "dimethylarsinous acid"),
+        # One false positive example from previous attempt (ideally now rejected):
+        ("Oc1ccc2c(oc3c([As]4SCCS4)c(O)ccc3c2=O)c1[As]1SCCS1", "HOxAsH-bis(1,2-ethanedithiol)")
     ]
+    
     for smi, name in test_examples:
         res, reason = is_organometalloidal_compound(smi)
         print(f"SMILES: {smi}\nNAME: {name}\nRESULT: {res}\nREASON: {reason}\n{'-'*60}")
