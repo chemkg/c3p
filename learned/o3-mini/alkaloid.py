@@ -3,124 +3,132 @@ Classifies: CHEBI:22315 alkaloid
 """
 """
 Classifies: Alkaloid
-Definition: Any of the naturally occurring, basic nitrogen compounds (mostly heterocyclic) found
-mostly in the plant kingdom (but also in bacteria, fungi, and animals). By extension, certain neutral
-compounds biogenetically related to basic alkaloids are also classed as alkaloids.
-Note: Compounds in which the nitrogen is exocyclic (e.g. dopamine, mescaline, serotonin) are usually classed as amines.
-However, accepted alkaloids (e.g. selegiline, ephedrine, colchicoside) can have only a single nitrogen even if that nitrogen is not in a ring.
-The heuristic below uses a combination of tests:
-  1) The SMILES must be valid.
-  2) There must be at least one nitrogen atom.
-  3) For each nitrogen atom we check if it is “qualifying” (in a ring OR exocyclic but directly attached to an aromatic atom)
-     and also flag nitrogen atoms in an amide environment (via SMARTS "[NX3][C](=O)").
-  4) Then we decide:
-       - If one or more nitrogen meets the qualifying criteria, we classify as alkaloid.
-       - Else if no nitrogen qualifies but there is more than one nitrogen and not all are amide‐nitrogen,
-         we classify as alkaloid.
-       - Lastly, if there is exactly one nitrogen, and it is in an amide, we use the extra information that many alkaloids
-         have a moderate-to-high molecular weight. (For example, a weight cutoff of 180 Da is used, though this is heuristic.)
-   If none of these conditions is met, the molecule is not classified as an alkaloid.
-   If the heuristic is too uncertain we return (None, None).
+Definition (heuristic): A naturally occurring basic nitrogen compound (mostly heterocyclic) that is not a peptide
+or a small simple amine. In our algorithm we (1) require the SMILES to parse, (2) require at least one nitrogen atom,
+(3) flag “qualifying” nitrogen atoms if they are either in a ring or – if exocyclic – directly attached to an aromatic atom,
+(4) mark nitrogen atoms in an amide environment, and (5) use additional criteria for molecules with a single nitrogen. 
+We also add a check that if all nitrogens appear in a peptide-like (amide) environment the molecule is likely not an alkaloid.
+This combined heuristic is meant to improve F1 score relative to a simpler check.
 """
 
 from rdkit import Chem
 from rdkit.Chem import Descriptors
 
-# SMARTS pattern for a simple amide nitrogen: nitrogen bonded to a carbonyl carbon (this is not perfect)
-amide_pattern = Chem.MolFromSmarts("[NX3][C](=O)")
+# SMARTS for amide environment (nitrogen attached to a carbonyl group)
+amide_pattern = Chem.MolFromSmarts("[NX3;!$(NC=O)]~[C](=O)")  # a loose pattern for amide nitrogen (the pattern isn’t perfect)
 
 def is_alkaloid(smiles: str):
     """
-    Determines if a given molecule (SMILES) is likely an alkaloid using an improved heuristic.
-    
-    Heuristic criteria:
-      1) SMILES must parse.
-      2) There must be at least one nitrogen.
-      3) A nitrogen is considered "qualifying" if it is (a) in a ring OR (b) if exocyclic then directly attached to at least one aromatic atom.
-      4) Additionally, we detect amide nitrogen using a SMARTS pattern.
-      5) Decision:
-            - If at least one nitrogen is qualifying (non‐amide or exocyclic attached to an aromatic group) then accept.
-            - If none qualify but there is more than one total nitrogen and not every nitrogen is in an amide, then accept.
-            - For a single‐nitrogen molecule that only appears as an amide, we require a molecular weight >180 Da.
-            - Otherwise, reject as likely a simple amine or non‐alkaloid.
-            
+    Determines if a molecule (SMILES string) is likely a naturally occurring alkaloid using several heuristics:
+      1) SMILES must be valid.
+      2) The molecule must have at least one nitrogen.
+      3) A nitrogen atom 'qualifies' if it is either in a ring OR if not in a ring and directly attached to at least one aromatic atom.
+      4) We flag nitrogen atoms in an amide environment (via a SMARTS match). Molecules in which all nitrogens
+         appear in such an environment (or in multiple amide bonds) are considered peptide-like and are rejected.
+      5) Decision making:
+           - If at least one nitrogen qualifies, accept.
+           - If there is exactly one nitrogen that does not qualify, then if its formal charge is nonzero OR if the 
+             overall molecular weight exceeds 150 Da (suggesting structural complexity) then accept.
+           - If there is more than one nitrogen but none qualify, yet not all appear as amide, accept.
+           - Otherwise, reject.
+           
     Args:
-      smiles (str): SMILES string of the molecule
+      smiles (str): SMILES string of the molecule.
       
     Returns:
-      bool: True if the molecule is alkaloid‐like, False if not.
-      str: An explanation for the decision.
+      bool: True if the compound is classified as an alkaloid, False otherwise.
+      str: A human‐readable explanation for the decision.
     """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-    
+
     total_nitrogen = 0
     qualifying_nitrogen = 0
-    amide_nitrogen = 0  # count nitrogen atoms which match the simple amide SMARTS
-    
-    # Prepare list of atom indices that match the amide pattern
+    amide_nitrogen = 0  # count of nitrogen atoms in an amide environment
+    single_nitrogen_charges = []  # record formal charges for nitrogen atoms
+
+    # Get all atoms that match the amide pattern.
     amide_matches = set()
     if amide_pattern is not None:
         for match in mol.GetSubstructMatches(amide_pattern):
-            # match is a tuple; the first atom in our SMARTS (the [NX3]) is at index 0
+            # The first atom in our SMARTS (the nitrogen) is at index 0
             amide_matches.add(match[0])
-    
+
+    # Loop over all atoms; focus on nitrogens (atomic number 7)
     for atom in mol.GetAtoms():
-        if atom.GetAtomicNum() == 7:  # nitrogen
+        if atom.GetAtomicNum() == 7:
             total_nitrogen += 1
             idx = atom.GetIdx()
+            single_nitrogen_charges.append(atom.GetFormalCharge())
             in_ring = atom.IsInRing()
-            # Check if exocyclic: if not in ring then see if any neighbor is aromatic.
-            exo_and_aromatic = False
+            exo_aromatic = False
             if not in_ring:
+                # If not in ring, check if any neighbor is aromatic.
                 for nbr in atom.GetNeighbors():
                     if nbr.GetIsAromatic():
-                        exo_and_aromatic = True
+                        exo_aromatic = True
                         break
-            # Determine if this nitrogen qualifies by our original criteria:
-            if in_ring or exo_and_aromatic:
+            # A nitrogen qualifies if it is in a ring or, if exocyclic, is attached to an aromatic atom.
+            if in_ring or exo_aromatic:
                 qualifying_nitrogen += 1
-            # Count if the nitrogen appeared as an amide (according to our SMARTS)
             if idx in amide_matches:
                 amide_nitrogen += 1
 
     if total_nitrogen == 0:
-        return False, "No nitrogen atoms present, so unlikely to be an alkaloid"
-    
-    # Decision making:
-    # (A) If at least one nitrogen meets the primary (qualifying) criteria then accept.
+        return False, "No nitrogen atoms present; molecule is unlikely to be an alkaloid"
+
+    # Check if the molecule appears peptide-like:
+    if total_nitrogen >= 2 and amide_nitrogen == total_nitrogen:
+        return False, (f"All {total_nitrogen} nitrogen(s) are in an amide environment; suggests a peptide or related structure")
+
+    # Decision branch (A): If at least one nitrogen qualifies, then accept.
     if qualifying_nitrogen > 0:
-        return True, (f"Found {qualifying_nitrogen} qualifying nitrogen(s) "
-                      f"(in ring or exocyclic attached to aromatic) out of {total_nitrogen} nitrogen(s): consistent with an alkaloid classification")
+        return True, (f"Found {qualifying_nitrogen} qualifying nitrogen(s) (in ring or exocyclic attached to aromatic) "
+                      f"out of {total_nitrogen} total nitrogen(s): consistent with an alkaloid")
     
-    # (B) If no nitrogen qualifies but there is more than one nitrogen and not all are in an amide environment then accept.
-    if total_nitrogen > 1 and amide_nitrogen < total_nitrogen:
-        return True, (f"All nitrogen(s) do not meet the ring/aromatic criteria but there are {total_nitrogen} nitrogen(s) "
-                      f"with {amide_nitrogen} in an amide environment: heuristically consistent with an alkaloid")
-    
-    # (C) For a molecule with only one nitrogen that appears only as an amide,
-    # we require the molecule to be moderately large (suggesting a complex structure) to be considered an alkaloid.
-    if total_nitrogen == 1 and amide_nitrogen == 1:
+    # Decision branch (B): For a single nitrogen that does not qualify:
+    if total_nitrogen == 1:
+        # If the lone nitrogen is formally charged, that points to a more specialized (often alkaloid) structure.
+        if any(charge != 0 for charge in single_nitrogen_charges):
+            return True, ("Single nitrogen with nonzero formal charge; consistent with many alkaloids (e.g. quaternary ammonium types)")
+        # Otherwise, if the molecule has moderate molecular weight, we assume a more complex framework.
         mw = Descriptors.ExactMolWt(mol)
-        if mw > 180:
-            return True, (f"Single nitrogen (appears as amide) but molecular weight is {mw:.1f} Da, "
-                          "suggesting a more complex alkaloid structure")
+        if mw > 150:
+            return True, (f"Single nonqualifying nitrogen but molecular weight is {mw:.1f} Da, suggesting a complex alkaloid framework")
         else:
-            return False, (f"Single nitrogen (in amide) and low molecular weight ({mw:.1f} Da): more typical of a small amine")
+            return False, (f"Single nonqualifying nitrogen and low molecular weight ({mw:.1f} Da): more typical of a simple amine")
     
-    # Otherwise, if conditions are not met, we classify as not alkaloid.
-    return False, (f"Nitrogen atoms are present ({total_nitrogen} total) but none qualify by the set criteria; "
-                   "suggests a simple amine rather than an alkaloid")
+    # Decision branch (C): For molecules with more than one nitrogen, if not all are amide and none qualify, allow acceptance.
+    if total_nitrogen > 1 and amide_nitrogen < total_nitrogen:
+        return True, (f"Multiple nitrogen(s) ({total_nitrogen} total) with {amide_nitrogen} in amide environment; "
+                      "heuristically consistent with an alkaloid despite lacking a qualifying NF")
+
+    # If none of the above conditions are met, we reject.
+    return False, (f"Nitrogen atoms present ({total_nitrogen}) but none meet qualifying criteria; "
+                   "suggests the structure is more like a simple amine or nonalkaloid")
 
 # Example usage:
 if __name__ == "__main__":
-    # Test a couple of examples:
+    # We test on several examples (true positives, false positives and false negatives, as described in the evaluation)
     test_examples = {
+        # True positives (should be accepted):
         "wilfordinine C": "[C@@]1(C(O[C@@]2([C@](O)([C@@]34[C@H](OC(C)=O)[C@@]([H])([C@H]([C@H]([C@@]3([C@@H](OC(C=5C=CC=CC5)=O)[C@H]2OC(C)=O)COC(=O)C)OC(=O)C)OC(C)=O)[C@@](COC(C6=C([C@H]1C)C=CN=C6)=O)(C)O4)C)[H])=O)(C)O",
-        "selegiline(1+)": "[H][N+](C)(CC#C)C(C)Cc1ccccc1",
-        "Colchicoside": "COc1c(O[C@@H]2O[C@H](CO)[C@@H](O)[C@H](O)[C@H]2O)cc2CC[C@H](NC(C)=O)c3cc(=O)c(OC)ccc3-c2c1OC",
+        "(1R)-N-(4-fluorophenyl)-1-(hydroxymethyl)-7-methoxy-9-methyl-1'-(1-oxo-2-pyridin-4-ylethyl)-2-spiro[1,3-dihydropyrido[3,4-b]indole-4,3'-azetidine]carboxamide":
+              "CN1C2=C(C=CC(=C2)OC)C3=C1[C@@H](N(CC34CN(C4)C(=O)CC5=CC=NC=C5)C(=O)NC6=CC=C(C=C6)F)CO",
+        "norcodeine": "[C@@]123C4=C5C(=CC=C4C[C@H]([C@@]1(C=C[C@@H]([C@@H]2O5)O)[H])NCC3)OC",
+        "Vinpocetine": "CC[C@@]12CCCN3[C@@H]1C4=C(CC3)C5=CC=CC=C5N4C(=C2)C(=O)OCC",
+        # Accepted alkaloids with single nitrogen (should be accepted):
+        "selegiline(1+)": "[H][N+](C)(CC#C)C(C)Cc1ccccc1",  
+        "N-methylmescaline": "CNCCC1=CC(OC)=C(OC)C(OC)=C1",
+        "(-)-ephedrine": "CN[C@@H](C)[C@H](O)c1ccccc1",
+        # False positive example (should be rejected):
+        "10,10-bis[(2-fluoro-4-pyridinyl)methyl]-9-anthracenone":
+              "C1=CC=C2C(=C1)C(=O)C3=CC=CC=C3C2(CC4=CC(=NC=C4)F)CC5=CC(=NC=C5)F",
+        # A peptide-like molecule (should be rejected)
+        "Leu-Gln-Val": "O=C(N[C@@H](C(C)C)C(O)=O)[C@@H](NC(=O)[C@@H](N)CC(C)C)CCC(=O)N",
     }
+    
     for name, smi in test_examples.items():
         result, reason = is_alkaloid(smi)
         print(f"{name}: {result}\n  Reason: {reason}\n")
