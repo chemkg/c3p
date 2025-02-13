@@ -6,11 +6,12 @@ Classifies: 2-enoyl-CoA
 Definition: An unsaturated fatty acyl-CoA in which the S-acyl group contains a double bond 
             between positions 2 and 3. Here position 1 is the thioester carbonyl carbon.
             
-The algorithm first verifies that a CoA moiety is present (using a characteristic SMARTS fragment)
-and then looks for a thioester carbonyl (a C=O that is directly bound to a sulfur atom).
-Among those, it identifies the acyl (R) group attached to the carbonyl carbon (excluding the S),
-and then checks whether the alpha carbon (the one directly attached) is involved in a double bond 
-to a beta carbon (and that double bond does not go back to the carbonyl).
+This algorithm first verifies that the CoA moiety is present (using a characteristic SMARTS fragment).
+Then, it searches for a thioester group – a carbonyl carbon double bonded to oxygen and singly bonded to a sulfur.
+Using the CoA match we require that the sulfur is part of the known CoA fragment while the acyl (R) group is external.
+Finally, among the acyl side–chain atoms (the candidate alpha carbon, i.e. the one attached to the carbonyl,
+other than the S) we check for a double bond to a beta carbon (which does not go back to the carbonyl).
+This is taken as evidence that the molecule contains a 2-enoyl-CoA fragment.
 """
 
 from rdkit import Chem
@@ -20,9 +21,11 @@ def is_2_enoyl_CoA(smiles: str):
     """
     Determines if a molecule (given as a SMILES string) qualifies as a 2-enoyl-CoA.
     To qualify the molecule must contain:
-      1. A CoA moiety as detected by a CoA substructure fragment.
-      2. An acyl thioester group in which the acyl chain (the group attached to the carbonyl C)
-         has a double bond between its first (alpha) and second (beta) carbon.
+      1. A CoA moiety (detected via a characteristic SMARTS fragment).
+      2. A thioester carbonyl (C=O bonded to sulfur) in which the S is part of the CoA.
+      3. An acyl chain (the R group attached to the carbonyl carbon that is NOT part of CoA)
+         in which the alpha carbon (directly bonded to the carbonyl) carries a double bond 
+         (to a beta carbon that is not the carbonyl).
          
     Args:
         smiles (str): SMILES string representation of the molecule.
@@ -31,70 +34,86 @@ def is_2_enoyl_CoA(smiles: str):
         bool: True if the molecule qualifies as a 2-enoyl-CoA; False otherwise.
         str: An explanation for the decision.
     """
-    # Parse the input SMILES string
+    # Parse the input SMILES string.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string."
-
-    # Step 1. Check for the presence of a CoA moiety.
-    # We use a characteristic fragment from the pantetheine/ADP portion of CoA.
-    # (This SMARTS works reasonably well for many acyl-CoA structures.)
+    
+    # Step 1. Check for presence of CoA moiety.
+    # We use a SMARTS fragment that covers a characteristic portion of the CoA (pantetheine/ADP part).
+    # Note: This fragment is heuristic and works reasonably well for many acyl-CoA molecules.
     coa_smarts = "SCCNC(=O)CCNC(=O)"
     coa_pattern = Chem.MolFromSmarts(coa_smarts)
     if coa_pattern is None:
         return False, "Error in SMARTS for CoA fragment."
-    if not mol.HasSubstructMatch(coa_pattern):
+    coa_matches = mol.GetSubstructMatches(coa_pattern)
+    if not coa_matches:
         return False, "CoA moiety fragment not detected."
-
-    # Step 2. Identify thioester carbonyls.
-    # Look for carbon atoms that have:
-    #   - a double bond to an oxygen (carbonyl)
-    #   - a single bond to a sulfur (thioester linkage)
-    # For each such carbon, check its other substituent (the acyl chain) for the expected unsaturation.
+    
+    # Form a set of all atom indices in any CoA match (to know which atoms belong to CoA).
+    coa_atom_set = set()
+    for match in coa_matches:
+        coa_atom_set.update(match)
+    
+    # Step 2. Identify thioester carbonyl groups.
+    # We loop over carbon atoms looking for a C=O (double bonded to O) and a single bond to S.
+    # For each such carbon, we then pick the substituent that is not oxygen or the sulfur.
+    # We further require that the sulfur neighbor is part of CoA (from our match)
+    # while the acyl substituent is outside the CoA fragment.
     enoyl_found = False
-
     for atom in mol.GetAtoms():
-        # Only consider carbon atoms
         if atom.GetAtomicNum() != 6:
             continue
-
-        # Look for a carbonyl oxygen (C=O) and a sulfur neighbor.
+        # Look for the required bonds: a double bond to oxygen and a single bond to sulfur.
         has_carbonyl_oxygen = False
-        has_S_neighbor = False
+        s_neighbors = []
         for bond in atom.GetBonds():
             nbr = bond.GetOtherAtom(atom)
             if nbr.GetAtomicNum() == 8 and bond.GetBondType() == Chem.rdchem.BondType.DOUBLE:
                 has_carbonyl_oxygen = True
             if nbr.GetAtomicNum() == 16 and bond.GetBondType() == Chem.rdchem.BondType.SINGLE:
-                has_S_neighbor = True
-        # Skip atoms that are not part of a thioester carbonyl.
-        if not (has_carbonyl_oxygen and has_S_neighbor):
+                s_neighbors.append(nbr)
+        if not (has_carbonyl_oxygen and s_neighbors):
             continue
-
-        # For a carbonyl carbon in a thioester, one neighbor is the sulfur (leading to CoA).
-        # The other neighbor (if any) is the acyl chain (R group); that should be the alpha carbon.
+        
+        # For each sulfur neighbor, require that it is part of the known CoA fragment.
+        coa_s = None
+        for s in s_neighbors:
+            if s.GetIdx() in coa_atom_set:
+                coa_s = s
+                break
+        if coa_s is None:
+            # This thioester carbonyl does not link to CoA; skip.
+            continue
+        
+        # Now, among the other substituents of the carbonyl carbon, select the acyl chain candidate.
         acyl_candidates = []
         for nbr in atom.GetNeighbors():
-            if nbr.GetAtomicNum() not in (8, 16):  # Exclude oxygen and sulfur
-                # Also, ensure that the bond between the carbonyl and this atom is a single bond.
-                bond = mol.GetBondBetweenAtoms(atom.GetIdx(), nbr.GetIdx())
-                if bond and bond.GetBondType() == Chem.rdchem.BondType.SINGLE:
-                    acyl_candidates.append(nbr)
-        # We expect a thioester carbonyl to have exactly one acyl substituent.
+            # Exclude the oxygen (carbonyl) and the sulfur (which is in CoA).
+            if nbr.GetAtomicNum() in (8, 16):
+                continue
+            # Also require that the bond is a single bond.
+            bond = mol.GetBondBetweenAtoms(atom.GetIdx(), nbr.GetIdx())
+            if bond is None or bond.GetBondType() != Chem.rdchem.BondType.SINGLE:
+                continue
+            # We also require that this candidate is not part of the CoA fragment.
+            if nbr.GetIdx() in coa_atom_set:
+                continue
+            acyl_candidates.append(nbr)
+            
         if not acyl_candidates:
             continue
-        # For each candidate (usually there is just one), check for a double bond on the candidate.
+        
+        # For each candidate alpha carbon, check if it carries the required double bond.
         for alpha in acyl_candidates:
-            # The expected pattern: the alpha carbon (attached to the carbonyl) should be 
-            # involved in a double bond with a beta carbon. To avoid picking up distant unsaturation,
-            # we only consider double bonds emanating from the alpha carbon that do not go back to
-            # the carbonyl atom.
+            # We look for at least one double bond from the alpha carbon that goes to a beta carbon.
+            # Ensure that the beta is not the carbonyl carbon.
             for bond in alpha.GetBonds():
                 if bond.GetBondType() == Chem.rdchem.BondType.DOUBLE:
                     beta = bond.GetOtherAtom(alpha)
                     if beta.GetIdx() == atom.GetIdx():
-                        continue  # Skip if it goes back to the carbonyl carbon.
-                    # Found a double bond from the alpha carbon.
+                        continue  # Skip the carbonyl back-bond.
+                    # Found a double bond starting at the alpha carbon.
                     enoyl_found = True
                     break
             if enoyl_found:
