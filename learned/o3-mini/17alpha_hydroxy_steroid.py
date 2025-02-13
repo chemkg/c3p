@@ -3,18 +3,23 @@ Classifies: CHEBI:35342 17alpha-hydroxy steroid
 """
 #!/usr/bin/env python
 """
-Classifies: CHEBI:17alpha-hydroxy steroid
+Classifies: 17alpha-hydroxy steroid
 Definition: The alpha-stereoisomer of 17-hydroxy steroid.
 Heuristic (improved):
-  1. Identify five-membered rings that are fused with at least one six-membered ring.
-  2. Build a steroid core as the union of the five-membered ring(s) (candidate “D-ring”) plus
-     any neighboring six-membered rings.
-  3. For each carbon atom in the steroid core, check if it is chiral and has a direct –OH neighbor
-     (an oxygen bearing at least one hydrogen). Also, allow a heavy-atom count (neighbors with atomic
-     number > 1) of either 3 or 4. At least one heavy neighbor (ignoring the –OH oxygen) must lie
-     outside the steroid core (the exocyclic substituent).
-  4. If exactly one candidate is found the molecule is classified as a 17α-hydroxy steroid.
-Note: This heuristic is still simplified – stereochemistry and steroid numbering can be complex.
+  1. Require a fused steroid nucleus: exactly one 5-membered ring (D-ring)
+     and at least 3 six-membered rings (A, B, C). We then build a steroid_core
+     as the union of the D-ring and those six-membered rings that share atoms with it.
+  2. In the D-ring, look for a candidate carbon (atomic #6) that is:
+       - Substituted by an –OH (an oxygen neighbor bearing at least one hydrogen)
+       - Chiral (has a defined chiral tag)
+       - Has three heavy-atom (non-H) neighbors (besides the hydroxyl oxygen, there
+         should be three carbon neighbors as expected for C17)
+       - Has at least one heavy neighbor that is not in the steroid_core (this should
+         be the exocyclic side chain at C17)
+  3. If exactly one candidate is found, report success (including any CIP assignment),
+     otherwise report failure.
+Note: This heuristic remains simplified, since the full stereochemical assignment
+      of steroids can be complex.
 """
 from rdkit import Chem
 from rdkit.Chem import AllChem, rdMolDescriptors
@@ -38,54 +43,40 @@ def is_17alpha_hydroxy_steroid(smiles: str):
     # Force assignment of stereochemistry (including CIP codes) if possible.
     Chem.AssignStereochemistry(mol, force=True, cleanIt=True)
     
-    # Get all ring information from the molecule.
+    # Get ring information. We require the presence of rings.
     rings = mol.GetRingInfo().AtomRings()
     if not rings:
         return False, "No rings detected – not a steroid"
     
-    # Collect all six-membered rings (candidate A–C rings) as sets for easy comparison.
-    six_membered = [set(ring) for ring in rings if len(ring) == 6]
+    # Identify the unique 5-membered ring (our D-ring candidate).
+    five_membered = [ring for ring in rings if len(ring) == 5]
+    if len(five_membered) != 1:
+        return False, f"Expected exactly 1 five-membered ring (steroid D-ring), but found {len(five_membered)}"
     
-    # Identify candidate D-ring: five-membered rings that are fused (share at least 1 atom) with a six-membered ring.
-    candidate_d_rings = []
-    for ring in rings:
-        if len(ring) == 5:
-            ring_set = set(ring)
-            # Check if fused with any six-membered ring:
-            if any(len(ring_set.intersection(six)) > 0 for six in six_membered):
-                candidate_d_rings.append(ring_set)
+    # Check that there are at least 3 six-membered rings (steroid A, B, C).
+    six_membered = [ring for ring in rings if len(ring) == 6]
+    if len(six_membered) < 3:
+        return False, f"Expected at least 3 six-membered rings (steroid A, B, C), but found {len(six_membered)}"
     
-    if not candidate_d_rings:
-        return False, "No candidate five-membered D-ring fused with six-membered rings was found."
+    # Build the fused steroid core: start with the set of atoms in the D-ring,
+    # and add any six-membered ring that shares an atom with the D-ring.
+    d_ring = five_membered[0]
+    steroid_core = set(d_ring)
+    for ring in six_membered:
+        if set(ring).intersection(steroid_core):
+            steroid_core.update(ring)
+    # (For our purposes, steroid_core is expected to contain most atoms of the fused steroid nucleus.)
     
-    # Build the fused steroid core: union of the candidate D-rings and any six-membered rings fused to them.
-    steroid_core = set()
-    for d_ring in candidate_d_rings:
-        steroid_core.update(d_ring)
-        for six in six_membered:
-            if d_ring.intersection(six):
-                steroid_core.update(six)
+    candidate_found = None
+    candidate_reason = ""
     
-    # Optionally sanity-check the size of the steroid core
-    if len(steroid_core) < 8:
-        return False, "Fused steroid core is too small to be a steroid."
-    
-    # Now search for the candidate 17α–OH carbon:
-    # We look over carbons in the steroid core that are chiral and have an –OH substituent.
-    candidates = []
-    for atom in mol.GetAtoms():
-        # Require carbon atom.
+    # Iterate over atoms in the D-ring looking for a candidate C17.
+    for atom_idx in d_ring:
+        atom = mol.GetAtomWithIdx(atom_idx)
+        # Expect a carbon atom in the D-ring.
         if atom.GetAtomicNum() != 6:
             continue
-        
-        # Only consider atoms that are part of the steroid core.
-        if atom.GetIdx() not in steroid_core:
-            continue
-        
-        # Check that the carbon is stereochemically defined.
-        if atom.GetChiralTag() == Chem.rdchem.ChiralType.CHI_UNSPECIFIED:
-            continue
-        
+            
         # Look for an -OH group: an oxygen neighbor that itself has at least one hydrogen.
         oh_found = False
         for nbr in atom.GetNeighbors():
@@ -95,39 +86,47 @@ def is_17alpha_hydroxy_steroid(smiles: str):
         if not oh_found:
             continue
         
-        # Count heavy atoms (atomic number > 1) among neighbors.
-        heavy_neighbors = [nbr for nbr in atom.GetNeighbors() if nbr.GetAtomicNum() > 1]
-        # Typical C17 is bound to an -OH, plus two or three carbon neighbors.
-        # Allow either 3 or 4 heavy neighbors.
-        if len(heavy_neighbors) not in (3, 4):
+        # Check that the atom is chiral.
+        if atom.GetChiralTag() == Chem.rdchem.ChiralType.CHI_UNSPECIFIED:
+            candidate_reason = "Hydroxyl-bearing carbon in D-ring is not stereochemically defined"
             continue
         
-        # Check that at least one heavy neighbor (excluding the OH oxygen) is exocyclic (i.e. outside the steroid core)
+        # Count heavy-atom neighbors (ignore hydrogens and the oxygen from the OH group separately).
+        heavy_neighbors = [nbr for nbr in atom.GetNeighbors() if nbr.GetAtomicNum() > 1]
+        # For a typical C17, expect three carbon neighbors (one from the fused core and one exocyclic).
+        if len(heavy_neighbors) != 4:  
+            # Typically, C17 in a steroid is bonded to: two ring carbons, one oxygen (the OH), and one exocyclic carbon.
+            # Thus heavy neighbor count including oxygen is 4.
+            continue
+        
+        # Now check that at least one heavy neighbor (apart from the oxygen) lies outside the steroid_core.
         exocyclic = False
         for nbr in heavy_neighbors:
+            # Skip oxygen neighbor (the -OH)
             if nbr.GetAtomicNum() == 8:
-                continue  # skip the OH oxygen
+                continue
             if nbr.GetIdx() not in steroid_core:
                 exocyclic = True
                 break
         if not exocyclic:
+            candidate_reason = "Hydroxyl-bearing carbon in D-ring does not show an exocyclic substituent"
             continue
         
-        # If passed all criteria, record the candidate along with its CIP code if available.
+        # If we have reached here, candidate meets our criteria.
+        # (Optionally report the CIP code if it exists.)
         cip = atom.GetProp('_CIPCode') if atom.HasProp('_CIPCode') else "unknown"
-        candidates.append((atom.GetIdx(), cip))
-    
-    # Evaluate candidate count.
-    if len(candidates) == 1:
-        return True, f"Found candidate D-ring hydroxyl carbon (likely C17) with CIP '{candidates[0][1]}', attached to exocyclic side-chain"
-    elif len(candidates) > 1:
-        return False, f"Multiple candidate 17α–OH sites found: {candidates}"
-    else:
-        return False, "Steroid nucleus identified but no suitable 17α–OH candidate in the D-ring was detected"
+        candidate_found = (atom_idx, cip)
+        candidate_reason = f"Found candidate D-ring hydroxyl carbon (likely C17) with CIP '{cip}', attached to exocyclic side-chain"
+        break  # Stop after the first candidate found
 
-# Example usage (for testing – remove or comment when using as a module):
+    if candidate_found is not None:
+        return True, candidate_reason
+    else:
+        return False, f"Steroid nucleus identified but no suitable 17α–OH candidate in the D-ring was detected. {candidate_reason}"
+
+# Example usage (for testing – remove or comment when using as module):
 if __name__ == "__main__":
-    # Example test: 17α-hydroxypregnenolone
+    # Test with one example SMILES (17α-hydroxypregnenolone)
     test_smiles = "CC(=O)[C@@]1(O)CC[C@H]2[C@@H]3CC=C4C[C@@H](O)CC[C@]4(C)[C@H]3CC[C@]12C"
     result, reason = is_17alpha_hydroxy_steroid(test_smiles)
     print(result, reason)
