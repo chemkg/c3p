@@ -7,16 +7,18 @@ Classifies: tocol
 A tocol is defined as "A chromanol with a chroman-6-ol skeleton that is substituted at position 2 by a 
 saturated or triply-unsaturated hydrocarbon chain consisting of three isoprenoid units".
 
-We use a heuristic approach:
-  (1) Search for a chromanol core via a SMARTS pattern that is flexible enough to match variants.
-  (2) Among the atoms in the core, look for one (typically sp3 carbon) with a substituent (side chain) 
-      that is not part of the core.
-  (3) Extract the side chain (via a DFS where we do not traverse core atoms), and check that it is:
-       - Acyclic (no rings).
-       - Composed entirely of carbon atoms.
-       - Contains between ~12 and 17 carbon atoms (consistent with three isoprene units).
-       - Has either 0 (saturated) or 3 (triply unsaturated) double bonds.
-If these checks pass, the molecule is classified as a tocol.
+The strategy is:
+  1. Parse the SMILES.
+  2. Look for a fused bicyclic system comprised of two 6-membered rings:
+       - One ring must be aromatic and contain at least one –OH substituent.
+       - The other ring (the “saturated” heterocycle) should contain one oxygen and the remainder carbons.
+  3. Identify within the saturated ring a candidate carbon (not part of the shared edge with the aromatic ring)
+       that has a neighbor outside of the fused system. That neighbor should be the start of the side chain.
+  4. From that attachment, do a DFS (without re-entering the core) to extract a side chain that must be:
+       - Entirely acyclic (not in any ring) and composed only of carbon atoms.
+       - Have between 12 and 17 carbon atoms.
+       - Contain either 0 or exactly 3 double bonds.
+If these criteria are met, the molecule is classified as a tocol.
 """
 
 from rdkit import Chem
@@ -27,56 +29,106 @@ def is_tocol(smiles: str):
     Determines whether the molecule specified by the SMILES string is a tocol.
     
     A tocol is defined as a chromanol (chroman-6-ol) skeleton substituted at position 2 by an
-    appropriate hydrocarbon (isoprenoid) chain.
+    appropriate isoprenoid side chain.
     
     Args:
         smiles (str): SMILES representation of the molecule.
         
     Returns:
-        (bool, str): A tuple: (True, reason) if tocol; otherwise (False, reason)
+        (bool, str): A tuple: (True, reason) if the molecule is a tocol; (False, reason) otherwise.
     """
-    # Parse the SMILES into a molecule
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Define a more flexible SMARTS for the chromanol (chroman-6-ol) core.
-    # The pattern here finds a fused bicyclic system: a saturated 6-membered ring with an oxygen
-    # (the dihydropyran) fused to an aromatic ring which must have at least one hydroxyl (OH).
-    # The pattern “O1CCc2cc(O)ccc2C1” should match many vitamin E core variants.
-    chromanol_smarts = "O1CCc2cc(O)ccc2C1"
-    chromanol_query = Chem.MolFromSmarts(chromanol_smarts)
-    if chromanol_query is None:
-        return False, "Error in chromanol SMARTS pattern"
-    
-    # Search for the chromanol substructure in the molecule
-    core_match = mol.GetSubstructMatch(chromanol_query)
-    if not core_match:
-        return False, "Chromanol (chroman-6-ol) core not found"
-    
-    # Store the indices of the core atoms from the match.
-    core_atoms = set(core_match)
-    
-    # Identify candidate attachment points within the core.
-    # We expect the side chain to be attached to one of the carbon atoms of the saturated ring.
-    candidate_indices = []
-    for idx in core_atoms:
-        atom = mol.GetAtomWithIdx(idx)
-        # restrict to carbon atoms that are not aromatic:
-        if atom.GetAtomicNum() == 6 and not atom.GetIsAromatic():
-            # Look for a neighbor that is not in the core and is a carbon (the start of a side chain)
-            for nb in atom.GetNeighbors():
-                if nb.GetIdx() not in core_atoms and nb.GetAtomicNum() == 6:
-                    candidate_indices.append(idx)
-                    break
+    # First, get all rings in the molecule.
+    ring_info = mol.GetRingInfo()
+    rings = ring_info.AtomRings()  # each ring is a tuple of atom indices
 
-    if not candidate_indices:
-        return False, "Side chain attachment point not found on chromanol core"
+    # Helper: check if a ring of given atom indices is fully aromatic.
+    def ring_is_aromatic(ring):
+        return all(mol.GetAtomWithIdx(idx).GetIsAromatic() for idx in ring)
     
-    # For each candidate attachment point, try to extract a side chain subgraph.
-    # We use DFS starting from the neighbor (outside of core) attached to the candidate.
+    # Helper: check if an aromatic ring has an -OH substituent.
+    # For each atom in the ring, check whether it has a neighbor O that is an -OH.
+    def ring_has_OH(ring):
+        for idx in ring:
+            atom = mol.GetAtomWithIdx(idx)
+            for nb in atom.GetNeighbors():
+                # skip if neighbor is in the ring already; we want a pendent OH.
+                if nb.GetIdx() in ring:
+                    continue
+                if nb.GetAtomicNum() == 8:
+                    # Check if this oxygen has a hydrogen (explicit or implicit)
+                    # RDKit gives a total H count (explicit+implicit)
+                    if nb.GetTotalNumHs() >= 1:
+                        return True
+        return False
+    
+    # Next, try to find a candidate fused pair of 6-membered rings.
+    # We want one ring to be aromatic with an OH and one ring to be largely saturated
+    # (should contain exactly one non-carbon, which we expect to be oxygen) and not aromatic.
+    fused_core = None
+    aromatic_ring = None
+    saturated_ring = None
+    for i in range(len(rings)):
+        ring1 = rings[i]
+        if len(ring1) != 6:
+            continue
+        for j in range(i+1, len(rings)):
+            ring2 = rings[j]
+            if len(ring2) != 6:
+                continue
+            # Check if the two rings are fused: they should share at least 2 atoms.
+            shared = set(ring1).intersection(set(ring2))
+            if len(shared) < 2:
+                continue
+            # Among these two rings, try to find one that is fully aromatic and has an OH.
+            if ring_is_aromatic(ring1) and ring_has_OH(ring1):
+                aromatic_ring = set(ring1)
+                saturated_ring = set(ring2)
+            elif ring_is_aromatic(ring2) and ring_has_OH(ring2):
+                aromatic_ring = set(ring2)
+                saturated_ring = set(ring1)
+            else:
+                continue
+            # For the saturated ring we expect it NOT to be fully aromatic
+            # and to have one oxygen.
+            non_carbons = [mol.GetAtomWithIdx(idx).GetSymbol() for idx in saturated_ring if mol.GetAtomWithIdx(idx).GetAtomicNum() != 6]
+            if len(non_carbons) != 1 or non_carbons[0] != "O":
+                # not matching expected heterocycle
+                continue
+            # We now define the fused core as union
+            fused_core = aromatic_ring.union(saturated_ring)
+            break
+        if fused_core is not None:
+            break
+
+    if fused_core is None:
+        return False, "Chromanol core (fused aromatic and heterocyclic rings) not found"
+
+    # Now, look for a candidate attachment point for the isoprenoid side chain.
+    # We assume the side chain is attached to the saturated ring.
+    # We look for a carbon atom (in the saturated ring) that has a neighbor outside the fused core.
+    candidate_attachment = None
+    for idx in saturated_ring:
+        atom = mol.GetAtomWithIdx(idx)
+        # Only consider carbon atoms in the saturated ring as possible attachment points.
+        if atom.GetAtomicNum() != 6:
+            continue
+        for nb in atom.GetNeighbors():
+            if nb.GetIdx() not in fused_core and nb.GetAtomicNum() == 6:
+                candidate_attachment = (idx, nb.GetIdx())  # tuple: (attachment atom in core, neighbor atom outside)
+                break
+        if candidate_attachment:
+            break
+
+    if candidate_attachment is None:
+        return False, "Side chain attachment point on the chromanol core not found"
+    
+    # Now, starting from the neighbor (outside the core) we extract the side chain via DFS.
+    # We do not traverse any atoms from the fused core.
     def extract_side_chain(start_idx):
-        # DFS: do not cross back into core and only allow carbon atoms.
         visited = set()
         stack = [start_idx]
         side_chain = set()
@@ -87,69 +139,50 @@ def is_tocol(smiles: str):
             visited.add(curr)
             side_chain.add(curr)
             curr_atom = mol.GetAtomWithIdx(curr)
-            # If any side-chain atom is part of a ring, flag an error (acyclic expected)
-            if curr_atom.IsInRing():
-                return None, "Side chain is cyclic, expected a linear hydrocarbon chain"
+            # We require acyclic side chain; if any side-chain atom is in a ring, it’s an error.
+            if mol.GetAtomWithIdx(curr).IsInRing():
+                return None, "Side chain is cyclic (contains ring atoms)"
             for nb in curr_atom.GetNeighbors():
-                if nb.GetIdx() in core_atoms or nb.GetIdx() in visited:
+                # Do not traverse into the fused core.
+                if nb.GetIdx() in fused_core:
                     continue
-                # Ensure the neighbor is a carbon; if not, error.
+                # Only allow carbon atoms.
                 if nb.GetAtomicNum() != 6:
                     return None, "Side chain contains non-carbon atoms"
-                stack.append(nb.GetIdx())
+                if nb.GetIdx() not in visited:
+                    stack.append(nb.GetIdx())
         return side_chain, None
-    
-    valid_side_chain_found = False
-    side_reason = ""
-    for candidate in candidate_indices:
-        cand_atom = mol.GetAtomWithIdx(candidate)
-        # Find neighbor(s) of the candidate outside the core to start the side chain.
-        side_chain_found = False
-        for nb in cand_atom.GetNeighbors():
-            if nb.GetIdx() in core_atoms or nb.GetAtomicNum() != 6:
-                continue
-            # Attempt to extract the side chain starting from this neighbor.
-            side_chain, err = extract_side_chain(nb.GetIdx())
-            if err:
-                side_chain_found = False
-                side_reason = err
-                continue
-            # Count the number of carbon atoms in the chain.
-            chain_carbons = sum(1 for idx in side_chain if mol.GetAtomWithIdx(idx).GetAtomicNum() == 6)
-            # Check the expected carbon count for an isoprenoid chain of three units (approximately 12-17 carbons).
-            if chain_carbons < 12 or chain_carbons > 17:
-                side_reason = f"Side chain has {chain_carbons} carbons; expected between 12 and 17 for isoprenoid units"
-                continue
-            # Count the number of double bonds in the side chain.
-            chain_double_bonds = 0
-            for bond in mol.GetBonds():
-                a1 = bond.GetBeginAtomIdx()
-                a2 = bond.GetEndAtomIdx()
-                if a1 in side_chain and a2 in side_chain:
-                    if bond.GetBondType() == Chem.rdchem.BondType.DOUBLE:
-                        chain_double_bonds += 1
-            if chain_double_bonds not in (0, 3):
-                side_reason = f"Side chain has {chain_double_bonds} double bonds; expected 0 (saturated) or 3 (triply unsaturated)"
-                continue
-            # If we pass all tests, we have found a valid side chain.
-            valid_side_chain_found = True
-            side_chain_found = True
-            break  # no need to check further neighbors for this candidate
-        if valid_side_chain_found:
-            break
 
-    if not valid_side_chain_found:
-        # Prioritize a meaningful message if available; else provide a generic failure message.
-        if side_reason:
-            return False, side_reason
-        return False, "No appropriate side chain found attached to the chromanol core"
+    side_start = candidate_attachment[1]
+    side_chain, err = extract_side_chain(side_start)
+    if err:
+        return False, f"Error in side chain extraction: {err}"
     
-    return True, "Molecule contains a chromanol core with an appropriate isoprenoid side chain (tocol)"
+    # Count carbons in the side chain.
+    chain_carbons = sum(1 for idx in side_chain if mol.GetAtomWithIdx(idx).GetAtomicNum() == 6)
+    if chain_carbons < 12 or chain_carbons > 17:
+        return False, f"Side chain has {chain_carbons} carbons; expected between 12 and 17 for three isoprenoid units"
     
-# For testing when run as a script:
+    # Count double bonds in the side chain.
+    chain_double_bonds = 0
+    for bond in mol.GetBonds():
+        a1 = bond.GetBeginAtomIdx()
+        a2 = bond.GetEndAtomIdx()
+        if a1 in side_chain and a2 in side_chain:
+            if bond.GetBondType() == Chem.rdchem.BondType.DOUBLE:
+                chain_double_bonds += 1
+    if chain_double_bonds not in (0, 3):
+        return False, f"Side chain has {chain_double_bonds} double bonds; expected 0 (saturated) or 3 (triply unsaturated)"
+
+    return True, "Molecule contains a chromanol core (chroman-6-ol) with an appropriate isoprenoid side chain (tocol)"
+
+# For testing when run as a script (example with beta-tocopherol):
 if __name__ == "__main__":
-    # Example: beta-tocopherol
-    test_smiles = "CC(C)CCC[C@@H](C)CCC[C@@H](C)CCC[C@]1(C)CCc2c(C)c(O)cc(C)c2O1"
-    result, reason = is_tocol(test_smiles)
-    print(f"Test SMILES: {test_smiles}")
-    print(f"Is tocol? {result}. Reason: {reason}")
+    test_smiles_list = [
+        "CC(C)CCC[C@@H](C)CCC[C@@H](C)CCC[C@]1(C)CCc2c(C)c(O)cc(C)c2O1",  # beta-tocopherol
+        "O1C(CCC=2C1=C(C(=C(O)C2)C)C)(CCC=C(CCC=C(CCC=C(C)C)C)C)C"  # I(3)-Tocotrienol
+    ]
+    for s in test_smiles_list:
+        result, reason = is_tocol(s)
+        print(f"SMILES: {s}")
+        print(f"Result: {result}, Reason: {reason}\n")
