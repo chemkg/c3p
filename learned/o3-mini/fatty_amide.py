@@ -3,123 +3,145 @@ Classifies: CHEBI:29348 fatty amide
 """
 """
 Classifies: Fatty Amide
-Definition: A monocarboxylic acid amide derived from a fatty acid.
-A fatty amide is recognized by an amide bond (C(=O)N) where the acyl (carbonyl) portion is derived from a fatty acid
-(i.e. contains a long aliphatic chain of at least 8 carbon atoms) while the amine portion is relatively small (no long aliphatic chain).
+Definition:
+  A monocarboxylic acid amide derived from a fatty acid.
+  In our approach, a fatty amide is recognized by an amide bond C(=O)N
+  wherein the acyl (C=O) side is “fatty” (i.e. has an aliphatic chain of
+  modest length – even allowing branched chains, here a minimum linear-chain length of 4 is required)
+  and the substituents on the amide nitrogen are comparatively short 
+  (none having a linear aliphatic chain longer than 4).
+  
+This heuristic was developed in response to many false positives (e.g. complex peptides)
+and false negatives (e.g. dolichotheline) seen previously.
 """
 
 from rdkit import Chem
 
 def longest_aliphatic_chain_length(atom, visited):
     """
-    Recursively computes the length (number of carbon atoms) of the longest _linear_ (acyclic, non-aromatic) chain
-    starting from the given atom. We only traverse carbon atoms that are not aromatic and not in a ring.
-    'visited' is a set of atom indices to prevent cycles.
+    Recursively computes the longest linear chain length starting from the given atom.
+    We only traverse carbon atoms that are:
+      - non-aromatic,
+      - not in any ring.
+    'visited' is a set of atom indices already seen.
+    (We do not require the chain to be perfectly linear – we take the longest branch.)
+    Returns an integer count (at least 1 for the starting atom).
     """
-    max_length = 1  # count current atom
+    max_len = 1  # count the current atom
     for nbr in atom.GetNeighbors():
-        if (nbr.GetAtomicNum() == 6 and not nbr.GetIsAromatic() and not nbr.IsInRing() 
-            and nbr.GetIdx() not in visited):
-            # Copy visited so that different branches do not interfere.
+        if nbr.GetAtomicNum() == 6 and (not nbr.GetIsAromatic()) and (not nbr.IsInRing()):
+            if nbr.GetIdx() in visited:
+                continue
+            # Allow a little branching: simply choose the branch with the greatest chain length
             new_visited = visited.copy()
             new_visited.add(nbr.GetIdx())
-            branch_length = 1 + longest_aliphatic_chain_length(nbr, new_visited)
-            if branch_length > max_length:
-                max_length = branch_length
-    return max_length
+            branch_len = 1 + longest_aliphatic_chain_length(nbr, new_visited)
+            if branch_len > max_len:
+                max_len = branch_len
+    return max_len
 
 def is_fatty_amide(smiles: str):
     """
     Determines if a molecule is a fatty amide.
-
-    A fatty amide is defined as a monocarboxylic acid amide derived from a fatty acid.
-    That means that:
-      (1) an amide bond (C(=O)N) is present,
-      (2) the acyl (C=O side) must come from a fatty acid and thus has an aliphatic chain of at least 8 carbon atoms (including the carbonyl carbon),
-      (3) at least one of the substituents on the amide nitrogen is not fatty (i.e. does not have a long aliphatic chain – here we require all chains off the nitrogen be shorter than 8 carbons).
-      
+    
+    We require that an amide bond (C(=O)N) is present such that
+      (1) The acyl (carbonyl) side derives from a (possibly branched) aliphatic chain.
+          We measure this by counting the maximum linear chain length starting from the acyl carbon (excluding the C=O oxygen)
+          and require that length (from the carbon attached to the carbonyl) is at least acyl_min.
+      (2) On the amide N, all substituents (other than the carbonyl connection) have a longest aliphatic chain length shorter than amine_max.
+    
+    We set acyl_min = 4 (so that even a branched isobutyl acyl chain as in dolichotheline qualifies)
+    and amine_max = 4.
+    
     Args:
-        smiles (str): SMILES string of the molecule
-        
+      smiles (str): SMILES string of the molecule.
+      
     Returns:
-        bool: True if the molecule meets the fatty amide criteria, False otherwise.
-        str: Message giving the reason for the classification.
+      bool: True if the molecule meets fatty amide criteria, False otherwise.
+      str: Explanation of the decision.
     """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-
-    # SMARTS for a simple amide group: the pattern returns carbonyl carbon, oxygen and nitrogen.
+    
+    # SMARTS for a basic amide bond (look for a carbonyl carbon sp2 bound to an oxygen by =, and bound to a nitrogen)
     amide_smarts = Chem.MolFromSmarts("C(=O)N")
     if amide_smarts is None:
-        return False, "Error generating amide SMARTS pattern"
+        return False, "Error generating SMARTS pattern for amide"
         
     matches = mol.GetSubstructMatches(amide_smarts)
     if not matches:
-        return False, "No amide group found in the molecule"
-
-    # Define thresholds: fatty acyl chain must be at least 8 carbons.
-    fatty_chain_threshold = 8
-    # And the substituent on the nitrogen must be short; here we require less than 8 carbons.
-    amine_chain_max = 7
-
-    # Process each amide match
+        return False, "No amide bond (C(=O)N) found"
+    
+    # Define thresholds:
+    acyl_min = 4    # minimum linear-chain length (from the chain attached to the carbonyl carbon)
+    amine_max = 4   # maximum allowed chain length on substituents from the amide nitrogen
+    
+    # Process each amide match.
+    # Each match is a tuple of indices: (carbonyl carbon, carbonyl oxygen, amide nitrogen)
     for match in matches:
-        # match: (carbonyl carbon, oxygen, amide nitrogen)
         carbonyl = mol.GetAtomWithIdx(match[0])
         oxy = mol.GetAtomWithIdx(match[1])
         amide_nitrogen = mol.GetAtomWithIdx(match[2])
         
-        # From the carbonyl carbon, get neighbors that represent the fatty acyl chain.
-        # Exclude the carbonyl oxygen and amide nitrogen.
+        # From the carbonyl carbon, determine the acyl side.
+        # Exclude the carbonyl oxygen and the amide nitrogen.
         acyl_neighbors = [nbr for nbr in carbonyl.GetNeighbors()
                           if nbr.GetIdx() not in {oxy.GetIdx(), amide_nitrogen.GetIdx()}
                           and nbr.GetAtomicNum() == 6
-                          and not nbr.GetIsAromatic()
-                          and not nbr.IsInRing()]
+                          and (not nbr.GetIsAromatic())
+                          and (not nbr.IsInRing())]
         if not acyl_neighbors:
-            # Cannot find a carbon chain on the acyl side.
-            continue
-
-        # Compute maximum chain length from carbonyl: include the carbonyl carbon itself.
+            continue  # this amide bond does not have an acyl substituent
+        
+        # For each acyl neighbor, compute the longest aliphatic chain length.
         acyl_chain_length = 0
         for nbr in acyl_neighbors:
-            chain_length = 1 + longest_aliphatic_chain_length(nbr, visited={carbonyl.GetIdx()})
-            if chain_length > acyl_chain_length:
-                acyl_chain_length = chain_length
-
-        if acyl_chain_length < fatty_chain_threshold:
-            # This amide does not qualify as having a sufficiently long fatty acyl chain.
+            # starting count: include this neighbor
+            chain_len = 1 + longest_aliphatic_chain_length(nbr, visited={carbonyl.GetIdx(), nbr.GetIdx()})
+            if chain_len > acyl_chain_length:
+                acyl_chain_length = chain_len
+        
+        # Check if the acyl chain meets the minimum threshold.
+        if acyl_chain_length < acyl_min:
+            # This amide does not have a sufficiently long acyl (fatty acid) group.
             continue
-
-        # Now check the amide nitrogen side: ensure that no substituent on the nitrogen (other than the carbonyl)
-        # is too long (i.e. fatty). We want the amine part to be relatively small.
+        
+        # Now check the substituents on the amide nitrogen.
+        # We want every substituent (aside from the carbonyl connection) to be modest (i.e. short aliphatic chain).
         valid_amine = True
+        max_amine_chain = 0  # record the longest chain found on N substituents
         for nbr in amide_nitrogen.GetNeighbors():
             if nbr.GetIdx() == carbonyl.GetIdx():
-                continue  # skip the carbonyl connection
-            if nbr.GetAtomicNum() == 6 and not nbr.GetIsAromatic() and not nbr.IsInRing():
-                chain_len = 1 + longest_aliphatic_chain_length(nbr, visited={amide_nitrogen.GetIdx()})
-                if chain_len >= fatty_chain_threshold:
+                continue  # skip the carbonyl side
+            if nbr.GetAtomicNum() == 6 and (not nbr.GetIsAromatic()) and (not nbr.IsInRing()):
+                amine_chain = 1 + longest_aliphatic_chain_length(nbr, visited={amide_nitrogen.GetIdx(), nbr.GetIdx()})
+                if amine_chain > max_amine_chain:
+                    max_amine_chain = amine_chain
+                if amine_chain >= amine_max:
                     valid_amine = False
                     break
         if not valid_amine:
-            # This amide's nitrogen bears a long aliphatic chain that makes it likely part of a lipid (e.g. ceramide)
-            # and not a typical fatty amide where only the acyl group is long.
             continue
-
-        # If we reach here, we found an amide bond whose acyl chain is long enough and whose nitrogen substituents are not fatty.
-        return True, f"Found fatty amide: amide group with acyl chain length {acyl_chain_length} carbons and modest amine substituents."
         
-    return False, "Amide group found but no qualifying fatty acyl chain or amine substituent criteria not met."
+        # If we reach here, we found a qualifying amide bond.
+        return True, (f"Found fatty amide: acyl chain length {acyl_chain_length} "
+                      f"and maximum N-side chain length {max_amine_chain}")
     
-# Example usage:
+    return False, "Amide groups were found but none met fatty amide criteria (acyl chain too short or N-substituents too long)."
+
+
+# Example usage (for testing):
 if __name__ == "__main__":
-    examples = [
-        "CC(C)CC(=O)NCCc1c[nH]cn1",  # Dolichotheline (should be false: acyl chain too short)
-        "CCCCCCCCC(=O)NCc1ccc(O)c(OC)c1",  # nonivamide (acyl chain length 9 --> true)
-        "O=C(NCC(O)=O)CC/C=C\\C/C=C\\C/C=C\\C/C=C\\C/C=C\\CC"  # Docosahexaenoyl glycine (22 carbons acyl)
+    test_smiles = [
+        # Should be classified as fatty amide:
+        "CC(C)CC(=O)NCCc1c[nH]cn1",  # Dolichotheline 
+        "CCCCCCCCC(=O)NCc1ccc(O)c(OC)c1",  # nonivamide
+        "O=C(NCC(O)=O)CC/C=C\\C/C=C\\C/C=C\\C/C=C\\C/C=C\\CC",  # Docosahexaenoyl glycine
+        # Others that might fail (or be rejected) by our criteria:
+        "O=C(N[C@H](C(=O)N[C@@H](C(O)O)CCC(C)C)CCC(=O)N)[C@@H](NC(=O)C[C@H](O)CCCCCCCCCCC)CC(=O)N"  # a peptide-like molecule
     ]
-    for smi in examples:
-        result, reason = is_fatty_amide(smi)
-        print(f"SMILES: {smi}\nResult: {result}\nReason: {reason}\n")
+    
+    for smi in test_smiles:
+        res, msg = is_fatty_amide(smi)
+        print(f"SMILES: {smi}\nResult: {res}\nMessage: {msg}\n")
