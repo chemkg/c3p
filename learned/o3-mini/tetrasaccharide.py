@@ -4,135 +4,130 @@ Classifies: CHEBI:50126 tetrasaccharide
 """
 Classifies: Tetrasaccharide
 Definition: An oligosaccharide comprising four monomeric monosaccharide units.
-The revised classifier:
+This revised classifier:
   - Parses the SMILES and requires one connected component.
-  - Finds rings of size 5 (furanose) or 6 (pyranose) that have exactly one oxygen in the ring.
-  - For each candidate ring, it checks that there are exocyclic O–H substituents (at least one)
-    and that a number of ring atoms are chiral (≥2 for 5-membered and ≥3 for 6-membered rings).
-  - Finally, it confirms that the candidates are connected (via bonds between ring atoms)
-    so that all four rings form one unified oligosaccharide.
-If these tests pass, the molecule is classified as a tetrasaccharide.
+  - Detects candidate sugar rings as rings of size 5 (furanose) or 6 (pyranose) containing exactly one oxygen.
+  - Requires that each candidate sugar ring has at least one exocyclic oxygen substituent carrying a hydrogen (e.g. –OH)
+    and at least one chiral atom.
+  - In addition, when checking connectivity, the candidate ring’s set is “grown” by including neighboring oxygen atoms
+    that commonly act as glycosidic linkers.
+If there are exactly 4 candidate rings and they are connected via such linkers, the molecule qualifies as a tetrasaccharide.
 """
-
 from rdkit import Chem
 
 def is_tetrasaccharide(smiles: str):
     """
     Determine if a molecule (given as a SMILES string) is a tetrasaccharide.
-    It checks:
-      - Valid SMILES and a single connected component.
-      - Exactly 4 candidate sugar rings. A candidate sugar ring is defined as:
-          * A 5-membered or 6-membered ring containing exactly one oxygen (and 4 or 5 carbons, respectively).
-          * At least one exocyclic O–H substituent (i.e. an oxygen neighbour not in the ring that carries a hydrogen).
-          * A minimum number of chiral centers in the ring (≥2 if 5-membered, ≥3 if 6-membered).
-      - The 4 candidate sugar rings are connected via bonds (i.e. the sugar units are linked by glycosidic bonds).
+    The procedure:
+      - Ensures the SMILES is valid and corresponds to a single (connected) molecule.
+      - From the ring information, it gathers candidate sugar rings defined as:
+          * A ring of 5 or 6 atoms,
+          * Containing exactly one oxygen atom (and the remaining being carbons),
+          * Having at least one exocyclic –OH substituent (an oxygen neighbor having at least one hydrogen),
+          * And having at least one explicitly chiral center.
+      - It then “grows” each candidate unit’s atom set by including neighbouring oxygen atoms (the typical glycosidic linker atoms).
+      - Finally, it requires exactly 4 candidate sugar rings whose grown sets are mutually connected (i.e. intersect at least one other).
       
     Args:
-        smiles (str): SMILES string of the molecule.
-        
+      smiles (str): SMILES string of the molecule.
+      
     Returns:
-        (bool, str): (True, reason) if molecule qualifies as a tetrasaccharide;
-                     (False, reason) otherwise.
+      (bool, str): (True, reason) if the molecule qualifies as a tetrasaccharide;
+                   (False, reason) otherwise.
     """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-        
-    # Check that molecule is a single connected component.
+    
+    # Check for a single connected component
     mol_smiles = Chem.MolToSmiles(mol)
     if '.' in mol_smiles:
         return False, "Molecule contains multiple disconnected fragments"
     
     ring_info = mol.GetRingInfo().AtomRings()
     
-    def is_sugar_ring(atom_indices):
+    def is_candidate_sugar_ring(atom_indices):
         """
-        Decide whether the ring given by atom_indices qualifies as a monosaccharide ring.
-        Checks:
-          - Ring size must be 5 or 6.
-          - Exactly one oxygen in the ring.
-          - Exocyclic –OH: at least one neighbor of a ring atom is an oxygen with at least one H.
-          - Chiral centers in the ring: at least 2 for a 5-membered ring, or at least 3 for a 6-membered ring.
+        Evaluate whether a given ring (identified by its atom indices) meets the criteria for a
+        candidate sugar ring.
+          - Ring must be of size 5 (furanose) or 6 (pyranose).
+          - The ring must have exactly one oxygen (rest assumed to be carbons).
+          - At least one exocyclic -OH substituent: one neighbor (not in the ring) that is an oxygen
+            with at least one hydrogen.
+          - At least one chiral center should be specified in the ring.
         """
-        n_atoms = len(atom_indices)
-        if n_atoms not in (5, 6):
+        n = len(atom_indices)
+        if n not in (5, 6):
             return False
-        
-        oxygen_in_ring = 0
-        carbon_in_ring = 0
+        oxy_count = 0
+        carbon_count = 0
         for idx in atom_indices:
             atom = mol.GetAtomWithIdx(idx)
             if atom.GetAtomicNum() == 8:
-                oxygen_in_ring += 1
+                oxy_count += 1
             elif atom.GetAtomicNum() == 6:
-                carbon_in_ring += 1
-        # A typical pyranose ring is 6-membered (1 oxygen + 5 carbons),
-        # and a typical furanose ring is 5-membered (1 oxygen + 4 carbons).
-        if n_atoms == 6 and not (oxygen_in_ring == 1 and carbon_in_ring == 5):
+                carbon_count += 1
+        # Check typical sugar ring composition: one oxygen and the rest carbons.
+        if oxy_count != 1 or (n - oxy_count) != carbon_count:
             return False
-        if n_atoms == 5 and not (oxygen_in_ring == 1 and carbon_in_ring == 4):
-            return False
-
-        # Check for exocyclic hydroxyl groups.
-        # For each atom in the ring, look at neighbors not in the ring.
-        exo_oh_count = 0
+        
+        # Check for exocyclic hydroxyl group(s)
+        exo_oh = 0
         for idx in atom_indices:
-            atom = mol.GetAtomWithIdx(idx)
-            for nbr in atom.GetNeighbors():
+            a = mol.GetAtomWithIdx(idx)
+            for nbr in a.GetNeighbors():
                 if nbr.GetIdx() in atom_indices:
                     continue
-                # Check if neighbor is oxygen and (explicitly or implicitly) bonded to at least one hydrogen.
-                if nbr.GetAtomicNum() == 8:
-                    # A simple test: if the neighbor has any explicit hydrogen or an atomic number hint from implicit H count.
-                    if nbr.GetTotalNumHs() > 0:
-                        exo_oh_count += 1
-        if exo_oh_count < 1:
+                # We expect an -OH substituent: neighbor oxygen with at least one hydrogen
+                if nbr.GetAtomicNum() == 8 and nbr.GetTotalNumHs() > 0:
+                    exo_oh += 1
+        if exo_oh < 1:
             return False
-
-        # Check chiral centers in the ring.
-        chiral_count = 0
+        
+        # Relaxed chiral requirement: at least one chiral center in the ring.
+        chiral = 0
         for idx in atom_indices:
-            atom = mol.GetAtomWithIdx(idx)
-            # If the atom has a specified chiral tag (different from CHI_UNSPECIFIED) we count it.
-            if atom.GetChiralTag() != Chem.rdchem.ChiralType.CHI_UNSPECIFIED:
-                chiral_count += 1
-        required_chiral = 2 if n_atoms == 5 else 3
-        if chiral_count < required_chiral:
+            a = mol.GetAtomWithIdx(idx)
+            if a.GetChiralTag() != Chem.rdchem.ChiralType.CHI_UNSPECIFIED:
+                chiral += 1
+        if chiral < 1:
             return False
-
+        
         return True
 
-    # Gather indices for candidate sugar rings.
+    # Gather candidate sugar rings (as sets of atom indices)
     candidate_rings = []
     for ring in ring_info:
-        if is_sugar_ring(ring):
+        if is_candidate_sugar_ring(ring):
             candidate_rings.append(set(ring))
-    
+            
     if len(candidate_rings) != 4:
-        return (False, f"Found {len(candidate_rings)} candidate carbohydrate rings, need exactly 4")
+        return False, f"Found {len(candidate_rings)} candidate carbohydrate rings, need exactly 4"
+
+    # Build a connectivity graph among candidate rings.
+    # Instead of checking only for direct bonds between atoms in rings, we "grow" the candidate set by including
+    # neighboring oxygen atoms (which may serve as glycosidic linkers).
+    grown_sets = []
+    for ring_atoms in candidate_rings:
+        grown = set(ring_atoms)  # start with atoms in the ring
+        for idx in ring_atoms:
+            atom = mol.GetAtomWithIdx(idx)
+            for nbr in atom.GetNeighbors():
+                # If neighbor is oxygen, add it to the grown set.
+                if nbr.GetAtomicNum() == 8:
+                    grown.add(nbr.GetIdx())
+        grown_sets.append(grown)
     
-    # Check connectivity among candidate rings.
-    # We use a simple graph where each node is one candidate ring.
-    # An edge is added if any atom in one ring is bonded to any atom in the other.
-    n = len(candidate_rings)
-    graph = {i: set() for i in range(n)}
+    n = len(grown_sets)
+    connectivity_graph = {i: set() for i in range(n)}
     for i in range(n):
         for j in range(i+1, n):
-            # If any bond connects an atom in candidate_rings[i] and an atom in candidate_rings[j], mark them as connected.
-            connected = False
-            for idx in candidate_rings[i]:
-                atom = mol.GetAtomWithIdx(idx)
-                for nbr in atom.GetNeighbors():
-                    if nbr.GetIdx() in candidate_rings[j]:
-                        connected = True
-                        break
-                if connected:
-                    break
-            if connected:
-                graph[i].add(j)
-                graph[j].add(i)
+            # If the grown sets of candidate rings share any atom, treat them as connected.
+            if grown_sets[i].intersection(grown_sets[j]):
+                connectivity_graph[i].add(j)
+                connectivity_graph[j].add(i)
     
-    # Now do a simple connectivity search.
+    # Do a DFS to check if all four candidate rings are connected.
     visited = set()
     def dfs(node):
         stack = [node]
@@ -141,17 +136,17 @@ def is_tetrasaccharide(smiles: str):
             if cur in visited:
                 continue
             visited.add(cur)
-            stack.extend(graph[cur] - visited)
+            stack.extend(list(connectivity_graph[cur] - visited))
     
     dfs(0)
     if len(visited) != n:
-        return (False, "Candidate carbohydrate rings are not connected via glycosidic bonds")
+        return False, "Candidate carbohydrate rings are not connected via glycosidic bonds"
     
     return True, "Molecule contains exactly 4 connected monosaccharide (sugar) units"
 
-# For testing (if running as script):
+# For testing purposes (script usage)
 if __name__ == '__main__':
-    # Test with a known tetrasaccharide SMILES
+    # A known tetrasaccharide example as provided.
     test_smiles = "OC[C@H]1O[C@@H](OC[C@H]2O[C@@H](OC[C@H]3O[C@@H](OC[C@H]4OC(O)[C@H](O)[C@@H](O)[C@H]4O)[C@H](O)[C@@H](O)[C@H]3O)[C@H](O)[C@@H](O)[C@H]2O)[C@H](O)[C@@H](O)[C@H]1O"
     result, reason = is_tetrasaccharide(test_smiles)
     print(result, reason)
