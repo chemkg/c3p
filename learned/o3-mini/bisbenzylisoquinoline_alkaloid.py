@@ -12,11 +12,14 @@ from rdkit import Chem
 def is_bisbenzylisoquinoline_alkaloid(smiles: str):
     """
     Determines if a molecule is a bisbenzylisoquinoline alkaloid based on its SMILES string.
-    The classification is made by checking two features:
-      1. The molecule must contain at least two distinct benzylisoquinoline (tetrahydroisoquinoline)
-         units. Here, we use the SMARTS "c1ccc2CCNCC2c1" as an approximate pattern.
-      2. The two units must be connected by a bridging group. We check for an aromatic ether bridge,
-         i.e. an oxygen atom with a bond to two aromatic carbons (SMARTS: "[c][O][c]").
+    The classification uses two main criteria:
+      1. The molecule must contain at least two distinct benzylisoquinoline units.
+         We search for the bicyclic fragment representing a tetrahydroisoquinoline unit with an attached aromatic ring.
+         A more permissive SMARTS pattern "c1ccc2CCNC2c1" is used to allow for additional substituents and loss
+         of explicit stereochemistry.
+      2. The two units must be connected by a bridging group. We check for:
+         - An aromatic ether bridge (SMARTS: "[c;r]-O-[c;r]"), or
+         - A methylenedioxy bridge (SMARTS: "cO[CH2]Oc").
     
     Args:
         smiles (str): SMILES string of the molecule
@@ -29,29 +32,35 @@ def is_bisbenzylisoquinoline_alkaloid(smiles: str):
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-
-    # Define SMARTS pattern for a tetrahydroisoquinoline unit (approximation of a benzylisoquinoline unit)
-    # This pattern represents an aromatic ring (benzene) fused to a saturated ring containing nitrogen.
-    isoquinoline_smarts = "c1ccc2CCNCC2c1"
-    isoquinoline_pattern = Chem.MolFromSmarts(isoquinoline_smarts)
-    iso_matches = mol.GetSubstructMatches(isoquinoline_pattern)
     
-    # Filter matches to obtain distinct (non‐overlapping) units.
+    # Define a more permissive SMARTS pattern for a benzylisoquinoline unit.
+    # This pattern matches an aromatic ring fused to a saturated ring containing nitrogen.
+    benzylisoquinoline_smarts = "c1ccc2CCNC2c1"
+    benzylisoquinoline_pattern = Chem.MolFromSmarts(benzylisoquinoline_smarts)
+    iso_matches = mol.GetSubstructMatches(benzylisoquinoline_pattern)
+    
+    # Filter matches to obtain distinct (non-overlapping) units.
     distinct_units = []
     for match in iso_matches:
         match_set = set(match)
-        # Only add if this match does not share atoms with any unit already found.
         if not any(match_set & existing for existing in distinct_units):
             distinct_units.append(match_set)
     
     if len(distinct_units) < 2:
         return False, f"Found {len(distinct_units)} benzylisoquinoline unit(s); need at least 2"
-
-    # Check for bridging: look for an aromatic ether bridge where an oxygen connects two aromatic carbons.
-    ether_bridge_smarts = "[c][O][c]"
+    
+    # Look for bridging patterns.
+    # Aromatic ether bridge: an oxygen connecting two aromatic (ring) carbons.
+    ether_bridge_smarts = "[c;r]-O-[c;r]"
     ether_bridge = Chem.MolFromSmarts(ether_bridge_smarts)
-    if not mol.HasSubstructMatch(ether_bridge):
-        return False, "No aromatic ether bridge linking the two units found"
-
-    # If both conditions are satisfied, we classify the molecule as a bisbenzylisoquinoline alkaloid.
-    return True, "Contains at least two benzylisoquinoline units linked by an aromatic ether bridge"
+    
+    # Methylenedioxy bridge: pattern representing a -OCH2O- group bridging two aromatic rings.
+    methylenedioxy_smarts = "cO[CH2]Oc"
+    methylenedioxy = Chem.MolFromSmarts(methylenedioxy_smarts)
+    
+    has_bridge = mol.HasSubstructMatch(ether_bridge) or mol.HasSubstructMatch(methylenedioxy)
+    if not has_bridge:
+        return False, "No bridging group (aromatic ether or methylenedioxy) linking the benzylisoquinoline units found"
+    
+    # If both conditions are satisfied, the molecule is classified as a bisbenzylisoquinoline alkaloid.
+    return True, "Contains at least two benzylisoquinoline units bridged by an aromatic ether or methylenedioxy group"
