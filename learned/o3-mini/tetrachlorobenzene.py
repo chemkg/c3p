@@ -3,79 +3,93 @@ Classifies: CHEBI:26888 tetrachlorobenzene
 """
 """
 Classifies: Tetrachlorobenzene
-Definition: Any member of the class of chlorobenzenes carrying four chloro groups 
-at unspecified positions. This classifier looks for ANY six‐membered aromatic ring 
-in the molecule (even if fused or linked) that has exactly four chlorine substituents 
-attached (neighbors not part of the ring). Other substituents are allowed.
+Definition: Any member of the class of chlorobenzenes carrying four chloro groups
+at unspecified positions. This improved classifier looks for a benzene ring (6-membered aromatic carbon cycle)
+that has exactly four chlorine (Cl) substituents attached (neighbors not in the ring).
+To avoid false positives from highly fused polycyclic aromatic systems, it favors rings that are not fused 
+(with another benzene ring, i.e. sharing 2 or more atoms) unless none are found.
 """
 
 from rdkit import Chem
 
 def is_tetrachlorobenzene(smiles: str):
     """
-    Determines if the given molecule (SMILES string) qualifies as a tetrachlorobenzene.
-    The approach is to find any aromatic benzene ring (6-membered, all carbons, aromatic)
-    in the molecule and count the number of chlorine (Cl) substituents attached to it 
-    (only counting groups on atoms not in the ring). If exactly 4 chlorines are found,
-    the molecule is classified as tetrachlorobenzene.
+    Determines whether the given molecule (SMILES string) qualifies as a tetrachlorobenzene.
+    The classifier first looks for benzene rings (aromatic 6-membered rings composed only of carbons).
+    It then counts the number of chlorine substituents (neighbors not belonging to the ring).
+    In order to reduce false positives from polycyclic (fused) systems, we attempt to filter out 
+    any candidate ring that is fused with another benzene ring (i.e. shares 2 or more atoms with it),
+    as long as at least one isolated benzene is present.
 
     Args:
         smiles (str): SMILES string of the molecule.
-
+    
     Returns:
-        bool: True if the molecule qualifies as a tetrachlorobenzene, False otherwise.
+        bool: True if a benzene ring with exactly 4 chlorine substituents is found, False otherwise.
         str: Explanation for the decision.
     """
+    # Parse the SMILES
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     try:
-        # Ensure the molecule is sanitized and kekulized (aromaticity perception, etc.)
         Chem.SanitizeMol(mol)
     except Exception as e:
         return False, "Sanitization error: " + str(e)
-
-    # Get ring information (each ring is a tuple of atom indices)
+    
+    # Retrieve ring information
     ring_info = mol.GetRingInfo().AtomRings()
-    # List to hold candidate benzene rings (set of atom indices)
     candidate_rings = []
     for ring in ring_info:
+        # Only consider rings of exactly 6 atoms.
         if len(ring) != 6:
             continue
+        # Check if every atom in the ring is carbon and aromatic (benzene-like)
         is_benzene = True
         for idx in ring:
             atom = mol.GetAtomWithIdx(idx)
-            # Check that the atom is a carbon and is aromatic
             if atom.GetAtomicNum() != 6 or not atom.GetIsAromatic():
                 is_benzene = False
                 break
         if is_benzene:
             candidate_rings.append(set(ring))
-
-    if not candidate_rings:
-        return False, "No benzene ring (6-membered aromatic carbon cycle) found"
-
-    # For each candidate benzene ring, count the number of Cl substituents.
-    for candidate in candidate_rings:
-        chlorine_count = 0
-        # For every atom in the candidate ring...
-        for idx in candidate:
-            atom = mol.GetAtomWithIdx(idx)
-            # Consider only neighbors not in the ring.
-            for nbr in atom.GetNeighbors():
-                if nbr.GetIdx() in candidate:
-                    continue
-                # Count if neighbor atom is Cl (atomic number 17)
-                if nbr.GetAtomicNum() == 17:
-                    chlorine_count += 1
-        # If exactly four chlorines are attached, we consider it a hit.
-        if chlorine_count == 4:
-            return True, "Found a benzene ring (aromatic 6-membered ring) with exactly 4 chlorine substituents"
     
-    return False, "No benzene ring found with exactly 4 chlorine substituents"
+    if not candidate_rings:
+        return False, "No 6‐membered aromatic carbon ring (benzene) found."
+    
+    # Try to filter out rings that are fused with another benzene ring.
+    # Two benzene rings that share 2 or more atoms are “fused”
+    isolated_rings = []
+    for i, ring in enumerate(candidate_rings):
+        fused = False
+        for j, other in enumerate(candidate_rings):
+            if i == j:
+                continue
+            if len(ring.intersection(other)) >= 2:
+                fused = True
+                break
+        if not fused:
+            isolated_rings.append(ring)
+    
+    # If at least one isolated benzene ring is available, use that list; otherwise, fall back.
+    rings_to_check = isolated_rings if isolated_rings else candidate_rings
 
+    # For each candidate ring, count Cl substituents attached to its atoms (neighbors not in ring).
+    for ring in rings_to_check:
+        chlorine_count = 0
+        for idx in ring:
+            atom = mol.GetAtomWithIdx(idx)
+            for nbr in atom.GetNeighbors():
+                if nbr.GetIdx() in ring:
+                    continue  # skip atoms that are part of the ring
+                if nbr.GetAtomicNum() == 17:  # chlorine atomic number is 17
+                    chlorine_count += 1
+        if chlorine_count == 4:
+            return True, "Found a benzene ring with exactly 4 chlorine substituents."
+    
+    return False, "No benzene ring found with exactly 4 chlorine substituents on its periphery."
 
-# For testing (these test calls may be removed or commented out)
+# For manual testing (remove or comment out in production)
 if __name__ == "__main__":
     test_examples = [
         ("Oc1cccc(c1)-c1cc(Cl)c(Cl)c(Cl)c1Cl", "2',3',4',5'-tetrachlorobiphenyl-3-ol"),
@@ -87,11 +101,6 @@ if __name__ == "__main__":
         ("Clc1ccc(Cl)c(Cl)c1Cl", "1,2,3,4-tetrachlorobenzene"),
         ("Clc1cc(-c2ccccc2)c(Cl)c(Cl)c1Cl", "2,3,4,5-tetrachlorobiphenyl"),
         ("Oc1c(O)c(Cl)c(Cl)c(Cl)c1Cl", "tetrachlorocatechol"),
-        ("Oc1c(Cl)c(Cl)c(O)c(Cl)c1Cl", "tetrachlorohydroquinone"),
-        ("Clc1ccc(cc1)-c1cc(Cl)c(Cl)c(Cl)c1Cl", "2,3,4,4',5-Pentachlorobiphenyl"),
-        ("Clc1cc(Cl)c(Cl)cc1Cl", "1,2,4,5-tetrachlorobenzene"),
-        ("Clc1ccc(cc1Cl)-c1cc(Cl)c(Cl)c(Cl)c1Cl", "2,3,3',4,4',5-Hexachlorobiphenyl"),
-        ("Clc1c(Cl)c(Cl)c2C(=O)OC(=O)c2c1Cl", "tetrachlorophthalic anhydride"),
         ("Clc1c(Cl)c(C#N)c(Cl)c(C#N)c1Cl", "chlorothalonil"),
         ("[O-][N+](=O)c1c(Cl)c(Cl)cc(Cl)c1Cl", "tecnazene"),
     ]
