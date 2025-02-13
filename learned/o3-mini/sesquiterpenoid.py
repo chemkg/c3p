@@ -3,17 +3,16 @@ Classifies: CHEBI:26658 sesquiterpenoid
 """
 """
 Classifies compounds as sesquiterpenoids.
-Definition: Any terpenoid derived from a sesquiterpene.
-The natural core is expected to be mainly built from about 15 carbons,
-allowing for rearrangements or the loss of one or more methyl groups.
-Because many sesquiterpenoids share a common natural “core” (often extractable 
-via a Bemis–Murcko scaffold) we use a heuristic:
-  (1) Extract the Murcko scaffold.
-  (2) If the scaffold splits into fragments, use the largest fragment.
-  (3) Count the number of carbon atoms and compute the fraction of heavy atoms that are C.
-If the largest fragment has between 10 and 17 carbons and is highly carbon‐rich 
-(>=90% carbons), then we classify it as consistent with a sesquiterpenoid core.
-Note: This is only a heuristic.
+Definition: Any terpenoid derived from a sesquiterpene. The natural core is built 
+from roughly 15 carbons (allowing for rearrangements or loss of one or more methyls).
+Our heuristic:
+  (1) Parse the SMILES and attempt to sanitize/kekulize.
+  (2) Extract the Bemis–Murcko scaffold; if extraction fails, use the full molecule.
+  (3) If the scaffold splits into fragments, choose the largest fragment.
+  (4) Count the carbon atoms and determine the fraction of heavy atoms that are carbon.
+  (5) Classify as a sesquiterpenoid if the largest fragment has between 10 and 17 carbons
+      and a high carbon fraction (>=0.90).
+Note: This is a heuristic method.
 """
 
 from rdkit import Chem
@@ -24,69 +23,74 @@ def is_sesquiterpenoid(smiles: str):
     Determines if a molecule is a sesquiterpenoid based on its SMILES string.
     
     The approach is heuristic:
-      - Extract the Bemis–Murcko scaffold from the molecule.
-      - If the scaffold consists of multiple disconnected fragments,
-        select the largest fragment.
-      - Count the number of carbon atoms in this fragment,
-        and also the fraction of heavy atoms that are carbons.
-      - Terpenoid cores are mainly built from carbons and tend to be derived 
-        from a C15 precursor (with allowable rearrangements),
-        so we accept if the largest fragment has between 10 and 17 carbons
-        and a carbon fraction of at least 0.90.
+      - Parse and sanitize the molecule. In case of kekulization errors, attempt a fallback.
+      - Extract the Bemis–Murcko scaffold and if it is fragmented, select the largest fragment.
+      - Count the number of carbon atoms and compute the fraction of heavy atoms that are C.
+      - A sesquiterpenoid core is expected to have roughly between 10 and 17 carbons with at least 90% carbons.
     
     Args:
       smiles (str): SMILES string of the molecule.
     
     Returns:
-      (bool, str): A tuple with a True/False decision and a string explanation.
+      (bool, str): A tuple providing a True/False decision and a string explanation.
     """
     # Parse the SMILES string
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    scaffold_source = ""
-    # Attempt to extract the Bemis–Murcko scaffold.
+    # Attempt to sanitize and kekulize the molecule.
+    # Sometimes RDKit may have issues with kekulization; we catch and bypass these errors.
+    try:
+        Chem.SanitizeMol(mol)
+        Chem.Kekulize(mol, clearAromaticFlags=True)
+    except Exception as e:
+        # If sanitization/kekulization fails, note that and continue with the original mol.
+        # Many scaffolds can still be extracted without full kekulization.
+        fallback_message = f"Sanitization/kekulization failed: {str(e)}; using unsanitized molecule. "
+    else:
+        fallback_message = "Molecule sanitized successfully. "
+    
+    # Try to extract the Bemis–Murcko scaffold.
+    scaffold_source = fallback_message
     try:
         scaffold = MurckoScaffold.GetScaffoldForMol(mol)
-        scaffold_source = "using Murcko scaffold"
+        scaffold_source += "Using Murcko scaffold."
     except Exception as e:
-        # If scaffold extraction fails (e.g., due to kekulization errors),
-        # we fall back to using the entire molecule.
-        scaffold = mol
-        scaffold_source = f"Murcko scaffold extraction failed: {str(e)}; using full molecule"
+        scaffold = mol  # Fall back to entire molecule.
+        scaffold_source += f"Murcko scaffold extraction failed: {str(e)}; using full molecule."
     
     # If the scaffold (or fallback) has no heavy atoms, use the complete molecule.
     if scaffold.GetNumHeavyAtoms() == 0:
         scaffold = mol
-        scaffold_source += " (empty scaffold; using full molecule)"
+        scaffold_source += " (Empty scaffold; using full molecule)."
     
     # For molecules with disconnected fragments in the scaffold,
-    # select the largest fragment (by heavy-atom count)
+    # select the largest fragment by heavy-atom count.
     frags = Chem.GetMolFrags(scaffold, asMols=True)
     if len(frags) > 1:
         frag = max(frags, key=lambda m: m.GetNumHeavyAtoms())
         scaffold = frag
-        scaffold_source += " (largest fragment selected)"
+        scaffold_source += " (Largest fragment selected from multiple fragments)."
     
-    # Count the number of carbon atoms in the selected scaffold
+    # Count the number of carbon atoms in the scaffold.
     carbon_count = sum(1 for atom in scaffold.GetAtoms() if atom.GetAtomicNum() == 6)
     heavy_count = scaffold.GetNumHeavyAtoms()
     
-    # Compute the carbon fraction (ignoring hydrogens)
+    # Compute the carbon fraction. (If no heavy atoms, fraction is 0.)
     carbon_fraction = carbon_count / heavy_count if heavy_count > 0 else 0
     
-    # Apply heuristic: expect a sesquiterpenoid core to have roughly between 10 and 17 carbons and be very carbon-rich (>=0.90)
+    # Use heuristic: sesquiterpenoid core is expected to have roughly 10 to 17 carbons with >= 90% carbons.
     if 10 <= carbon_count <= 17 and carbon_fraction >= 0.90:
-        return True, (f"{scaffold_source}: scaffold contains {carbon_count} carbon atoms "
+        return True, (f"{scaffold_source}: Scaffold contains {carbon_count} carbon atoms "
                       f"({carbon_fraction:.2f} carbon fraction), consistent with a sesquiterpenoid core.")
     else:
-        return False, (f"{scaffold_source}: scaffold contains {carbon_count} carbon atoms "
-                       f"({carbon_fraction:.2f} carbon fraction), not consistent with a typical sesquiterpenoid core (expected ~15 heavy carbons).")
-
+        return False, (f"{scaffold_source}: Scaffold contains {carbon_count} carbon atoms "
+                       f"({carbon_fraction:.2f} carbon fraction), not consistent with a typical sesquiterpenoid core (expected ~15 carbons).")
+    
 # Example usage:
 if __name__ == '__main__':
-    # Example: (2-cis,6-cis)-farnesol, a known sesquiterpenoid.
+    # (2-cis,6-cis)-farnesol is a known sesquiterpenoid.
     test_smiles = "CC(C)=CCC\\C(C)=C/CC\\C(C)=C/CO"
     result, reason = is_sesquiterpenoid(test_smiles)
     print(f"Result: {result}\nReason: {reason}")
