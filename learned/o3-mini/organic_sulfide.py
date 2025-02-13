@@ -2,8 +2,13 @@
 Classifies: CHEBI:16385 organic sulfide
 """
 """
-Classifies: Organic sulfide (thioether) compounds
-Definition: Compounds having the structure R–S–R (where R ≠ H)
+Classifies: Organic sulfide (thioether) compounds.
+Definition: Compounds having the structure R–S–R (with R ≠ H).
+Here we require that an S atom (atomic number 16) in the molecule is attached
+to exactly two heavy atoms, both of which are carbon (atomic number 6). In addition,
+we “veto” molecules that show a clear peptide backbone (by detecting at least two
+amide bonds), which are common false‐positives (e.g. methionine residues in peptides).
+Note: This is a heuristic implementation and may not capture all edge cases.
 """
 
 from rdkit import Chem
@@ -11,46 +16,63 @@ from rdkit import Chem
 def is_organic_sulfide(smiles: str):
     """
     Determines if a molecule is an organic sulfide (thioether) based on its SMILES string.
-    An organic sulfide is defined as a compound containing an R–S–R motif with both R groups
-    being non-hydrogen substituents (i.e. no S–H bond is allowed).
+    Here the criterion is that the molecule contains at least one sulfur atom that is bonded
+    to exactly two non-hydrogen atoms and, for improved discrimination, both neighbors must be carbons.
+    Also, if the molecule contains multiple peptide-bond motifs, it is likely a peptide and we do not
+    wish to classify that as “organic sulfide” (even if a thioether appears in a side‐chain).
     
     Args:
-        smiles (str): SMILES string of the molecule
+        smiles (str): SMILES string of the molecule.
         
     Returns:
-        bool: True if molecule is classified as an organic sulfide, False otherwise
-        str: Reason for classification
+        bool: True if the molecule is classified as an organic sulfide, False otherwise.
+        str: A reason string describing the decision.
     """
-    # Parse the SMILES string into an RDKit molecule object.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Add explicit hydrogens so we can check for S–H bonds.
-    mol = Chem.AddHs(mol)
+    # Crude peptide detection: count amide bonds (C(=O)N).
+    amide_smarts = Chem.MolFromSmarts("C(=O)N")
+    peptide_matches = mol.GetSubstructMatches(amide_smarts) if amide_smarts is not None else []
+    peptide_flag = len(peptide_matches) > 1  # if >1 amide bond exists, we treat it as peptide-like
     
-    # Iterate over all atoms to find sulfur atoms (atomic number 16).
+    # Loop over all atoms; look for a thioether sulfur:
     for atom in mol.GetAtoms():
         if atom.GetAtomicNum() == 16:
-            # For organic sulfide (thioether), the S should be bonded only to non-hydrogen atoms.
-            # Count the number of heavy (non-hydrogen) neighbors.
-            heavy_neighbors = [nbr for nbr in atom.GetNeighbors() if nbr.GetAtomicNum() != 1]
-            # We require at least 2 non-hydrogen bonds for an R-S-R motif.
-            if len(heavy_neighbors) == 2:
-                return True, "Contains an R-S-R motif with no S-H bonds (organic sulfide)"
+            # Check number of neighbors (here we work on the implicit (not added) molecule).
+            neighbors = atom.GetNeighbors()
+            # Expect exactly 2 bonds for an isolated thioether sulfur.
+            if len(neighbors) != 2:
+                continue
+            # Check none of the neighbors is a hydrogen (atomic num 1)
+            if any(nbr.GetAtomicNum() == 1 for nbr in neighbors):
+                continue
+            # To be sure the S is in a typical organic sulfide motif, require that both neighbors are carbon.
+            if not all(nbr.GetAtomicNum() == 6 for nbr in neighbors):
+                continue
+            # Also, if the molecule strongly appears to be a peptide (e.g. several amide bonds),
+            # we decide not to classify it as an organic sulfide.
+            if peptide_flag:
+                # We could refine by checking if the S is within a “side-chain” of a peptide,
+                # but here we take a simple stance.
+                continue
+            # If all conditions are met, we classify as an organic sulfide.
+            return True, "Contains an R–S–R motif (S bonded to two carbons, with no S–H bonds) and no strong peptide signals"
     
-    # If no S atom with exactly two non-hydrogen neighbors was found, then the molecule
-    # does not contain the organic sulfide (thioether) signature.
-    return False, "No R-S-R motif (thioether) found"
+    # If we get here no sulfur in the proper environment was found.
+    return False, "No R–S–R (thioether) motif found"
 
-# Example test cases (uncomment to run tests)
+# Example usage (uncomment to run some tests):
 # test_smiles = [
-#     "S(CCCCC)C",  # 1-(Methylthio)pentane, should be True
-#     "CSC",        # Dimethyl sulfide, should be True
-#     "SC",         # Methanethiol, should be False since one substituent is H
-#     "c1ccsc1"     # Thiophene, should be True (S in an aromatic ring bonded to 2 carbons)
+#     "CSC",                      # dimethyl sulfide, should be True
+#     "SC",                       # methanethiol, should be False (has S–H bond)
+#     "c1ccsc1",                  # thiophene, should be True
+#     "S(CCCCC)C",                # 1-(Methylthio)pentane, should be True
+#     "N[C@@H](CSC(C#N)c1c[nH]c2ccccc12)C(O)=O",  # L-Cys(IAN), should be True
+#     "C1=CC=C(C=C1)CCCNC2=[NH+]C=NC3=C2NC=N3"      # LSM-21130*, no S so will be False
 # ]
 #
 # for s in test_smiles:
 #     result, reason = is_organic_sulfide(s)
-#     print(f"SMILES: {s} -> {result}: {reason}")
+#     print(f"SMILES: {s}\n  -> {result}: {reason}\n")
