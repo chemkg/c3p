@@ -2,7 +2,7 @@
 Classifies: CHEBI:15693 aldose
 """
 """
-Classifies: Aldose – Aldehydic parent sugars (polyhydroxy aldehydes H[CH(OH)]nC(=O)H, n>=2)
+Classifies: Aldose – Aldehydic parent sugars (polyhydroxy aldehydes H[CH(OH)]nC(=O)H, n >= 2)
 and their intramolecular hemiacetals.
 Examples include beta-D-idopyranose, D-ribofuranose, L-erythrose, beta-D-glucose, etc.
 """
@@ -12,46 +12,58 @@ from rdkit import Chem
 def is_aldose(smiles: str):
     """
     Determines if a molecule is an aldose based on its SMILES string.
-    Aldoses are defined as polyhydroxy aldehydes (open-chain) or their cyclic hemiacetals.
-    Typically, aldoses have between 3 and 7 carbon atoms.
-    
-    The algorithm handles two cases:
-      1. Open-chain aldoses: The molecule is acyclic, has a terminal aldehyde group
-         (SMARTS: [CX3H1](=O)) and every carbon in the backbone (traversed via DFS)
-         carries at least one exocyclic hydroxyl (–OH) group.
-      
-      2. Cyclic (hemiacetal) aldoses: A ring of size 5 (furanose) or 6 (pyranose) is 
-         identified that contains exactly one oxygen (the ring oxygen) and each ring carbon 
-         bears at least one external hydroxyl group.
-    
+    Aldoses can either be open-chain aldehydes with a fully hydroxylated backbone or
+    cyclic hemiacetals having a 5- or 6-membered ring containing exactly one oxygen and
+    appropriate exocyclic hydroxyl (–OH or CH2OH) decorations on each ring carbon.
+
     Args:
         smiles (str): SMILES string of the molecule.
-    
+
     Returns:
-        bool: True if molecule appears to be an aldose, False otherwise.
+        bool: True if the molecule appears to be an aldose, False otherwise.
         str: Detailed reason for the classification decision.
     """
     # Parse the SMILES string to an RDKit molecule.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-    
+
     # Count carbon atoms in the molecule.
     carbons = [atom for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6]
     nC = len(carbons)
     if nC < 3 or nC > 7:
         return False, f"Number of carbons is {nC}, which is outside the typical range for aldoses (3-7)"
-    
-    # Helper function: Determines if an oxygen atom is in a hydroxyl (-OH) group,
-    # i.e. it has at least one hydrogen neighbor.
+
+    # Helper function: determines if an oxygen behaves as a hydroxyl (-OH).
     def is_hydroxyl(oxygen):
         if oxygen.GetAtomicNum() != 8:
             return False
+        # A hydroxyl oxygen should have at least one hydrogen neighbor.
         return any(nb.GetAtomicNum() == 1 for nb in oxygen.GetNeighbors())
-    
-    # Attempt 1: Open-chain aldose detection (only if molecule is acyclic).
+
+    # Helper for cyclic sugars:
+    # Check if a given ring carbon has an exocyclic hydroxyl,
+    # either directly or via a CH2OH group.
+    def has_exocyclic_hydroxyl(atom, ring_indices):
+        # Check each neighbor that is not part of the ring.
+        for nb in atom.GetNeighbors():
+            if nb.GetIdx() in ring_indices:
+                continue
+            # Direct attachment to a hydroxyl oxygen.
+            if nb.GetAtomicNum() == 8 and is_hydroxyl(nb):
+                return True
+            # Alternatively, if a neighboring carbon (e.g., CH2) eventually bears an -OH.
+            if nb.GetAtomicNum() == 6:
+                for nb2 in nb.GetNeighbors():
+                    if nb2.GetIdx() == atom.GetIdx() or nb2.GetIdx() in ring_indices:
+                        continue
+                    if nb2.GetAtomicNum() == 8 and is_hydroxyl(nb2):
+                        return True
+        return False
+
+    # Attempt 1: Open-chain aldose detection (only if the molecule is acyclic).
     if mol.GetRingInfo().NumRings() == 0:
-        # Use SMARTS to detect a terminal aldehyde group: a carbonyl (C=O) carbon with one hydrogen.
+        # Use SMARTS to detect a terminal aldehyde: a carbonyl (C=O) carbon with one hydrogen.
         aldehyde_smarts = Chem.MolFromSmarts("[CX3H1](=O)")
         aldehyde_matches = mol.GetSubstructMatches(aldehyde_smarts)
         for match in aldehyde_matches:
@@ -60,7 +72,7 @@ def is_aldose(smiles: str):
             carbon_neighbors = [nb for nb in aldehyde_atom.GetNeighbors() if nb.GetAtomicNum() == 6]
             if len(carbon_neighbors) != 1:
                 continue  # Not a terminal aldehyde.
-            # Traverse the carbon skeleton (backbone) via DFS.
+            # Traverse the carbon chain from the aldehyde carbon.
             chain = set()
             def dfs(atom):
                 if atom.GetIdx() in chain:
@@ -70,70 +82,69 @@ def is_aldose(smiles: str):
                     if nb.GetAtomicNum() == 6 and nb.GetIdx() not in chain:
                         dfs(nb)
             dfs(aldehyde_atom)
-            # If the DFS does not cover all carbon atoms, skip this match.
-            if len(chain) != nC:
-                continue
-            # For every carbon in the backbone (except the aldehyde carbon),
-            # check for at least one exocyclic hydroxyl group.
+            if len(chain) != nC: 
+                continue  # The carbon chain is not contiguous.
+            # For every carbon (except the terminal aldehyde), verify there is an exocyclic -OH.
             open_chain_valid = True
-            for idx in chain:
-                if idx == aldehyde_atom.GetIdx():
+            for cid in chain:
+                if cid == aldehyde_atom.GetIdx():
                     continue
-                atom = mol.GetAtomWithIdx(idx)
-                found_oh = False
-                # Look at neighbors not in the main carbon chain.
-                for nb in atom.GetNeighbors():
+                carbon_atom = mol.GetAtomWithIdx(cid)
+                found_hydroxyl = False
+                for nb in carbon_atom.GetNeighbors():
                     if nb.GetIdx() in chain:
                         continue
                     if nb.GetAtomicNum() == 8 and is_hydroxyl(nb):
-                        found_oh = True
+                        found_hydroxyl = True
                         break
-                if not found_oh:
+                    if nb.GetAtomicNum() == 6:
+                        # Check if this substituent carbon carries an -OH.
+                        for nb2 in nb.GetNeighbors():
+                            if nb2.GetIdx() == carbon_atom.GetIdx() or nb2.GetIdx() in chain:
+                                continue
+                            if nb2.GetAtomicNum() == 8 and is_hydroxyl(nb2):
+                                found_hydroxyl = True
+                                break
+                        if found_hydroxyl:
+                            break
+                if not found_hydroxyl:
                     open_chain_valid = False
                     break
             if open_chain_valid:
                 return True, ("Open-chain aldose pattern detected with terminal aldehyde "
-                              "and hydroxylated carbon backbone")
-    
-    # Attempt 2: Cyclic hemiacetal aldose detection.
-    # Look through rings of size 5 (furanose) or 6 (pyranose).
+                              "and fully hydroxylated carbon backbone")
+        return False, "No open-chain aldose pattern detected"
+
+    # Attempt 2: Cyclic (hemiacetal) aldose detection.
     rings = mol.GetRingInfo().AtomRings()
     for ring in rings:
         if len(ring) not in (5, 6):
+            continue  # Only consider 5- or 6-membered rings.
+        ring_indices = set(ring)
+        # For an aldose ring, expect exactly one oxygen (the ring oxygen).
+        oxygen_in_ring = [idx for idx in ring if mol.GetAtomWithIdx(idx).GetAtomicNum() == 8]
+        if len(oxygen_in_ring) != 1:
             continue
-        # Get the atoms in this ring.
-        ring_atoms = [mol.GetAtomWithIdx(idx) for idx in ring]
-        # For a sugar ring, we expect exactly one oxygen atom (the ring oxygen).
-        ring_oxygen_atoms = [atom for atom in ring_atoms if atom.GetAtomicNum() == 8]
-        if len(ring_oxygen_atoms) != 1:
+        # Check that the ring (excluding the ring oxygen) is composed of carbons.
+        ring_carbons = [idx for idx in ring if mol.GetAtomWithIdx(idx).GetAtomicNum() == 6]
+        if len(ring_carbons) != len(ring) - 1:
             continue
-        # The rest of the ring should be carbons.
-        ring_carbon_atoms = [atom for atom in ring_atoms if atom.GetAtomicNum() == 6]
-        if len(ring_carbon_atoms) != (len(ring) - 1):
-            continue
-        # For each ring carbon, check that it carries at least one exocyclic hydroxyl group.
+        # Now ensure that each ring carbon has an exocyclic hydroxyl decoration.
         valid_ring = True
-        for atom in ring_carbon_atoms:
-            has_oh = False
-            for nb in atom.GetNeighbors():
-                # Only consider substituents that are not part of the ring.
-                if nb.GetIdx() in ring:
-                    continue
-                if nb.GetAtomicNum() == 8 and is_hydroxyl(nb):
-                    has_oh = True
-                    break
-            if not has_oh:
+        for idx in ring_carbons:
+            atom = mol.GetAtomWithIdx(idx)
+            if not has_exocyclic_hydroxyl(atom, ring_indices):
                 valid_ring = False
                 break
         if valid_ring:
-            return True, ("Cyclic hemiacetal sugar pattern detected in a "
-                          f"{len(ring)}-membered ring with appropriate hydroxyl decorations")
+            return True, (f"Cyclic hemiacetal sugar pattern detected in a {len(ring)}-membered "
+                          "ring with appropriate exocyclic hydroxyl decorations")
     
     # If neither open-chain nor cyclic patterns were detected, classify as non-aldose.
-    return False, ("No aldose pattern detected: neither open-chain terminal aldehyde with "
-                   "a fully hydroxylated backbone nor a cyclic hemiacetal sugar pattern was found")
+    return False, ("No aldose pattern detected: neither open-chain terminal aldehyde with a "
+                   "fully hydroxylated backbone nor a cyclic hemiacetal sugar pattern was found")
 
-# Example test cases (can be run if executing this file directly):
+# Example test cases (if running as a main file).
 if __name__ == "__main__":
     test_cases = [
         # Open-chain aldoses:
