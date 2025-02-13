@@ -4,7 +4,7 @@ Classifies: CHEBI:47622 acetate ester
 """
 Classifies: Any carboxylic ester where the carboxylic acid component is acetic acid.
 We define an acetate ester as a molecule containing the motif -O-C(=O)-CH3.
-This version uses an explicit SMARTS substructure query to improve detection.
+This program uses RDKit for pattern matching and substructure checking.
 """
 
 from rdkit import Chem
@@ -12,8 +12,8 @@ from rdkit import Chem
 def is_acetate_ester(smiles: str):
     """
     Determines if a molecule given by a SMILES string contains an acetate ester group.
-    An acetate ester is defined as a carboxylic ester with acetic acid as the acyl component,
-    that is, a molecule containing the substructure -O-C(=O)-CH3.
+    An acetate ester is defined as a carboxylic ester where the acyl part is acetic acid,
+    i.e. it contains the motif –O–C(=O)–CH3.
 
     Args:
         smiles (str): SMILES string of the molecule.
@@ -22,36 +22,82 @@ def is_acetate_ester(smiles: str):
         bool: True if the molecule contains an acetate ester moiety, False otherwise.
         str: Explanation for the classification decision.
     """
-    # Parse the SMILES string into an RDKit molecule.
+    # Parse the SMILES into an RDKit molecule
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Define a SMARTS pattern representing the acetate ester motif.
-    # This pattern finds an oxygen bound to a carbon which is double bonded to an oxygen,
-    # and having a methyl group ([CH3]) as the remaining substituent on the carbonyl carbon.
-    acetate_pattern = Chem.MolFromSmarts("O-C(=O)-[CH3]")
-    if acetate_pattern is None:
-        return None, None  # in the unlikely event SMARTS could not be created
+    # Iterate over all bonds to search for ester bonds with the acetate motif.
+    for bond in mol.GetBonds():
+        # Consider only single bonds
+        if bond.GetBondType() != Chem.rdchem.BondType.SINGLE:
+            continue
 
-    # Use RDKit's substructure matching to check for the acetate ester motif.
-    if mol.HasSubstructMatch(acetate_pattern):
-        return True, "Contains an acetate ester moiety (O-C(=O)-CH3)"
-    else:
-        return False, "No acetate ester substructure (O-C(=O)-CH3) found"
+        # Get atoms at both ends of the bond
+        atom1 = bond.GetBeginAtom()
+        atom2 = bond.GetEndAtom()
+        
+        # One atom must be oxygen and the other must be carbon.
+        if (atom1.GetAtomicNum() == 8 and atom2.GetAtomicNum() == 6) or (atom2.GetAtomicNum() == 8 and atom1.GetAtomicNum() == 6):
+            # Identify which is the oxygen and which is the carbon
+            if atom1.GetAtomicNum() == 8:
+                oxy = atom1
+                c = atom2
+            else:
+                oxy = atom2
+                c = atom1
+            
+            # Check that the carbon (c) has a double-bonded oxygen (i.e., a carbonyl group)
+            carbonyl_found = False
+            carbonyl_oxygen = None
+            for nb in c.GetNeighbors():
+                # Skip the oxygen already connected in the ester bond.
+                if nb.GetIdx() == oxy.GetIdx():
+                    continue
+                # Use the Mol object to get the bond between the carbon and the neighbor
+                bond_to_nb = mol.GetBondBetweenAtoms(c.GetIdx(), nb.GetIdx())
+                if bond_to_nb is not None and bond_to_nb.GetBondType() == Chem.rdchem.BondType.DOUBLE and nb.GetAtomicNum() == 8:
+                    carbonyl_found = True
+                    carbonyl_oxygen = nb
+                    break
+            if not carbonyl_found:
+                continue  # No carbonyl found on this bond; skip
+            
+            # Now find the substituent on c that is not the ester oxygen (oxy) or the carbonyl oxygen.
+            # For an acetate ester, this substituent (the acyl part) should be a methyl group.
+            acyl_candidate = None
+            for nb in c.GetNeighbors():
+                if nb.GetIdx() in [oxy.GetIdx(), carbonyl_oxygen.GetIdx()]:
+                    continue
+                acyl_candidate = nb
+                break
+            if acyl_candidate is None:
+                continue
+            
+            # Check that the candidate is a carbon.
+            if acyl_candidate.GetAtomicNum() != 6:
+                continue
+            
+            # In a methyl group, the only heavy-atom connection should be to the carbonyl carbon.
+            # (Implicit hydrogens are not counted in GetDegree(), so the degree should be 1.)
+            if acyl_candidate.GetDegree() != 1:
+                continue
+            
+            # All conditions are satisfied: we have an O–C single bond where the C is double-bonded to an O 
+            # and the extra substituent is a methyl group. Thus, the structure contains an acetate ester.
+            return True, "Contains an acetate ester moiety (O-C(=O)-CH3)"
+    
+    # If none of the bonds match the criteria, return False.
+    return False, "No acetate ester substructure (O-C(=O)-CH3) found"
 
-# For development/testing purposes:
+# Example usage with test cases (for development illustration):
 if __name__ == "__main__":
-    test_cases = [
-        # Expected to be acetate esters
-        ("[H][C@]12[C@H](O)[C@@]3(C[C@H](O)C(C)=C3[C@@H](O)[C@H](OC(=O)c3ccccc3)[C@]1(C)[C@H](C[C@H](OC(C)=O)[C@@]2(O)COC(C)=O)OC(C)=O)C(C)(C)O", "tasumatrol E"),
-        ("CC(C)C(=O)O[C@H]1CC[C@@H]2[C@@](C)([C@@H]3C[C@H]4C=CO[C@H]4O3)[C@H](C)C[C@H](OC(C)=O)[C@@]2(COC(C)=O)[C@@]11CO1", "ajubractin B"),
-        ("CCCCCCCCOC(C)=O", "nonyl acetate"),
-        ("CC(=O)Oc1ccc(cc1)C(O)=O", "4-acetoxy benzoic acid"),
-        # Expected not to be acetate esters (acyl part is not acetic acid)
-        ("CCOC(=O)C(C)C#N", "ethyl 2-cyanopropionate"),
+    test_smiles_list = [
+        ("CC(=O)Oc1ccc(cc1)C(O)=O", "4-acetoxy benzoic acid (should be acetate ester)"),
+        ("CCOC(=O)C(C)C#N", "ethyl 2-cyanopropionate (unlikely an acetate ester)"),
+        ("CCCCCCCCOC(C)=O", "nonyl acetate (should be acetate ester)"),
     ]
     
-    for smi, name in test_cases:
+    for smi, description in test_smiles_list:
         result, reason = is_acetate_ester(smi)
-        print(f"Name: {name}\nSMILES: {smi}\nResult: {result}\nReason: {reason}\n")
+        print(f"SMILES: {smi}\n{description} => {result}: {reason}\n")
