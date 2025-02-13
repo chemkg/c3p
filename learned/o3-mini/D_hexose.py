@@ -3,131 +3,106 @@ Classifies: CHEBI:4194 D-hexose
 """
 """
 Classifies: D-hexose
-A D-hexose is defined as a hexose (a monosaccharide containing 6 carbons)
-in which the sugar ring (either pyranose or furanose) bears an exocyclic CH2OH group
-attached to a ring carbon that has the “R” CIP configuration (i.e., D configuration, at position 5).
-This heuristic only accepts molecules that appear to be a single hexose unit.
+A D-hexose is defined here as a hexose (6-carbon monosaccharide) whose sugar ring contains a chiral center 
+(i.e. the ring carbon that bears the exocyclic CH2OH group) with the R configuration (i.e. D-configuration at position 5).
+
+NOTE: This procedure uses heuristic rules. It first identifies rings of size 5 (furanose) or 6 (pyranose) that 
+contain exactly one ring oxygen. Then, for each ring carbon it checks for a candidate CH2OH group (a non‐ring carbon 
+attached that is “CH2” and further bonded to an OH). If found, it checks its CIP code (assigned by RDKit) and if it is 
+“R” then the compound is classified as a D-hexose.
 """
 
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
-from rdkit.Chem import AllChem
 
 def is_D_hexose(smiles: str):
     """
-    Determines if a molecule is a D-hexose based on the following heuristic:
-      (1) The molecule must have a total of 6 carbons.
-      (2) It must contain a sugar ring – either a 6-membered ring (pyranose; which will have 5 carbons and 1 oxygen)
-          or a 5-membered ring (furanose; which will have 4 carbons and 1 oxygen).
-      (3) One of the ring carbons must bear an exocyclic substituent which is a CH2OH group.
-          For our purposes, a CH2OH group is a (non‐ring) carbon with (at least) 2 hydrogens and
-          which is bonded to at least one terminal OH group (an oxygen with degree 1).
-      (4) The ring carbon that carries this CH2OH group must have CIP stereochemistry of "R".
-    
+    Determines if a molecule is a D-hexose based on its SMILES string.
+    A D-hexose is defined as a hexose (monosaccharide with 6 carbon atoms) having D configuration
+    at the carbon bearing the exocyclic CH2OH group (position 5 in many common sugars).
+
     Args:
-        smiles (str): SMILES string of the molecule.
-    
+        smiles (str): SMILES string of the molecule
+
     Returns:
-        bool: True if the molecule is classified as a D-hexose, False otherwise.
-        str: Explanation of the classification result.
+        bool: True if molecule is classified as a D-hexose, False otherwise
+        str: A reason explaining the classification result.
     """
-    # Parse the SMILES string.
+    # Parse SMILES
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
+        
+    # Assign/refresh stereochemistry (CIP codes etc.)
+    Chem.AssignStereochemistry(mol, cleanIt=True, force=True)
     
-    # Add explicit hydrogens and assign stereochemistry.
-    mol = Chem.AddHs(mol)
-    # Force stereochemistry assignment so that _CIPCode properties are computed.
-    Chem.AssignStereochemistry(mol, cleanIt=True, force=True, flagPossibleStereoCenters=True)
+    # Get ring information
+    ri = mol.GetRingInfo()
+    atom_rings = ri.AtomRings()
     
-    # Check that the total carbon count is 6.
-    total_carbons = sum(1 for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6)
-    if total_carbons != 6:
-        return False, f"Total carbon count is {total_carbons} (expected 6 for a hexose)"
+    candidate_found = False
+    msg_details = []
     
-    ring_info = mol.GetRingInfo()
-    atom_rings = ring_info.AtomRings()
-    candidate_reasons = []
-    
-    # Loop over all rings that might represent a sugar ring.
+    # Loop through rings of interest: furanose (5 members) and pyranose (6 members)
     for ring in atom_rings:
-        # Only consider rings of the sizes typically found in sugar rings.
-        if len(ring) not in (5, 6):
-            continue
+        if len(ring) not in [5, 6]:
+            continue  # skip rings that are not furanose or pyranose rings
             
-        # Within the ring, we expect exactly one heteroatom oxygen.
+        # Count ring oxygens
         ring_oxygens = [idx for idx in ring if mol.GetAtomWithIdx(idx).GetAtomicNum() == 8]
         if len(ring_oxygens) != 1:
+            # For a “sugar ring” we expect exactly one ring oxygen.
             continue
             
-        # For each atom in the ring that is a carbon:
+        # Now, search in this ring for a carbon that has an exocyclic CH2OH group.
+        # In many hexoses, the carbon that bears the CH2OH group (the exocyclic substituent) is the one at position 5.
         for idx in ring:
             atom = mol.GetAtomWithIdx(idx)
             if atom.GetAtomicNum() != 6:
-                continue
-            
-            # Look for exocyclic neighbor(s); that is, neighbors not in the ring.
-            exo_neighbors = [nbr for nbr in atom.GetNeighbors() if nbr.GetIdx() not in ring]
-            for nbr in exo_neighbors:
-                if nbr.GetAtomicNum() != 6:
-                    continue
-                # Instead of requiring exactly 2 hydrogens (which may be too strict in some cases),
-                # we require at least 2 attached hydrogens.
-                if nbr.GetTotalNumHs() < 2:
-                    continue
-                    
-                # Check that this exocyclic carbon is attached to at least one terminal hydroxyl group.
-                oh_found = False
-                for subnbr in nbr.GetNeighbors():
-                    # Look for an oxygen that is terminal (i.e., degree 1)
-                    if subnbr.GetAtomicNum() == 8 and subnbr.GetDegree() == 1:
-                        oh_found = True
-                        break
-                if not oh_found:
-                    continue
-                
-                # We have found a candidate CH2OH group attached to the ring carbon at idx.
-                # Check the stereochemical configuration at the ring carbon.
-                if atom.HasProp('_CIPCode'):
-                    cip = atom.GetProp('_CIPCode')
+                continue  # looking only at carbon atoms in the ring
+            # Look at neighbors that are not in the ring.
+            exocyclic_neighbors = [nbr for nbr in atom.GetNeighbors() if nbr.GetIdx() not in ring]
+            for nbr in exocyclic_neighbors:
+                # We are looking for a CH2OH group: neighbor should be a carbon with exactly two implicit hydrogens 
+                # and attached to an oxygen (i.e. the -OH).
+                if nbr.GetAtomicNum() == 6:
+                    # Check the count of hydrogens (using total H count, which includes implicit)
+                    if nbr.GetTotalNumHs() != 2:
+                        continue
+                    # Now check that this carbon has an oxygen neighbor (the hydroxyl)
+                    oh_found = False
+                    for subnbr in nbr.GetNeighbors():
+                        if subnbr.GetAtomicNum() == 8 and subnbr.GetDegree() == 1:
+                            oh_found = True
+                            break
+                    if not oh_found:
+                        continue
+                    # If we reach here, we have identified a CH2OH substituent attached to a ring carbon.
+                    # Now check if this ring carbon (our candidate for "position 5") has an assigned CIP code,
+                    # and if it is "R". (In D-sugars, the CH2OH-bearing carbon should be R.)
+                    cip = atom.GetProp('_CIPCode') if atom.HasProp('_CIPCode') else None
                     if cip == "R":
-                        return True, (f"Found sugar ring (size {len(ring)}) with a CH2OH group on ring carbon (atom idx {idx}) "
-                                      "which has CIP code 'R' (D-hexose).")
+                        return True, "Found sugar ring with CH2OH substituent at a chiral center (position 5) with R configuration (D-hexose)"
                     else:
-                        candidate_reasons.append(
-                            f"Ring carbon (atom idx {idx}) bearing CH2OH has CIP code '{cip}' instead of 'R'."
-                        )
-                else:
-                    # If no CIP code available, we try to inspect the chiral tag.
-                    chiral_tag = atom.GetChiralTag()
-                    if chiral_tag == Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CW:
-                        # RDKit uses CW for R in some cases.
-                        return True, (f"Found sugar ring (size {len(ring)}) with a CH2OH group on ring carbon (atom idx {idx}) "
-                                      "which has chiral tag CHI_TETRAHEDRAL_CW (interpreted as 'R').")
-                    else:
-                        candidate_reasons.append(
-                            f"Ring carbon (atom idx {idx}) bearing CH2OH lacks a recognized CIP assignment (chiral tag: {chiral_tag})."
-                        )
-    
-    # If no candidate ring was found that satisfies the criteria.
-    if candidate_reasons:
-        reason = ("Candidate sugar ring(s) were found but none had the expected 'R' configuration at the CH2OH-bearing carbon: " +
-                  "; ".join(candidate_reasons))
-        return False, reason
-    else:
-        return False, "No valid sugar ring with an exocyclic CH2OH group was found."
+                        msg_details.append(f"Found CH2OH on ring carbon (idx {idx}) but CIP code is {cip if cip is not None else 'undefined'}")
+                    # note: if no valid chiral center is found, continue with next candidate
+        # end for each atom in ring
+    # end for each ring
 
-# Example usage for testing (uncomment the lines below to test the function):
-# if __name__ == "__main__":
-#     test_examples = [
-#         # A few examples that should be recognized as D-hexoses.
-#         ("O1[C@@H]([C@@H](O)[C@@H](O)[C@H](O)[C@@H]1O)CO", "beta-D-altropyranose"),
-#         ("O1[C@@]([C@H](O)[C@@H](O)[C@@H]1O)([C@H](O)CO)[H]", "beta-D-glucofuranose"),
-#         ("OC[C@H]1O[C@@H](O)[C@H](O)[C@H](O)[C@H]1O", "beta-D-gulose"),
-#         ("OC[C@H]1OC(O)[C@H](O)[C@H](O)[C@@H]1O", "D-allopyranose"),
-#         ("[H]C(=O)[C@@H](O)[C@@H](O)[C@H](O)[C@H](O)CO", "aldehydo-D-mannose"),
-#     ]
-#     for smi, name in test_examples:
-#         valid, reason = is_D_hexose(smi)
-#         print(f"{name}: {valid} -- {reason}")
+    if msg_details:
+        # We found candidate CH2OH-bearing atoms but none had the R configuration.
+        return False, "Candidate sugar ring(s) found but none had the expected R configuration at position 5: " + "; ".join(msg_details)
+    
+    # As a fallback, we can also check if the molecule contains 6 carbons (hexose formula) as an additional heuristic.
+    carbon_count = sum(1 for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6)
+    if carbon_count != 6:
+        return False, f"Total carbon count ({carbon_count}) does not equal 6 (expected for a hexose)"
+    
+    return False, "No valid hexose sugar ring with D configuration at position 5 was found"
+
+# Example usage (for testing):
+if __name__ == '__main__':
+    # Example SMILES for beta-D-glucose:
+    test_smiles = "OC[C@H]1O[C@@H](O)[C@H](O)[C@@H](O)[C@@H]1O"
+    valid, reason = is_D_hexose(test_smiles)
+    print("Beta-D-glucose classification:", valid, reason)
