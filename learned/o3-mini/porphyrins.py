@@ -2,23 +2,18 @@
 Classifies: CHEBI:26214 porphyrins
 """
 """
-Classifies: Porphyrins
-(Natural pigments containing a fundamental skeleton of four pyrrole nuclei united through 
-the alpha-positions by four methine groups to form a macrocyclic structure.)
+Classifies: Porphyrins 
+(Natural pigments containing a fundamental skeleton of four pyrrole nuclei united through the 
+alpha‐positions by four methine groups to form a macrocyclic structure.)
 
-Our improved heuristic:
-  1. Parse the SMILES.
-  2. Identify “candidate pyrrole rings” (5‐membered rings having exactly one nitrogen atom).
-  3. From these rings, extract the unique core nitrogen atom indices.
-  4. Require that there are at least 4 candidate pyrrole rings and that exactly 4 unique nitrogen 
-     atoms are present.
-  5. Check whether one of the overall rings (macrocycles) has a size roughly in the range 15–20 
-     atoms and contains all 4 of these candidate core nitrogen atoms.
-  6. Only if both criteria are met, classify the molecule as a porphyrin.
-  
-Note:
-  This is a heuristic and some real porphyrin derivatives (or non-porphyrins) might be missed 
-  or misclassified. Further refinements (or substructure SMARTS queries) could be added.
+Our improved approach is:
+1. Parse the SMILES with RDKit.
+2. Identify candidate pyrrole rings: these are 5‐membered rings with exactly one nitrogen.
+3. Check the overall ring systems for a macrocyclic ring (typically 15–18 atoms) that contains exactly 4 nitrogen atoms.
+4. If there are at least 4 distinct pyrrole candidate rings and a macrocyclic ring meeting the above criteria,
+   the molecule is classified as a porphyrin.
+
+Note: This is a heuristic approach and may not catch every nuance.
 """
 
 from rdkit import Chem
@@ -27,12 +22,11 @@ def is_porphyrins(smiles: str):
     """
     Determines if a molecule is a porphyrin based on its SMILES string.
     
-    The heuristic:
+    Our improved heuristic:
       • Identify candidate pyrrole rings as 5-membered rings having exactly one nitrogen atom.
-      • From these, extract the unique set of core nitrogen atoms.
-      • Verify that there are at least 4 candidate pyrrole rings and exactly 4 unique core nitrogens.
-      • Find a macrocyclic ring (of size 15 to 20 atoms) that contains all 4 nitrogen atoms.
-      • Classify as porphyrin only if both conditions are met.
+      • Identify a macrocycle ring (size 15 to 18) that has exactly 4 nitrogen atoms.
+          This is meant to capture the overall porphyrin backbone (4 pyrrole rings connected by methine bridges).
+      • Only if both criteria are met does the molecule get classified as a porphyrin.
     
     Args:
         smiles (str): SMILES string of the molecule.
@@ -41,62 +35,54 @@ def is_porphyrins(smiles: str):
         bool: True if the molecule is classified as a porphyrin, False otherwise.
         str: Explanation of the classification decision.
     """
-    # Parse the SMILES string.
+    # Parse the SMILES:
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Get ring information from the molecule.
+    # Get ring systems as tuples of atom indices:
     ring_info = mol.GetRingInfo().AtomRings()
     
-    # Find candidate pyrrole rings: 5-membered rings with exactly one nitrogen.
-    candidate_pyrroles = []
+    # Collect candidate pyrrole rings: 5-membered rings with exactly one nitrogen
+    pyrrole_rings = set()
     for ring in ring_info:
         if len(ring) == 5:
             n_count = sum(1 for idx in ring if mol.GetAtomWithIdx(idx).GetAtomicNum() == 7)
             if n_count == 1:
-                candidate_pyrroles.append(set(ring))
-                
-    if len(candidate_pyrroles) < 4:
-        return False, (f"Found only {len(candidate_pyrroles)} candidate pyrrole rings "
-                       " (5-membered rings with one N), need at least 4 for a porphyrin.")
+                # using frozenset ensures unique sets (order independent)
+                pyrrole_rings.add(frozenset(ring))
     
-    # Extract the unique core nitrogen atoms from these candidate rings.
-    core_nitrogens = set()
-    for ring in candidate_pyrroles:
-        for idx in ring:
-            # Only count if the atom is nitrogen.
-            if mol.GetAtomWithIdx(idx).GetAtomicNum() == 7:
-                core_nitrogens.add(idx)
-    if len(core_nitrogens) != 4:
-        return False, (f"Found {len(core_nitrogens)} unique core nitrogen atoms from candidate "
-                       "pyrrole rings, but exactly 4 are expected for a porphyrin.")
+    num_candidate_pyrroles = len(pyrrole_rings)
     
-    # Now check for an overall macrocyclic ring that connects the four candidate pyrroles.
-    # We allow a macrocycle ring in the size range 15 to 20 atoms.
+    if num_candidate_pyrroles < 4:
+        return False, f"Found only {num_candidate_pyrroles} candidate pyrrole rings (5-membered rings with one N), need at least 4 for a porphyrin."
+
+    # Now search for a macrocycle ring that spans the overall porphyrin core.
+    # Under the assumption that the four pyrrole rings are connected by four methine bridges,
+    # the overall macrocycle ring should be roughly 16 atoms.
     macrocycle_found = False
     macrocycle_size = None
     for ring in ring_info:
-        if 15 <= len(ring) <= 20:
-            # Check if all core nitrogen atoms are in this ring.
-            if core_nitrogens.issubset(set(ring)):
+        # Allowing some slack (15 to 18 atoms) to account for minor variations.
+        if 15 <= len(ring) <= 18:
+            # Count nitrogen atoms in this ring:
+            n_in_ring = sum(1 for idx in ring if mol.GetAtomWithIdx(idx).GetAtomicNum() == 7)
+            if n_in_ring == 4:
                 macrocycle_found = True
                 macrocycle_size = len(ring)
                 break
-                
     if not macrocycle_found:
-        return False, ("No macrocyclic ring (size 15-20 with all 4 core N) found; even though "
-                       "candidate pyrrole rings exist, they are not connected by a typical porphyrin "
-                       "macrocycle.")
+        return False, "No macrocyclic ring (size 15-18 with exactly 4 N) found; the four pyrrole candidates are not connected in a typical porphyrin pattern."
     
-    return True, (f"Found {len(candidate_pyrroles)} candidate pyrrole rings with core N atoms {core_nitrogens} "
-                  f"and a macrocyclic ring of size {macrocycle_size} containing all 4 nitrogen atoms, "
-                  "consistent with a porphyrin macrocycle.")
+    # If both conditions are met, classify as porphyrin.
+    return True, (f"Found {num_candidate_pyrroles} candidate pyrrole rings and a macrocycle "
+                  f"ring of size {macrocycle_size} with 4 nitrogen atoms, consistent with a porphyrin macrocycle.")
 
-# Example usage (demonstration only):
+# Example usage (the testing below is only demonstrative):
 if __name__ == '__main__':
-    # Test with a sample SMILES (this one is for 7(1)-hydroxychlorophyllide a shown in the prompt).
-    test_smiles = "C=12N3C(=CC4=NC(=CC=5N(C=6C(=C7N=C(C1)[C@H]([C@@H]7CCC(O)=O)C)[C@H](C(C6C5C)=O)C(=O)OC)[Mg]3)C(=C4CO)CC)C(=C2C)C=C"
+    # A test with a known porphyrin-like compound.
+    # (This is only a sample SMILES and may not represent a real porphyrin derivative.)
+    test_smiles = "C1=2N3C(C=C4N5=C(C=C6N7C=8C(=C9N(C=1)C)[Mg]0)C(=C6C)CCC(O)=O)C(=C4C)C=C" 
     result, reason = is_porphyrins(test_smiles)
     print("Is porphyrin?", result)
     print("Reason:", reason)
