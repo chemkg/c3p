@@ -6,11 +6,17 @@ Classifies: inositol phosphoceramide
 Definition:
   A phosphosphingolipid in which an inositol residue and the ceramide moiety are linked via a phosphodiester bridge.
   The ceramide moiety contains substituents R(1) and R(2) which vary with different sphingoid bases and fatty acyl moieties.
-  
-We approximate detection by:
- - Looking for an inositol ring substructure,
- - Looking for a phosphate (phosphodiester) group, and
- - Identifying a ceramide substructure represented by an amide group (C(=O)N) attached to at least one long aliphatic chain.
+
+Our improved approach:
+  1. Look for an inositol ring (using a relatively generic ring pattern for myo‐inositol,
+     ignoring stereochemistry).
+  2. For at least one oxygen in the inositol ring, check if it is bonded to a phosphorus atom.
+  3. From that phosphorus, follow a non‐inositol oxygen that bonds to a carbon
+     which is part of an amide bond (i.e. has a adjacent double‐bonded oxygen and a neighbor nitrogen).
+  4. Finally, require that the molecule shows evidence of long fatty acyl chains
+     (sufficient carbon count and many rotatable bonds).
+
+If these criteria are met, we classify the compound as an inositol phosphoceramide.
 """
 
 from rdkit import Chem
@@ -19,61 +25,107 @@ from rdkit.Chem import rdMolDescriptors
 def is_inositol_phosphoceramide(smiles: str):
     """
     Determines if a molecule is an inositol phosphoceramide based on its SMILES string.
-    
-    Criteria used (approximate):
-      1. Presence of an inositol ring (six-membered ring with multiple hydroxyl groups)
-      2. Phosphodiester bridge (a phosphate connected via ester bonds; we search for OP(=O)(O)O)
-      3. Ceramide-like moiety: an amide group (C(=O)N) and a long aliphatic chain (assessed by total carbon count)
+
+    The detection steps are:
+      1. Detect an inositol ring (neutral, six-membered ring featuring five hydroxyl groups and one ring oxygen).
+      2. Check that at least one oxygen on that ring is bonded to a phosphorus atom.
+      3. Verify that from that phosphorus a different oxygen leads to a carbon which is part of a C(=O)N (amide) group.
+      4. (Optional) Check overall carbon count and number of rotatable bonds to ensure the presence of long fatty acyl chains.
      
     Args:
         smiles (str): SMILES string of the molecule
         
     Returns:
-        bool: True if molecule is classified as an inositol phosphoceramide, False otherwise
-        str: Reason for classification
+        bool: True if the molecule is classified as an inositol phosphoceramide, False otherwise.
+        str: Explanation for the classification decision.
     """
-    # Parse SMILES
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Check for inositol ring.
-    # This SMARTS approximates a myo-inositol ring pattern.
-    inositol_smarts = "O[C@@H]1[C@H](O)[C@H](O)[C@@H](O)[C@H](O)[C@H]1O"
+    # Step 1: Look for inositol ring.
+    # SMARTS for a generic inositol ring (ignoring stereochemistry):
+    inositol_smarts = "OC1C(O)C(O)C(O)C(O)C1O"
     inositol_pattern = Chem.MolFromSmarts(inositol_smarts)
-    if not mol.HasSubstructMatch(inositol_pattern):
+    inositol_matches = mol.GetSubstructMatches(inositol_pattern)
+    if not inositol_matches:
         return False, "No inositol ring detected"
     
-    # Check for phosphodiester bridge.
-    # We look for a phosphate group with three oxygens (one typically linking to the inositol).
-    phosphate_smarts = "[O;D2]-P(=O)([O;D1])[O;D2]"  # this pattern looks for a phosphodiester moiety (O-P(=O)-O)
-    phosphate_pattern = Chem.MolFromSmarts(phosphate_smarts)
-    if not mol.HasSubstructMatch(phosphate_pattern):
-        return False, "No phosphodiester bridge (phosphate group) detected"
+    # Step 2 & 3: For atoms in the inositol ring, look for an oxygen connected to phosphorus,
+    # and from that phosphorus look for an oxygen that connects to a carbon involved in an amide.
+    bridge_found = False
+    # Loop over each inositol match (each is a tuple of atom indices from the pattern)
+    for match in inositol_matches:
+        # Get the atoms corresponding to the inositol ring.
+        for idx in match:
+            atom = mol.GetAtomWithIdx(idx)
+            # We are only interested in oxygen atoms.
+            if atom.GetAtomicNum() != 8:
+                continue
+            # Look at neighbors of this oxygen
+            for nbr in atom.GetNeighbors():
+                # Check if neighbor is phosphorus (atomic number 15)
+                if nbr.GetAtomicNum() == 15:
+                    P_atom = nbr
+                    # Get oxygen neighbors of the phosphorus
+                    p_oxy_neighbors = [a for a in P_atom.GetNeighbors() if a.GetAtomicNum() == 8]
+                    # There should be at least two oxygens (one is from inositol, one connecting to the other side)
+                    if len(p_oxy_neighbors) < 2:
+                        continue
+                    # Now, check those oxygens except the one from the inositol ring.
+                    for oxy in p_oxy_neighbors:
+                        if oxy.GetIdx() == atom.GetIdx():
+                            continue
+                        # Look for a carbon neighbor of this oxygen (this is our candidate linker)
+                        for c in oxy.GetNeighbors():
+                            if c.GetAtomicNum() != 6:
+                                continue
+                            # Check if the carbon is part of an amide group
+                            # (i.e., it has a neighbor oxygen with a double bond and a neighboring nitrogen)
+                            amide_flag = False
+                            for neighbor in c.GetNeighbors():
+                                # Look for oxygen double-bonded to this carbon
+                                if neighbor.GetAtomicNum() == 8:
+                                    bond = mol.GetBondBetweenAtoms(c.GetIdx(), neighbor.GetIdx())
+                                    if bond is not None and bond.GetBondTypeAsDouble() == 2.0:
+                                        # Now check if the carbon also has a neighbor nitrogen (amide N)
+                                        for n in c.GetNeighbors():
+                                            if n.GetAtomicNum() == 7:
+                                                amide_flag = True
+                                                break
+                                if amide_flag:
+                                    break
+                            if amide_flag:
+                                bridge_found = True
+                                break
+                        if bridge_found:
+                            break
+                    if bridge_found:
+                        break
+            if bridge_found:
+                break
+        if bridge_found:
+            break
+
+    if not bridge_found:
+        return False, "Phosphodiester bridge linking inositol ring and ceramide moiety not detected"
     
-    # Look for ceramide-like moiety: an amide group.
-    amide_smarts = "C(=O)N"
-    amide_pattern = Chem.MolFromSmarts(amide_smarts)
-    amide_matches = mol.GetSubstructMatches(amide_pattern)
-    if not amide_matches:
-        return False, "No amide bond detected to suggest a ceramide moiety"
-    
-    # Check for long aliphatic chain (fatty acyl chains) typical in ceramides.
-    # We count the number of carbon atoms in the molecule.
+    # Step 4: Optional checks for long aliphatic chains (fatty acyl chains typically found in ceramides).
+    # Check total carbon count.
     c_atoms = [atom for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6]
     if len(c_atoms) < 20:
-        return False, "Total carbon count too low to suggest long fatty acyl chains in ceramide"
+        return False, "Too few carbons to support long acyl chains in a ceramide moiety"
     
-    # Optionally also check for rotatable bonds as a proxy for flexible, long chains.
+    # Check for a sufficient number of rotatable bonds.
     n_rotatable = rdMolDescriptors.CalcNumRotatableBonds(mol)
     if n_rotatable < 5:
         return False, "Not enough rotatable bonds; fatty acyl chains may be too short"
     
-    # Passed all checks
-    return True, "Molecule contains an inositol ring, a phosphodiester bridge, and a ceramide-like amide bond with long aliphatic chains"
+    return True, "Molecule contains an inositol ring linked (via a phosphodiester bridge) to a ceramide moiety with long acyl chains"
 
-# Example usage (if run as main, uncomment):
-# if __name__ == "__main__":
-#     test_smiles = "CCCCCCCCCCCCCCCCCCCCCC(O)C(=O)N[C@@H](COP(O)(=O)O[C@@H]1[C@H](O)[C@H](O)[C@@H](O)[C@H](O)[C@H]1O)[C@H](O)C(O)CCCCCCCCCCCCCC"
-#     result, reason = is_inositol_phosphoceramide(test_smiles)
-#     print(result, reason)
+# Example usage:
+if __name__ == "__main__":
+    # You can test with one of the provided SMILES:
+    test_smiles = "CCCCCCCCCCCCCCCCCCCCCC(O)C(=O)N[C@@H](COP(O)(=O)O[C@@H]1C(O)C(O)C(O)C(O)C1O)[C@H](O)C(O)CCCCCCCCCCCCCC"
+    result, reason = is_inositol_phosphoceramide(test_smiles)
+    print(result, reason)
