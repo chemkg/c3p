@@ -4,77 +4,75 @@ Classifies: CHEBI:61384 sulfolipid
 #!/usr/bin/env python
 """
 Classifies: sulfolipid
-Definition: A compound containing a sulfonic acid residue joined by a carbon–sulfur bond to a lipid 
-            (where “lipid” is defined as a contiguous chain of at least 10 aliphatic [sp3, non‐aromatic] carbons).
-
-Strategy:
+Definition: A compound containing a sulfonic acid residue (–SO3H or –SO3–) that is joined (directly or via a bridging oxygen) by a carbon–sulfur or carbon–oxygen–sulfur linkage to a lipid.
+Heuristic strategy:
   1. Parse the SMILES.
-  2. Identify sulfur atoms that are part of a sulfonic acid group.
-     We require that the sulfur is bonded to at least three oxygens – two via double bonds and one via a single bond.
-  3. For each such S, check if at least one neighbor is a carbon (indicating a C–S bond).
-  4. For each candidate carbon, use DFS to find the maximum length of contiguous aliphatic (sp3 non‐aromatic) carbon chain (via single bonds).
-  5. Return True if any chain is at least 10 carbons long.
+  2. To avoid false positives on simple sulfonic acids (e.g. hexadecane-1-sulfonic acid), we require that the overall molecule shows “complexity”
+     (for example, at least one ring or one amide bond).
+  3. For every sulfur atom, check if it is part of a sulfonate/sulfonic acid subgroup by requiring at least three oxygen neighbors (with ≥2 double bonds).
+  4. For each such S, check if one of its neighbor atoms (directly or via an oxygen bridge) is a carbon that is “aliphatic” (sp3, non‐aromatic)
+     and is part of a contiguous chain of at least 10 sp3 carbons.
+     The chain search (via DFS) is restricted to non‐aromatic sp3 carbons connected by single bonds.
+  5. If a candidate is found, return True together with an explanation.
   
-If either no sulfonic acid group or no such lipid chain is found, return False.
+If no candidate S is found that is connected to a sufficiently long lipid chain, return False.
+  
+Note: This algorithm is heuristic and may mis‐categorize borderline structures.
 """
 
 from rdkit import Chem
 
 def is_sulfolipid(smiles: str):
     """
-    Determines if a molecule is a sulfolipid by verifying that:
-      (a) it contains a sulfonic acid (or sulfonate) residue (S(=O)(=O)(O) or S(=O)(=O)[O-]),
-      (b) that sulfonate sulfur is directly bonded to a carbon (i.e., via a C–S bond),
-      (c) and that the carbon is part of a contiguous aliphatic chain of at least 10 sp3 carbons.
+    Determines if a molecule should be classified as a sulfolipid based on a heuristic:
+      (a) the molecule must be “complex” (contain a ring or an amide bond), and
+      (b) it must contain at least one sulfonate/sulfonic acid-like moiety (S bound to ≥3 O atoms, with ≥2 double bonds), and
+      (c) one neighbor (directly or via an oxygen) of that S is a carbon that is part of a contiguous aliphatic chain of at least 10 sp3 carbons.
       
     Args:
-        smiles (str): SMILES string of the molecule.
-        
+      smiles (str): SMILES string of the molecule.
+      
     Returns:
-        bool: True if the molecule is classified as a sulfolipid, otherwise False.
-        str: Explanation for the decision.
+      (bool, str): A tuple where the first element is True if the molecule is classified as a sulfolipid,
+                   False otherwise. The second element is a textual explanation.
     """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string."
     
-    # Identify candidate sulfonic acid/sulfonate groups:
-    # For each sulfur atom in the molecule, we look at its neighbors.
-    candidate_found = False
-    candidate_explanation = ""
+    # First check for minimal molecular complexity (e.g. rings or amide bonds)
+    if not mol.GetRingInfo().NumRings() and not mol.HasSubstructMatch(Chem.MolFromSmarts("C(=O)N")):
+        # If the molecule is acyclic and does not contain an amide bond, then it might be a simple sulfonic acid.
+        return False, "Molecule appears too simple (acyclic and lacks amide bonds) to be a sulfolipid."
     
-    # Helper DFS to compute the longest contiguous chain of sp3, non-aromatic carbons (starting from an atom)
-    def dfs(atom, visited):
-        max_length = 1  # current atom is counted
+    # DFS helper to walk a contiguous chain of aliphatic sp3 carbons (single bonds only)
+    def dfs_chain(atom, visited):
+        # Count the current atom and search for neighbors that are carbon, sp3 and non‐aromatic.
+        length = 1
         for nbr in atom.GetNeighbors():
             bond = mol.GetBondBetweenAtoms(atom.GetIdx(), nbr.GetIdx())
-            # walk only through carbon atoms that are sp3 (non-aromatic) and connected by a SINGLE bond
-            if (nbr.GetAtomicNum() == 6 and not nbr.GetIsAromatic()
-                and bond.GetBondType() == Chem.BondType.SINGLE
-                and nbr.GetIdx() not in visited):
+            # Only traverse if neighbor is carbon (atomic number 6), non‐aromatic and the bond is single.
+            if nbr.GetAtomicNum() == 6 and (not nbr.GetIsAromatic()) and bond.GetBondType() == Chem.BondType.SINGLE:
+                if nbr.GetIdx() in visited:
+                    continue
                 new_visited = visited.copy()
                 new_visited.add(nbr.GetIdx())
-                chain_length = 1 + dfs(nbr, new_visited)
-                if chain_length > max_length:
-                    max_length = chain_length
-        return max_length
+                branch_length = 1 + dfs_chain(nbr, new_visited)
+                if branch_length > length:
+                    length = branch_length
+        return length
 
-    # Loop over all sulfur atoms in the molecule.
+    # Now loop over all sulfur atoms as potential sulfonate/sulfonic acid centers.
     for atom in mol.GetAtoms():
-        if atom.GetAtomicNum() != 16: # not sulfur
-            continue
-
-        # Check neighbors of S for oxygens.
+        if atom.GetAtomicNum() != 16:
+            continue  # not S
+        
+        # For candidate S, gather oxygen neighbors and count bond orders.
         oxy_neighbors = []
-        other_neighbors = []  # atoms other than oxygen
         for nbr in atom.GetNeighbors():
             if nbr.GetAtomicNum() == 8:
                 oxy_neighbors.append(nbr)
-            else:
-                other_neighbors.append(nbr)
-        
-        # We expect a sulfonic acid group to have at least 3 oxygen neighbors.
-        # And among the oxygens, ideally 2 are connected by double bonds.
+        # A sulfonate/sulfonic acid ideally has at least three O substituents
         if len(oxy_neighbors) < 3:
             continue
         
@@ -86,36 +84,46 @@ def is_sulfolipid(smiles: str):
                 double_bond_count += 1
             elif bond.GetBondType() == Chem.BondType.SINGLE:
                 single_bond_count += 1
-        # Require at least two double bonds and one single bond.
         if double_bond_count < 2 or single_bond_count < 1:
-            continue
+            continue   # does not fulfill a typical sulfonic acid pattern
 
-        # Now check among the other neighbors (or even oxygen neighbors) if there is a carbon directly attached.
-        # We are looking for a C–S bond.
+        checked_candidates = False
+        # Now check all neighbors of S.
+        # We allow the possibility that S is connected directly to a carbon with a lipid chain...
         for nbr in atom.GetNeighbors():
-            if nbr.GetAtomicNum() == 6:
-                # We have a candidate C–S bond.
-                # Now get the contiguous aliphatic carbon chain (starting from that carbon).
-                # To be conservative, check that the candidate carbon is sp3 (non-aromatic)
-                if nbr.GetIsAromatic():
-                    continue
-                chain_length = dfs(nbr, {nbr.GetIdx()})
-                if chain_length >= 10:
-                    candidate_explanation = (f"Contains sulfonic acid group (S(=O)(=O)(O) or S(=O)(=O)[O-]) "
-                                             f"joined via a C–S bond to a lipid chain of {chain_length} contiguous sp3 carbons.")
-                    return True, candidate_explanation
+            if nbr.GetAtomicNum() == 6 and not nbr.GetIsAromatic():
+                chain_len = dfs_chain(nbr, {nbr.GetIdx()})
+                if chain_len >= 10:
+                    explanation = (f"Contains a sulfonate group (S(=O)(=O)(O) or S(=O)(=O)[O-]) directly attached via a C–S bond "
+                                   f"to an aliphatic chain of {chain_len} contiguous sp3 carbons.")
+                    return True, explanation
                 else:
-                    # For debugging purposes record the chain length for this candidate if too short.
-                    candidate_explanation = (f"Candidate C–S bond found but the attached aliphatic chain is only {chain_length} carbons long.")
-                    candidate_found = True
-        # End of sulfur loop
+                    checked_candidates = True
+            # Alternatively, the S may be attached via an intervening oxygen.
+            if nbr.GetAtomicNum() == 8:
+                # For each oxygen neighbor, check if it itself is bound to a carbon (other than S) that yields a long lipid chain.
+                for o_nbr in nbr.GetNeighbors():
+                    if o_nbr.GetIdx() == atom.GetIdx():
+                        continue
+                    if o_nbr.GetAtomicNum() == 6 and not o_nbr.GetIsAromatic():
+                        chain_len = dfs_chain(o_nbr, {o_nbr.GetIdx()})
+                        if chain_len >= 10:
+                            explanation = (f"Contains a sulfonate group (S(=O)(=O)(O) or S(=O)(=O)[O-]) attached via an O bridge "
+                                           f"to a carbon that is part of an aliphatic chain of {chain_len} contiguous sp3 carbons.")
+                            return True, explanation
+                        else:
+                            checked_candidates = True
 
-    if candidate_found:
-        return False, candidate_explanation
-    else:
-        return False, "No sulfonic acid group attached via a C–S bond to a sufficiently long aliphatic (lipid) chain was found."
+        if checked_candidates:
+            # We found candidate neighbor(s) but their lipid chain length was too short.
+            return False, "Candidate sulfonate observed but the attached aliphatic chain is too short (< 10 contiguous sp3 carbons)."
+    
+    return False, "No sulfonate (sulfonic acid) group attached (directly or via an oxygen) to a sufficiently long aliphatic chain was found."
 
-# For testing (you can uncomment and test with example SMILES):
+
+# For testing, you might uncomment one or more examples below:
 # test_smiles = "[C@@H]([C@@H](/C=C/CCCCCCCCCCCCC)O)(CO[C@@H]1O[C@@H]([C@@H]([C@@H]([C@H]1O)OS(=O)(=O)O)O)CO)NC([C@H](O)CCCCCCCCCCCCCCCCCCCCCC)=O"
 # result, reason = is_sulfolipid(test_smiles)
 # print(result, reason)
+
+# If uncertain, one is allowed to return (None, None) in borderline cases.
