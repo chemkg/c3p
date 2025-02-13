@@ -16,10 +16,10 @@ def is_short_chain_fatty_acyl_CoA(smiles: str):
     Determines if a molecule is a short-chain fatty acyl-CoA based on its SMILES string.
     
     The algorithm checks:
-      - The presence of a thioester group (C(=O)S).
-      - That the acyl (fatty acid) fragment attached to the carbonyl carbon is short 
-        (we require no more than 6 carbon atoms in that fragment).
-      - The presence of a CoA moiety by detecting an adenine fragment using multiple SMARTS.
+      - The presence of a thioester group (carbonyl linked to sulfur).
+      - That the acyl (fatty acid) fragment attached to the carbonyl carbon is short (no more than 6 carbons).
+      - The presence of a CoA moiety by detecting an adenine substructure using several SMARTS patterns
+        while ignoring stereochemistry.
     
     Args:
         smiles (str): SMILES string of the molecule.
@@ -33,20 +33,19 @@ def is_short_chain_fatty_acyl_CoA(smiles: str):
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Look for a thioester functionality: a carbonyl linked to a sulfur.
+    # --- Check for thioester functionality: carbonyl (C=O) linked to a sulfur atom
     thioester_smarts = "[C](=O)[S]"
     thioester_pattern = Chem.MolFromSmarts(thioester_smarts)
     thioester_matches = mol.GetSubstructMatches(thioester_pattern)
-    
     if not thioester_matches:
         return False, "No thioester (C(=O)S) bond detected, hence not an acyl-CoA"
     
-    # For this check, consider only the first found thioester bond.
-    # The pattern returns a tuple of atom indices: (acyl_carbon, carbonyl_oxygen, sulfur)
+    # We take the first thioester match.
+    # The match tuple corresponds to (acyl_carbon, carbonyl oxygen, sulfur)
     acyl_carbon_idx, _, sulfur_idx = thioester_matches[0]
     
-    # Define a recursive depth-first search (DFS) function to count carbon atoms in the acyl fragment.
-    # We want to count only carbons reachable from the acyl carbon without crossing the bond to sulfur.
+    # --- Count the number of carbon atoms in the acyl (fatty acid) fragment
+    # We count carbons connected to the acyl carbon while not crossing into the CoA fragment.
     def dfs_count_atoms(atom_idx, visited):
         count = 0
         atom = mol.GetAtomWithIdx(atom_idx)
@@ -55,47 +54,46 @@ def is_short_chain_fatty_acyl_CoA(smiles: str):
         visited.add(atom_idx)
         for nbr in atom.GetNeighbors():
             nbr_idx = nbr.GetIdx()
-            # Avoid traversing the bond to the sulfur (connection to CoA part)
+            # Do not traverse the bond joining to the sulfur (which leads to CoA)
             if nbr_idx == sulfur_idx:
                 continue
-            # traverse only if the neighbor is carbon
-            if nbr.GetAtomicNum() == 6 and nbr_idx not in visited:
+            if nbr_idx not in visited and nbr.GetAtomicNum() == 6:
                 count += dfs_count_atoms(nbr_idx, visited)
         return count
 
     visited = set()
     acyl_carbons = dfs_count_atoms(acyl_carbon_idx, visited)
     
-    # Define the allowed acyl chain length. Here we require a short-chain fatty acid:
-    # For instance, acetyl (2 carbons), propionyl (3), butyryl (4), valeryl (5), caproyl (6).
+    # Allowed short-chain fatty acid fragments: acetyl (2C), propionyl (3C), butyryl (4C), valeryl (5C), caproyl (6C)
     if acyl_carbons > 6:
         return False, f"Acyl chain contains {acyl_carbons} carbons, too long for a short-chain fatty acid"
     if acyl_carbons < 2:
         return False, "Acyl chain too short (less than 2 carbons) to be a fatty acid"
     
-    # Check for a fragment typical of CoA. Many CoA molecules contain an adenine moiety.
-    # The exact SMARTS representation of adenine can vary, so we include several variants.
+    # --- Check for a fragment typical of Coenzyme A
+    # We look for an adenine moiety by testing several SMARTS patterns.
     adenine_smarts_list = [
-        "n1cnc2c(n)cnc12",      # original pattern
-        "n1c2ncnc2ncn1",        # alternative ordering
-        "c1nc2nc[nH]c2n1",      # another common form
+        "c1ncnc2ncnc12",     # a generic adenine/purine pattern
+        "n1cnc2nc[nH]c2n1",   # alternative ordering
+        "c1nc2nc[nH]c2n1"     # another variation
     ]
     adenine_found = False
     for smarts in adenine_smarts_list:
         adenine_pattern = Chem.MolFromSmarts(smarts)
-        if mol.HasSubstructMatch(adenine_pattern):
+        # Use useChirality=False to overlook stereochemical details in the adenine moiety.
+        if mol.HasSubstructMatch(adenine_pattern, useChirality=False):
             adenine_found = True
             break
 
     if not adenine_found:
         return False, "No adenine fragment typical of CoA detected"
     
-    # If all checks passed, the molecule satisfies the criteria.
+    # All checks have passed.
     return True, f"Found thioester bond with an acyl chain of {acyl_carbons} carbons and a CoA moiety"
 
-# Optional testing examples. You can run this module to test one example.
+# Optional: simple testing examples.
 if __name__ == "__main__":
-    # Example test: (R)-3-hydroxypentanoyl-CoA from the provided examples.
+    # Test with one of the provided examples: (R)-3-hydroxypentanoyl-CoA.
     test_smiles = "[C@@H]1(N2C3=C(C(=NC=N3)N)N=C2)O[C@H](COP(OP(OCC(C)([C@H](C(NCCC(NCCSC(C[C@@H](CC)O)=O)=O)=O)O)C)(=O)O)(=O)O)[C@H]([C@H]1O)OP(O)(O)=O"
     result, reason = is_short_chain_fatty_acyl_CoA(test_smiles)
     print("Result:", result)
