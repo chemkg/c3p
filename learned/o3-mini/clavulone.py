@@ -4,81 +4,89 @@ Classifies: CHEBI:36092 clavulone
 """
 Classifies: clavulone family – esterified prostanoids from marine corals.
 Definition: A class of esterified prostanoids obtained from marine corals.
-Heuristic criteria:
-  • Must contain a cyclopentenone ring (i.e. a five‐membered ring containing at least one C=O group 
-    where the oxygen is exocyclic, and at least one carbon–carbon double bond in the ring).
-  • Must contain at least one ester group (–O–C(=O)–).
-Note: The patterns below are a heuristic approximation.
+Heuristic criteria (improved):
+  • Molecule must be parseable from SMILES.
+  • It must contain a non-aromatic cyclopentenone ring. We search for a five-membered ring that:
+       – Has at least one carbon which is double-bonded to oxygen (ketone functionality). 
+         (We allow the oxygen to be exocyclic to the ring.)
+       – Contains at least one carbon–carbon double bond between ring atoms.
+  • It must contain at least one ester group (–O–C(=O)–).
+  • To reduce false positives we also require that the total number of rings is not too high (≤ 3).
+Note: This heuristic will not be perfect, and some true clavulones may be missed or some false positives remain.
 """
 
 from rdkit import Chem
-from rdkit.Chem import AllChem
 from rdkit.Chem import rdMolDescriptors
 
 def is_clavulone(smiles: str):
     """
     Determines if a molecule is a clavulone (esterified prostanoid from marine corals)
-    based on its SMILES string.
-
-    The function uses heuristic criteria:
-      1. The SMILES can be parsed.
-      2. The molecule contains a cyclopentenone ring, defined as any five-membered ring 
-         that includes at least one ketone group (a carbon double-bonded to oxygen, where the O is not part of the ring)
-         and at least one carbon–carbon double bond within the ring.
-      3. The molecule contains at least one ester functional group.
-      4. Optionally checks that the molecular weight is in a plausible range (>300 Da).
-
+    based on its SMILES string and heuristic structural features.
+    
+    The criteria used herein are:
+      1. SMILES can be parsed into a molecule.
+      2. The molecule contains a non-aromatic cyclopentenone ring. This ring is defined as:
+           - A five-membered ring.
+           - At least one carbon in the ring that has a double bond to oxygen (ketone),
+             where the oxygen is not itself in the ring.
+           - At least one carbon–carbon double bond within the ring.
+           - None of the ring atoms are aromatic.
+      3. The molecule contains at least one ester group (–O–C(=O)–).
+      4. The total number of rings in the molecule is not too high (≤ 3).
+    
     Args:
-        smiles (str): SMILES string of the molecule
-
+        smiles (str): SMILES string of the molecule.
+    
     Returns:
         bool: True if the molecule is classified as a clavulone, False otherwise.
         str: Reason for the classification decision.
     """
-    # Parse SMILES string
+    # Parse the SMILES string
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-
-    # First, search for a cyclopentenone-type ring.
-    # We iterate over all five-membered rings and check for two features:
-    #   (a) A ketone group: a carbon in the ring that has a double bond to an oxygen atom 
-    #       that is NOT part of the ring (i.e. the O is exocyclic).
-    #   (b) At least one carbon–carbon double bond in the ring (C=C).
+    
+    # Get rings from the molecule
     ring_info = mol.GetRingInfo().AtomRings()
     cyclopentenone_found = False
     for ring in ring_info:
         if len(ring) != 5:
-            continue  # only consider 5-membered rings
+            continue  # only consider five-membered rings
+        
+        # Check that none of the ring atoms are aromatic
+        if any(mol.GetAtomWithIdx(idx).GetIsAromatic() for idx in ring):
+            continue
+        
         ketone = False
         cc_double = False
-
-        # Check for ketone: for every atom in the ring, if carbon then look for an exocyclic C=O.
+        
+        # Check for ketone functionality: at least one carbon in the ring must have a double bond to oxygen,
+        # where that oxygen is not in the ring.
         for atom_idx in ring:
             atom = mol.GetAtomWithIdx(atom_idx)
             if atom.GetAtomicNum() != 6:
-                continue
+                continue  # we expect a carbon
             for bond in atom.GetBonds():
-                # Check bond is a double bond
+                # Check for double bond
                 if bond.GetBondTypeAsDouble() == 2.0:
-                    # Identify the neighbor atom which is not the current atom.
                     nbr = bond.GetOtherAtom(atom)
-                    # Check if neighbor is oxygen and NOT in the ring.
-                    if nbr.GetAtomicNum() == 8 and nbr.GetIdx() not in ring:
+                    # Accept if neighbor is oxygen and is not in the ring.
+                    if nbr.GetAtomicNum() == 8 and (nbr.GetIdx() not in ring):
                         ketone = True
                         break
             if ketone:
                 break
-
-        # Check for at least one carbon-carbon double bond within the ring.
-        # We iterate over every pair of distinct atoms in the ring.
-        for i in range(len(ring)):
-            for j in range(i+1, len(ring)):
+        
+        # Check for at least one carbon–carbon double bond within the ring.
+        # Iterate over pairs of ring atom indices.
+        n = len(ring)
+        for i in range(n):
+            for j in range(i+1, n):
                 bond = mol.GetBondBetweenAtoms(ring[i], ring[j])
                 if bond is not None and bond.GetBondTypeAsDouble() == 2.0:
-                    # Ensure that both atoms are carbons (i.e., we are not counting the ketone bond)
                     a1 = mol.GetAtomWithIdx(ring[i])
                     a2 = mol.GetAtomWithIdx(ring[j])
+                    # Ensure that both atoms are carbons
                     if a1.GetAtomicNum() == 6 and a2.GetAtomicNum() == 6:
                         cc_double = True
                         break
@@ -91,23 +99,25 @@ def is_clavulone(smiles: str):
 
     if not cyclopentenone_found:
          return False, "No cyclopentenone ring found (required prostanoid core missing)"
-
-    # Next, check for at least one ester group via SMARTS.
+    
+    # Check that the molecule contains at least one ester group.
+    # This SMARTS pattern matches an oxygen single-bonded to a carbon that is double-bonded to oxygen,
+    # with the carbon attached to at least one other carbon.
     ester_smarts = "[OX2][CX3](=O)[#6]"
     ester_pattern = Chem.MolFromSmarts(ester_smarts)
     if not mol.HasSubstructMatch(ester_pattern):
          return False, "No ester group found (molecule is not esterified)"
+    
+    # To reduce false positives, check that the total number of rings is not too high.
+    total_rings = mol.GetRingInfo().NumRings()
+    if total_rings > 3:
+         return False, f"Too many rings ({total_rings}) for a typical clavulone"
 
-    # Optional check: ensure the molecular weight is plausible for clavulones (>300 Da).
-    mol_wt = rdMolDescriptors.CalcExactMolWt(mol)
-    if mol_wt < 300:
-         return False, f"Molecular weight too low ({mol_wt:.1f} Da) for a typical clavulone"
-
-    return True, "Molecule contains a cyclopentenone ring and at least one ester group consistent with clavulones"
+    return True, "Molecule contains a non-aromatic cyclopentenone ring and at least one ester group consistent with clavulones"
 
 # Example usage:
 if __name__ == "__main__":
-    # Test example using one of the provided SMILES.
+    # Test a known example (7-Acetoxy-7,8-dihydrobromovulone II)
     test_smiles = "BrC1=C[C@@](O)([C@@]([C@@H](OC(=O)C)/C=C/CCCC(OC)=O)(C1=O)[H])C/C=C\\CCCCC"
     result, reason = is_clavulone(test_smiles)
     print("Result:", result)
