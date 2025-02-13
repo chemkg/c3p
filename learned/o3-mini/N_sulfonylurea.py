@@ -14,71 +14,99 @@ def is_N_sulfonylurea(smiles: str):
     """
     Determines if a molecule is a N-sulfonylurea based on its SMILES string.
     A N-sulfonylurea is defined as a urea (N-C(=O)-N) in which one of the hydrogens on a nitrogen is replaced
-    by a sulfonyl group (–S(=O)2R).
-
+    by a sulfonyl group (-S(=O)(=O)-R). In some cases an intervening amino group may be present linking the urea
+    nitrogen to the sulfonyl moiety.
+    
     Args:
         smiles (str): SMILES string of the molecule
-
+    
     Returns:
         bool: True if molecule is N-sulfonylurea, False otherwise
-        str: Reason for the classification
+        str: Reason for classification
     """
-    # Parse SMILES
+    # Parse the input SMILES into an RDKit molecule.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Define SMARTS for a simple urea core: N-C(=O)-N.
-    # Note: This pattern may match other urea derivatives as well.
-    urea_smarts = "NC(=O)N"
+    # First search for a urea core. Use a SMARTS that matches N-C(=O)-N.
+    # This is a minimal pattern for a urea group.
+    urea_smarts = "N-C(=O)-N"
     urea_core = Chem.MolFromSmarts(urea_smarts)
     if urea_core is None:
-        return False, "Invalid urea SMARTS pattern"
+        return False, "Could not interpret urea SMARTS pattern"
     
-    # Find urea substructure matches.
     urea_matches = mol.GetSubstructMatches(urea_core)
     if not urea_matches:
         return False, "No urea (N-C(=O)-N) core found in the molecule"
     
-    # For each found urea core, check if one of the N atoms is substituted with a sulfonyl group.
-    # We'll inspect neighbors of the urea N atoms (the first and third atoms in the match)
-    for match in urea_matches:
-        # In the SMARTS "NC(=O)N", match indices:
-        # match[0] -> first N
-        # match[1] -> carbonyl carbon
-        # match[2] -> second N
-        for n_idx in (match[0], match[2]):
-            n_atom = mol.GetAtomWithIdx(n_idx)
-            # Check each neighbor of this nitrogen
-            for neighbor in n_atom.GetNeighbors():
-                # Skip the carbonyl carbon already in the urea core
-                if neighbor.GetAtomicNum() == 6:
-                    continue
-                # Look for a sulfur neighbor (atomic number 16) attached via a single bond
-                if neighbor.GetAtomicNum() == 16:
-                    # Check if the bond between the nitrogen and sulfur is a single bond.
-                    bond = mol.GetBondBetweenAtoms(n_atom.GetIdx(), neighbor.GetIdx())
-                    if bond is None or bond.GetBondType() != Chem.rdchem.BondType.SINGLE:
-                        continue
-                    # Now check that this sulfur has at least two double-bonded oxygens.
-                    sulfonyl_O_count = 0
-                    for sulfon_neighbor in neighbor.GetNeighbors():
-                        # if the neighbor is an oxygen and the bond is double
-                        if sulfon_neighbor.GetAtomicNum() == 8:
-                            s_bond = mol.GetBondBetweenAtoms(neighbor.GetIdx(), sulfon_neighbor.GetIdx())
-                            if s_bond is not None and s_bond.GetBondType() == Chem.rdchem.BondType.DOUBLE:
-                                sulfonyl_O_count += 1
-                    if sulfonyl_O_count >= 2:
-                        return True, ("Found a urea core with a nitrogen substituted by a sulfonyl group "
-                                      "(has sulfur with at least two double-bonded oxygens)")
-    
-    # If no suitable substitution found, then this is not an N-sulfonylurea.
-    return False, "Urea core found, but no nitrogen has a sulfonyl substitution (S(=O)(=O)-R) attached"
+    def check_sulfonyl(sulfur_atom):
+        """
+        Check if a sulfur atom is a sulfonyl moiety by counting oxygen neighbors
+        that are double-bonded.
+        """
+        double_oxygens = 0
+        # Loop through each neighbor of the sulfur.
+        for neigh in sulfur_atom.GetNeighbors():
+            if neigh.GetAtomicNum() == 8:
+                bond = mol.GetBondBetweenAtoms(sulfur_atom.GetIdx(), neigh.GetIdx())
+                if bond is not None and bond.GetBondType() == Chem.rdchem.BondType.DOUBLE:
+                    double_oxygens += 1
+        return double_oxygens >= 2
 
-# Below are some examples for testing the function.
+    def sulfonyl_on_neighbor(n_atom, visited=set()):
+        """
+        Check if the nitrogen atom (n_atom) has a substituent which is (or leads to) a sulfonyl group.
+        We ignore the bond that is part of the urea core.
+        To allow for cases where an intervening amino (N) group exists, we check one level deeper.
+        visited: to avoid loops.
+        """
+        # Mark current nitrogen as visited.
+        visited = visited | {n_atom.GetIdx()}
+        for nbr in n_atom.GetNeighbors():
+            # Skip if neighbor is a carbonyl carbon (C with =O bond to our urea core)
+            if nbr.GetAtomicNum() == 6:
+                continue
+            # Direct S check
+            if nbr.GetAtomicNum() == 16:
+                bond = mol.GetBondBetweenAtoms(n_atom.GetIdx(), nbr.GetIdx())
+                if bond is not None and bond.GetBondType() == Chem.rdchem.BondType.SINGLE:
+                    if check_sulfonyl(nbr):
+                        return True
+            # Allow one intervening nitrogen: if neighbor is nitrogen and we haven't visited it,
+            # check its neighbors for a sulfur.
+            if nbr.GetAtomicNum() == 7 and nbr.GetIdx() not in visited:
+                for nbr2 in nbr.GetNeighbors():
+                    if nbr2.GetIdx() == n_atom.GetIdx():
+                        continue
+                    if nbr2.GetAtomicNum() == 16:
+                        bond2 = mol.GetBondBetweenAtoms(nbr.GetIdx(), nbr2.GetIdx())
+                        if bond2 is not None and bond2.GetBondType() == Chem.rdchem.BondType.SINGLE:
+                            if check_sulfonyl(nbr2):
+                                return True
+        return False
+
+    # For each matched urea core, check the two terminal nitrogen atoms.
+    # In the SMARTS "N-C(=O)-N", the match tuple has indices:
+    # match[0] -> first N, match[1] -> C (carbonyl), match[2] -> second N.
+    for match in urea_matches:
+        # Check first nitrogen
+        n1 = mol.GetAtomWithIdx(match[0])
+        if sulfonyl_on_neighbor(n1):
+            return True, ("Found a urea core with a nitrogen substituted (directly or via an intervening NH) "
+                          "by a sulfonyl group (S with at least two double-bonded O atoms)")
+        # Check second nitrogen
+        n2 = mol.GetAtomWithIdx(match[2])
+        if sulfonyl_on_neighbor(n2):
+            return True, ("Found a urea core with a nitrogen substituted (directly or via an intervening NH) "
+                          "by a sulfonyl group (S with at least two double-bonded O atoms)")
+    
+    return False, "Urea core found, but no nitrogen has a sulfonyl substitution (S(=O)(=O)-R or NH-S(=O)(=O)-R) attached"
+
+# The code below is for testing purposes.
 if __name__ == "__main__":
     test_smiles = [
-        # Chlorsulfuron
+        # chlorsulfuron -- should be recognized (previously false negative)
         "C1(=NC(=NC(=N1)NC(NS(C=2C(=CC=CC2)Cl)(=O)=O)=O)OC)C",
         # 3-[(2-adamantylamino)-oxomethyl]-1-methylsulfonyl-1-pentylurea
         "CCCCCN(C(=O)NC(=O)NC1C2CC3CC1CC(C2)C3)S(=O)(=O)C",
@@ -86,5 +114,5 @@ if __name__ == "__main__":
         "Cc1cnc(cn1)C(=O)NCCc1ccc(cc1)S(=O)(=O)NC(=O)NC1CCCCC1",
     ]
     for s in test_smiles:
-        result, reason = is_N_sulfonylurea(s)
-        print(f"SMILES: {s}\nResult: {result}\nReason: {reason}\n")
+        res, reason = is_N_sulfonylurea(s)
+        print(f"SMILES: {s}\nResult: {res}\nReason: {reason}\n")
