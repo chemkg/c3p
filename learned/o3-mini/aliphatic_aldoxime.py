@@ -3,6 +3,17 @@ Classifies: CHEBI:82744 aliphatic aldoxime
 """
 """
 Classifies: Any aldoxime derived from an aliphatic aldehyde.
+Aldoxime = group of the form CH=N–OH where the carbon is derived from an aldehyde.
+An aliphatic aldehyde is defined as an aldehyde that is not aromatic and is not substituted by (or connected to) any aromatic group.
+The strategy:
+  1. Use a SMARTS pattern "[CH1;!a]=[N][O;H]" to find aldoxime moieties,
+     which ensures the carbon has one hydrogen and is not flagged as aromatic.
+  2. For each match, check:
+      – The aldehyde carbon is not aromatic.
+      – It has exactly one heavy-atom substituent aside from the nitrogen.
+      – The substituent is not directly joined to an aromatic bond or atom.
+      – Additionally, check the immediate neighbors of that substituent for any aromatic atoms.
+If any match passes all these filters then the molecule will be classified as an aliphatic aldoxime.
 """
 
 from rdkit import Chem
@@ -10,84 +21,93 @@ from rdkit import Chem
 def is_aliphatic_aldoxime(smiles: str):
     """
     Determines if a molecule is an aliphatic aldoxime based on its SMILES string.
-    An aliphatic aldoxime is any aldoxime (C=N–OH) that is derived from an aliphatic aldehyde.
-    This means that the carbon of the aldoxime (originally the aldehyde carbon) should be a CH unit,
-    and should not be directly or indirectly connected to an aromatic system.
-    
-    Our strategy is to identify the aldoxime group using a SMARTS query and then
-    verify that the carbon involved (1) is not aromatic and (2) none of its nearby heavy-atom neighbors
-    (apart from the bonded nitrogen) are either aromatic themselves or directly attached to aromatic atoms.
-    
+    An aliphatic aldoxime is any aldoxime (CH=N–OH) that comes from an aliphatic aldehyde.
+    The carbon involved should be a CH unit (with one hydrogen) that is not aromatic and is not 
+    substituted by atoms directly connected (by aromatic bonds or belonging to aromatic systems) 
+    to aromatic atoms.
+
     Args:
-        smiles (str): SMILES string of the molecule.
-    
+        smiles (str): SMILES string of the molecule
+
     Returns:
-        bool: True if the molecule is classified as an aliphatic aldoxime, False otherwise.
-        str: Reason for classification.
+        bool: True if the molecule is an aliphatic aldoxime, False otherwise.
+        str: Reason for the classification.
     """
-    # Parse the SMILES string
+    # Parse the SMILES string.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Add explicit hydrogens so we can check for CH1
+    # Add explicit hydrogens to correctly check the CH count.
     mol = Chem.AddHs(mol)
     
-    # Define a SMARTS pattern for the aldoxime moiety:
-    # [CH1;!a]  ensures a CH unit that is not flagged aromatic, attached by double bond to [N],
-    # which in turn is single bonded to [O;H] (an oxygen with an explicit hydrogen).
+    # Define a SMARTS for an aldoxime group.
+    # The pattern: [CH1;!a]=[N][O;H]
     aldoxime_smarts = "[CH1;!a]=[N][O;H]"
     aldoxime_pattern = Chem.MolFromSmarts(aldoxime_smarts)
     if aldoxime_pattern is None:
         return False, "Error in defining SMARTS for aldoxime"
     
-    # Find matches for the aldoxime group.
+    # Find all matches for the aldoxime group.
     matches = mol.GetSubstructMatches(aldoxime_pattern)
     if not matches:
-        return False, "No aldoxime group (C=N–OH with a CH unit) found"
+        return False, "No aldoxime group (CH=N–OH with a CH unit) found"
     
-    # For each match, perform extra aliphatic filters:
+    # Helper function: check if a bond is aromatic.
+    def bond_is_aromatic(mol, idx1, idx2):
+        bond = mol.GetBondBetweenAtoms(idx1, idx2)
+        if bond is not None and bond.GetIsAromatic():
+            return True
+        return False
+
+    # For each aldoxime match, apply further aliphatic filters.
     for match in matches:
-        # The SMARTS pattern yields indices for (carbon, nitrogen, oxygen).
+        # match returns indices for (carbon, nitrogen, oxygen) per our SMARTS order.
         carbon_idx, nitrogen_idx, oxygen_idx = match
         carbon_atom = mol.GetAtomWithIdx(carbon_idx)
         
-        # First check: The carbon atom should not be aromatic.
+        # 1. The carbon itself must not be aromatic.
         if carbon_atom.GetIsAromatic():
-            # Not aliphatic if the key carbon itself is aromatic.
+            continue  # not aliphatic
+        
+        # 2. Check that the aldehyde carbon is only connected to hydrogen(s) and one heavy substituent apart from the nitrogen.
+        heavy_neighbors = [n for n in carbon_atom.GetNeighbors() if n.GetAtomicNum() != 1 and n.GetIdx() != nitrogen_idx]
+        if len(heavy_neighbors) != 1:
+            # Either too many substituents or none.
             continue
         
-        # Now check neighbors of the aldehyde carbon (excluding the nitrogen that forms the oxime).
+        # 3. Examine that one heavy neighbor (the rest group) is not directly attached via an aromatic bond.
+        neighbor = heavy_neighbors[0]
+        if bond_is_aromatic(mol, carbon_idx, neighbor.GetIdx()):
+            continue
+        if neighbor.GetIsAromatic():
+            continue
+        
+        # 4. Check one level deeper: none of the neighbor's non-hydrogen neighbors (excluding the carbon) should be aromatic
         qualifies = True
-        for neighbor in carbon_atom.GetNeighbors():
-            if neighbor.GetIdx() == nitrogen_idx:
-                continue  # skip the nitrogen of the oxime group
-            if neighbor.GetAtomicNum() == 1:
-                continue  # skip hydrogens
-            
-            # Direct neighbor check: if neighbor itself is aromatic, reject.
-            if neighbor.GetIsAromatic():
+        for sub_neighbor in neighbor.GetNeighbors():
+            if sub_neighbor.GetIdx() == carbon_idx:
+                continue
+            if sub_neighbor.GetAtomicNum() == 1:
+                continue
+            # Also check the bond between neighbor and sub_neighbor
+            if bond_is_aromatic(mol, neighbor.GetIdx(), sub_neighbor.GetIdx()):
                 qualifies = False
                 break
-            
-            # Second-level check: look at the neighbors of this neighbor (excluding the original carbon).
-            # If any neighbor (of the neighbor) is aromatic, then the substituent is benzylic to an aromatic ring.
-            for sub_neighbor in neighbor.GetNeighbors():
-                if sub_neighbor.GetIdx() == carbon_atom.GetIdx():
-                    continue
-                if sub_neighbor.GetAtomicNum() != 1 and sub_neighbor.GetIsAromatic():
-                    qualifies = False
-                    break
-            if not qualifies:
+            if sub_neighbor.GetIsAromatic():
+                qualifies = False
                 break
-        
-        if qualifies:
-            return True, "Aldoxime group derived from an aliphatic aldehyde found"
-    
-    return False, "Aldoxime group found but appears to be derived from an aromatic aldehyde"
+        if not qualifies:
+            continue
 
-# Optional: For testing purposes, you can call the function on one example.
+        # If we pass all tests, then we consider the aldoxime as derived from an aliphatic aldehyde.
+        return True, "Aldoxime group derived from an aliphatic aldehyde found"
+    
+    return False, "Aldoxime group(s) found but substituents suggest aromatic or conjugated system"
+
+# Optional: Testing examples if run as a script.
 if __name__ == "__main__":
-    test_smiles = "[H]\\C(C)=N\\O"  # (Z)-acetaldehyde oxime
+    # (Z)-acetaldehyde oxime
+    test_smiles = "[H]\\C(C)=N\\O"
     result, reason = is_aliphatic_aldoxime(test_smiles)
     print(result, "->", reason)
