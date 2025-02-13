@@ -5,13 +5,6 @@ Classifies: CHEBI:36315 glycerophosphoinositol
 Classifies: glycerophosphoinositol
 Definition: Any glycerophospholipid having the polar alcohol inositol 
 esterified to the phosphate group at the sn-3 position of the glycerol backbone.
-
-Improvement notes:
- - Use a more specific SMARTS pattern for glycerol (3‐carbon chain with two primary alcohols)
- - Use an inositol SMARTS for a myo‐inositol ring
- - When examining phosphate groups ([P](=O)(O)(O)), require that one oxygen substituent
-   is connected to a carbon that is uniquely part of the glycerol fragment and another oxygen
-   is connected to a carbon that is uniquely part of the inositol ring.
 """
 
 from rdkit import Chem
@@ -20,120 +13,126 @@ def is_glycerophosphoinositol(smiles: str):
     """
     Determines if a molecule is a glycerophosphoinositol based on its SMILES string.
     
-    The strategy is to (1) identify a simplified glycerol backbone and an inositol ring;
-    (2) find a phosphate ([P](=O)(O)(O)) group; and (3) check if that phosphate has two
-    oxygen substituents such that one is linked (through a carbon) to a unique glycerol atom
-    and a second is linked to a unique inositol atom.
-    
+    Our strategy is as follows:
+      1. Identify a glycerol backbone carrying a phosphate at the sn-3 position.
+         We use a specific SMARTS: the first carbon is a non‐ring CH2 with OH,
+         the middle carbon is CH with OH, and the third (sn‑3) carbon is a non‐ring CH2
+         with a phosphate group attached (–OP(=O)(O)O).
+      2. Identify the myo‐inositol headgroup using an explicit cyclic SMARTS.
+      3. From the glycerol match, identify the phosphate atom (via the sn‑3 carbon).
+         Then, verify that at least one oxygen bound to phosphorus (other than the oxygen 
+         linking back to glycerol) connects to a carbon that is a member of an inositol ring.
+      4. If found, classification is positive.
+      
     Args:
         smiles (str): SMILES string of the molecule.
-        
+    
     Returns:
-        bool: True if classified as a glycerophosphoinositol, else False.
-        str: Reason for the classification decision.
+        bool: True if the molecule is classified as a glycerophosphoinositol, else False.
+        str: Explanation for the decision.
     """
+    
+    # Parse the input SMILES into an RDKit molecule.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-    
-    # Define SMARTS patterns.
-    # A simplified myo-inositol pattern: six-membered ring with one hydroxyl on each carbon.
-    # (This will match a cyclohexane in which every carbon is substituted with at least one OH.)
-    inositol_smarts = "C1C(O)C(O)C(O)C(O)C1O"
+
+    # Define a SMARTS for myo-inositol:
+    # This pattern represents a six-membered cyclohexane ring carrying one hydroxyl on each carbon.
+    inositol_smarts = "O[C@@H]1[C@H](O)[C@@H](O)[C@H](O)[C@@H](O)[C@H]1O"
     inositol_pat = Chem.MolFromSmarts(inositol_smarts)
     if inositol_pat is None:
         return False, "Error in inositol SMARTS pattern"
     
-    # Define a simplified glycerol backbone pattern.
-    # Here we want a three-carbon chain with terminal primary hydroxyl groups.
-    # One common representation is: HO-C(CO)CO which covers that the terminal carbons 
-    # (sn-1 and sn-3) are CH2OH and the middle one is CHOH.
-    glycerol_smarts = "[#6;X4](O)[#6;X4](O)[#6;X4](O)"
+    # Define a SMARTS for a glycerol backbone with phosphate at sn-3.
+    # We require:
+    #   - A non-ring primary carbon [CH2;!R] with –OH (sn-1)
+    #   - A middle CH (with –OH) (sn-2)
+    #   - A non-ring primary carbon [CH2;!R] substituted with a phosphate group (sn-3)
+    # The phosphate part is specified as OP(=O)(O)O.
+    glycerol_smarts = "[CH2;!R](O)[CH](O)[CH2;!R](OP(=O)(O)O)"
     glycerol_pat = Chem.MolFromSmarts(glycerol_smarts)
     if glycerol_pat is None:
         return False, "Error in glycerol SMARTS pattern"
-    
-    # Find all matches for inositol and glycerol fragments.
-    inositol_matches = mol.GetSubstructMatches(inositol_pat)
+        
     glycerol_matches = mol.GetSubstructMatches(glycerol_pat)
-    
+    if not glycerol_matches:
+        return False, "No glycerol-phosphate backbone found"
+
+    # Get inositol matches and build a set of atom indices that are part of any inositol ring.
+    inositol_matches = mol.GetSubstructMatches(inositol_pat)
     if not inositol_matches:
         return False, "No inositol ring found"
-    if not glycerol_matches:
-        return False, "No glycerol backbone found"
-    
-    # Build sets of atom indices for each fragment.
-    glycerol_atoms = set()
-    for match in glycerol_matches:
-        glycerol_atoms.update(match)
-    inositol_atoms = set()
+    inositol_atom_set = set()
     for match in inositol_matches:
-        inositol_atoms.update(match)
+        inositol_atom_set.update(match)
     
-    # Remove atoms that occur in both sets (to avoid overlap that causes misclassification).
-    unique_glycerol_atoms = glycerol_atoms.difference(inositol_atoms)
-    unique_inositol_atoms = inositol_atoms.difference(glycerol_atoms)
-    if not unique_glycerol_atoms:
-        return False, "Glycerol fragment not clearly defined (overlap with inositol?)"
-    if not unique_inositol_atoms:
-        return False, "Inositol fragment not clearly defined (overlap with glycerol?)"
-    
-    # Define phosphate SMARTS: phosphorus with one double bond O and three single-bonded oxygens.
-    phosphate_smarts = "[P](=O)(O)(O)"
-    phosphate_pat = Chem.MolFromSmarts(phosphate_smarts)
-    if phosphate_pat is None:
-        return False, "Error in phosphate SMARTS pattern"
-    
-    phosphate_matches = mol.GetSubstructMatches(phosphate_pat)
-    if not phosphate_matches:
-        return False, "No phosphate group found"
-    
-    # For each phosphate group found, check its neighbors:
-    for match in phosphate_matches:
-        p_atom = None
-        # Identify the phosphorus atom within the match (atomic number 15)
-        for idx in match:
-            atom = mol.GetAtomWithIdx(idx)
-            if atom.GetAtomicNum() == 15:
-                p_atom = atom
+    # For each glycerol-phosphate match, verify proper connectivity to inositol.
+    # Our glycerol pattern is defined with three carbon atoms in order.
+    # The third carbon (sn-3) should have a phosphate group.
+    for match in glycerol_matches:
+        # It is expected that match[0], match[1], match[2] correspond to the 3 glycerol carbons.
+        sn3_carbon_idx = match[2]
+        sn3_carbon = mol.GetAtomWithIdx(sn3_carbon_idx)
+        phosphate_atom = None
+        # Identify the phosphorus atom attached to the sn-3 carbon.
+        for neighbor in sn3_carbon.GetNeighbors():
+            if neighbor.GetAtomicNum() == 15:  # phosphorus
+                phosphate_atom = neighbor
                 break
-        if p_atom is None:
-            continue  # safety check
+        if phosphate_atom is None:
+            continue  # try next match
         
-        glycerol_link_found = False
+        # Check that phosphate_atom has the expected O=P and three -O substituents.
+        # (We do a minimal check looking for at least one double-bonded oxygen.)
+        p_neighbors = list(phosphate_atom.GetNeighbors())
+        has_doubly_bound_O = any(nb.GetAtomicNum()==8 and 
+                                 any(bond.GetBondTypeAsDouble()==True for bond in phosphate_atom.GetBonds() if bond.GetOtherAtom(phosphate_atom)==nb)
+                                 for nb in p_neighbors)
+        if not has_doubly_bound_O:
+            continue  # does not look like a phosphate
+        
+        # Now, of the oxygen atoms attached to P, one should be already linked to the glycerol sn-3 carbon.
+        # Look at the remaining oxygen atoms and see if at least one is connected (via a carbon) to the inositol ring.
+        glycerol_o_idx = None
+        # Determine which oxygen on phosphate comes from glycerol.
+        for nb in phosphate_atom.GetNeighbors():
+            if nb.GetAtomicNum() == 8:
+                for sub_nb in nb.GetNeighbors():
+                    if sub_nb.GetIdx() == sn3_carbon_idx:
+                        glycerol_o_idx = nb.GetIdx()
+                        break
+                if glycerol_o_idx is not None:
+                    break
+
+        # Now check the other oxygens bonded to P:
         inositol_link_found = False
-        
-        # Look at neighbors of phosphorus
-        for neighbor in p_atom.GetNeighbors():
-            # We want oxygen neighbors (atomic number 8)
-            if neighbor.GetAtomicNum() != 8:
+        for nb in phosphate_atom.GetNeighbors():
+            if nb.GetAtomicNum() != 8:
                 continue
-            oxy_idx = neighbor.GetIdx()
-            # For each oxygen neighbor, check its other neighbors (should be a carbon)
-            for nb in neighbor.GetNeighbors():
-                # Skip the phosphorus atom itself.
-                if nb.GetIdx() == p_atom.GetIdx():
+            # Skip the oxygen that links back to glycerol.
+            if nb.GetIdx() == glycerol_o_idx:
+                continue
+            # For each such oxygen, check its neighbors (other than phosphate).
+            for oxy_nei in nb.GetNeighbors():
+                if oxy_nei.GetIdx() == phosphate_atom.GetIdx():
                     continue
-                # We require that the neighbor is a carbon
-                if nb.GetAtomicNum() != 6:
-                    continue
-                c_idx = nb.GetIdx()
-                # If this carbon is uniquely in the glycerol backbone, mark glycerol linkage.
-                if c_idx in unique_glycerol_atoms:
-                    glycerol_link_found = True
-                # If this carbon is uniquely in the inositol ring, mark inositol linkage.
-                if c_idx in unique_inositol_atoms:
+                # If any neighbor carbon is part of an inositol match, consider it a link.
+                if oxy_nei.GetAtomicNum() == 6 and oxy_nei.GetIdx() in inositol_atom_set:
                     inositol_link_found = True
-            # If both links are already found, we can classify the phosphate as bridging.
-            if glycerol_link_found and inositol_link_found:
-                return True, ("Molecule contains a glycerol backbone with a phosphate group that bridges "
-                              "to an inositol headgroup")
+                    break
+            if inositol_link_found:
+                break
+        
+        if inositol_link_found:
+            return True, ("Molecule contains a glycerol backbone with a phosphate group at the sn-3 position "
+                          "bridging to a myo-inositol headgroup")
     
-    return False, "No phosphate group found that directly bridges a unique glycerol and a unique inositol fragment"
+    return False, "No phosphate group found that directly bridges a defined glycerol and an inositol fragment"
 
 # Example usage:
 if __name__ == "__main__":
-    # Test with one of the provided SMILES for a glycerophosphoinositol.
+    # Test with one of the provided SMILES for glycerophosphoinositol.
     test_smiles = "[C@@H]1([C@@H]([C@@H]([C@@H]([C@H]([C@@H]1O)O)O)O)OP(OC[C@@H](COC(CCCCCCCCCCCCCCC)=O)OC(CCCCCCC/C=C\\CCCCCCCC)=O)(=O)O)O"
     result, reason = is_glycerophosphoinositol(test_smiles)
     print("Result:", result)
