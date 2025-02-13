@@ -5,7 +5,7 @@ Classifies: CHEBI:86315 methyl sulfide
 Classifies: Methyl Sulfide
 Definition: Any aliphatic sulfide in which at least one of the organyl groups attached 
 to the sulfur is a methyl group.
-Note: We exclude molecules that appear to be amino acids or peptides.
+Note: In this revised version we do not exclude molecules that appear to be amino acids or peptides.
 """
 from rdkit import Chem
 
@@ -14,11 +14,10 @@ def is_methyl_sulfide(smiles: str):
     Determines if a given molecule is a methyl sulfide.
     
     A methyl sulfide (thioether) by our definition is a molecule that contains at least one
-    non‐aromatic sulfur atom (S) that is bonded to two carbon atoms and at least one of them
-    is a methyl group (a tetrahedral sp3 carbon bearing exactly three hydrogens). In order to
-    reduce false positives from peptides and amino acids (which often have –S–CH3, e.g. L-methionine),
-    we first check if the molecule shows an α–amino acid motif.
-    
+    aliphatic (non‐aromatic) sulfur atom that is bonded to two carbon atoms and at least one 
+    of these carbons is a methyl group. A methyl group is defined here as an sp3-hybridized carbon 
+    that is connected to exactly one heavy (non-hydrogen) atom (the sulfur).
+
     Args:
         smiles (str): SMILES string of the molecule.
     
@@ -34,43 +33,40 @@ def is_methyl_sulfide(smiles: str):
     # Add explicit hydrogens so that hydrogen counts are available.
     mol = Chem.AddHs(mol)
     
-    # Exclude molecules that appear to be amino acids or peptides.
-    # These patterns look for typical α–amino acid moieties.
-    aa_pattern1 = Chem.MolFromSmarts("[C@H](N)C(=O)O")
-    aa_pattern2 = Chem.MolFromSmarts("[C@@H](N)C(=O)O")
-    if mol.HasSubstructMatch(aa_pattern1) or mol.HasSubstructMatch(aa_pattern2):
-        return False, "Molecule appears to be an amino acid or peptide"
-    
-    # Iterate over sulfur atoms.
+    # Iterate over all atoms to locate sulfur atoms.
     for atom in mol.GetAtoms():
-        if atom.GetAtomicNum() == 16:
-            # Only consider non-aromatic sulfur with exactly two connections.
-            if atom.GetIsAromatic():
+        # Look for sulfur (atomic number 16)
+        if atom.GetAtomicNum() != 16:
+            continue
+        # We need an aliphatic (non‐aromatic) sulfur. Skip if aromatic.
+        if atom.GetIsAromatic():
+            continue
+        
+        # We require the sulfur to be part of a thioether: it must be connected to two heavy atoms.
+        # (Hydrogens are not considered heavy atoms.)
+        heavy_neighbors = [nbr for nbr in atom.GetNeighbors() if nbr.GetAtomicNum() != 1]
+        if len(heavy_neighbors) != 2:
+            continue
+        
+        # Check that both neighbors are carbons.
+        if any(nbr.GetAtomicNum() != 6 for nbr in heavy_neighbors):
+            continue
+        
+        # At least one neighbor carbon must be a methyl group.
+        # We define a methyl group as a carbon (sp3-hybridized, non-aromatic) whose only heavy atom neighbor is the sulfur.
+        for nbr in heavy_neighbors:
+            # Skip if not sp3 or if aromatic.
+            if nbr.GetHybridization() != Chem.rdchem.HybridizationType.SP3 or nbr.GetIsAromatic():
                 continue
-            if atom.GetDegree() != 2:
-                continue
-            
-            # For each neighboring atom, check if one is a methyl carbon.
-            for neighbor in atom.GetNeighbors():
-                # Check neighbor is carbon; use atomic number 6.
-                if neighbor.GetAtomicNum() != 6:
-                    continue
-                # The attached methyl carbon should be tetrahedral (sp3) and non‐aromatic.
-                if neighbor.GetHybridization() != Chem.rdchem.HybridizationType.SP3:
-                    continue
-                if neighbor.GetIsAromatic():
-                    continue
-                # Count attached hydrogens (from explicit + implicit hydrogens).
-                # RDKit has GetTotalNumHs() which sums implicit and explicit hydrogens.
-                h_count = neighbor.GetTotalNumHs()
-                # Check that this carbon has exactly three hydrogens.
-                if h_count == 3:
-                    # Found a sulfur atom bonded to a methyl carbon.
-                    return True, "Found an aliphatic sulfide with at least one methyl group attached to sulfur."
+            # Count heavy (non-hydrogen) neighbors of the carbon.
+            nbr_heavy = [n for n in nbr.GetNeighbors() if n.GetAtomicNum() != 1]
+            # For a methyl carbon, the only heavy neighbor should be the sulfur.
+            if len(nbr_heavy) == 1:
+                return True, "Found an aliphatic sulfide with a methyl group attached to sulfur."
     
     return False, "No suitable aliphatic sulfide with a methyl group attached was found."
-    
+
 # Example usage (uncomment to test):
-# test_smiles = "CSCC(=O)[C@H](O)[C@H](O)COP(O)(O)=O"  # 1-(methylthio)ribulose 5-phosphate
+# test_smiles = "CCSC"  # ethyl methyl sulfide
 # result, reason = is_methyl_sulfide(test_smiles)
 # print(result, reason)
