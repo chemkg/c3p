@@ -3,120 +3,103 @@ Classifies: CHEBI:16749 1-phosphatidyl-1D-myo-inositol
 """
 """
 Classifies: 1-phosphatidyl-1D-myo-inositol
-Definition: A phosphatidylinositol in which the inositol moiety is the 1D-myo isomer 
- (i.e. a cyclohexane ring in which five carbons display a free –OH group while the remaining 
- carbon is substituted with an oxygen that is bound to a phosphate group) and the phosphatidyl unit 
- (diacylglycerol) provides at least two acyl (ester) groups.
+Definition: A phosphatidylinositol in which the inositol moiety is the 1D-myo isomer
+            and the phosphatidyl group is located at its position 1.
+The function is_1_phosphatidyl_1D_myo_inositol takes a SMILES string and returns a boolean
+and a reason for the classification.
 """
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
-from rdkit.Chem import rdMolDescriptors
 
 def is_1_phosphatidyl_1D_myo_inositol(smiles: str):
     """
     Determines whether a molecule (given as a SMILES string) is a 1-phosphatidyl-1D-myo-inositol.
     
-    The function performs two major checks:
-    
-    1. Inositol moiety check:
-       - After parsing and adding explicit hydrogens, each six-membered ring that is composed 
-         entirely of carbon atoms is examined. For a valid 1D-myo inositol, every carbon in 
-         the ring must have exactly one oxygen neighbor (a substituent). Among these 6 oxygens, 
-         exactly one must be bonded to a phosphorus atom (representing the phosphate substituent) 
-         and the other five must be free hydroxyl groups (i.e. each oxygen has at least one attached hydrogen).
-         
-    2. Diacylglycerol (ester) unit check:
-       - Using a SMARTS pattern for ester bonds (C(=O)O[C]), count the acyl groups that are not 
-         part of a phosphate linkage. At least two acyl ester groups must be present.
+    The approach here is to check three structural features:
+    1. The molecule must contain an inositol moiety having the arrangement of hydroxyl groups
+       characteristic of 1D-myo-inositol. (We use a SMARTS pattern that matches a cyclohexane
+       ring bearing six hydroxyl groups with stereochemistry typical for D-myo-inositol.)
+    2. One of the hydroxyl groups (the one corresponding to position 1) must be substituted
+       (acylated) by a phosphate group. In other words, an oxygen of the inositol ring must be
+       directly bonded to a phosphorus atom having the typical P(=O)(O)O fragment.
+    3. In phosphatidylinositols the phosphate group is connected to a diacylglycerol unit;
+       here we search for at least two ester (acyl) groups (i.e. a C(=O)O– fragment not directly
+       linked to P) as a proxy for the acyl chains.
     
     Args:
-        smiles (str): SMILES string of the molecule.
-    
+        smiles (str): SMILES string of the molecule
+
     Returns:
         bool: True if the molecule is classified as 1-phosphatidyl-1D-myo-inositol, False otherwise.
-        str: Explanation for the classification.
+        str: A reason message explaining the classification result.
     """
-    # Parse SMILES string and add explicit hydrogens
+    
+    # Parse the SMILES string to a molecule
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string."
-    mol = Chem.AddHs(mol)
     
-    # --- Part 1: Look for a valid inositol ring ---
-    ring_info = mol.GetRingInfo().AtomRings()
-    valid_inositol_found = False
+    # Define a SMARTS pattern for 1D-myo-inositol.
+    # This pattern covers a cyclohexane ring with a hydroxyl group on each vertex.
+    # The stereochemistry tags in the pattern help target the 1D-myo isomer.
+    inositol_smarts = "O[C@@H]1[C@H](O)[C@@H](O)[C@H](O)[C@@H](O)[C@H]1O"
+    inositol_mol = Chem.MolFromSmarts(inositol_smarts)
+    if inositol_mol is None:
+        return False, "Error in inositol SMARTS pattern."
     
-    # Iterate over all rings of size 6
-    for ring in ring_info:
-        if len(ring) != 6:
-            continue
-        # Check that every atom in this ring is a carbon (atomic number 6)
-        if not all(mol.GetAtomWithIdx(idx).GetAtomicNum() == 6 for idx in ring):
-            continue
-        
-        # For each ring carbon, we expect exactly one substituent oxygen
-        phospho_count = 0  # count of carbons with oxygen attached to phosphorus (phospho substituent)
-        oh_count = 0       # count of carbons with a free –OH (oxygen with at least one hydrogen)
-        valid_ring = True  # assume valid until proven otherwise
-        
-        for idx in ring:
-            atom = mol.GetAtomWithIdx(idx)
-            # Get neighbors not in the ring
-            substituents = [nbr for nbr in atom.GetNeighbors() if nbr.GetIdx() not in ring]
-            # We expect exactly one oxygen substituent on each ring carbon.
-            oxygen_subs = [nbr for nbr in substituents if nbr.GetAtomicNum() == 8]
-            if len(oxygen_subs) != 1:
-                valid_ring = False
+    inositol_matches = mol.GetSubstructMatches(inositol_mol)
+    if not inositol_matches:
+        return False, "No inositol moiety with the expected 1D-myo configuration was found."
+    
+    # Check that at least one of the inositol matches has an oxygen that is connected to a phosphorus.
+    phosphate_attached = False
+    for match in inositol_matches:
+        # In our SMARTS pattern the first atom (index 0) is the oxygen substituent that (in PI)
+        # should be connected to the phosphate.
+        inositol_O_idx = match[0]
+        atom_O = mol.GetAtomWithIdx(inositol_O_idx)
+        # Look at neighbors of this oxygen to see if one is a phosphorus (atomic number 15)
+        for neighbor in atom_O.GetNeighbors():
+            if neighbor.GetAtomicNum() == 15:
+                phosphate_attached = True
                 break
-            # Check the lone oxygen substituent
-            o_atom = oxygen_subs[0]
-            # Determine if this oxygen is bound to phosphorus (i.e. phosphate substituent)
-            attached_to_P = any(neigh.GetAtomicNum() == 15 for neigh in o_atom.GetNeighbors() if neigh.GetIdx() != idx)
-            if attached_to_P:
-                phospho_count += 1
-            else:
-                # For free hydroxyl, check that the oxygen has at least one hydrogen attached.
-                if o_atom.GetTotalNumHs() >= 1:
-                    oh_count += 1
-                else:
-                    valid_ring = False
-                    break
-        # For a valid 1D-myo inositol, we expect exactly 6 oxygen substituents,
-        # exactly one phospho substituent and five free –OH groups.
-        if valid_ring and phospho_count == 1 and oh_count == 5:
-            valid_inositol_found = True
+        if phosphate_attached:
             break
-
-    if not valid_inositol_found:
-        return False, ("No valid inositol moiety with a phosphate substituent at one position was found. "
-                       "Expected a cyclohexane ring with six oxygen substituents (one bound to phosphorus and "
-                       "five as free –OH groups).")
+                
+    if not phosphate_attached:
+        return False, "Inositol moiety is not substituted with a phosphate group at position 1."
     
-    # --- Part 2: Check for the diacylglycerol (ester) unit ---
-    # Define a SMARTS pattern for an ester bond: a carbonyl (C(=O)) linked to an oxygen that is in turn linked to a carbon.
+    # Next, look for ester bonds that represent acyl chains on the diacylglycerol part.
+    # We use a simple SMARTS for an ester bond: a carbonyl (C=O) connected to an oxygen
+    # that is then bound to a carbon.
     ester_smarts = "C(=O)O[C]"
-    ester_query = Chem.MolFromSmarts(ester_smarts)
-    if ester_query is None:
+    ester_mol = Chem.MolFromSmarts(ester_smarts)
+    if ester_mol is None:
         return False, "Error in ester SMARTS pattern."
+    ester_matches = mol.GetSubstructMatches(ester_mol)
     
-    ester_matches = mol.GetSubstructMatches(ester_query)
+    # Filter out ester matches that belong to the phosphate linkage.
+    # We do so by demanding that the oxygen in the ester (atom with index corresponding to 'O' in the pattern)
+    # is not also a neighbor of a phosphorus.
     acyl_count = 0
     for match in ester_matches:
-        # match indices: e.g. match[0] = carbonyl carbon, match[1] = carbonyl oxygen, match[2] = bridging carbon
-        bridging_O = mol.GetAtomWithIdx(match[1])
-        # Exclude this ester if the bridging oxygen is attached to phosphorus (phosphate bond)
-        if any(neigh.GetAtomicNum() == 15 for neigh in bridging_O.GetNeighbors()):
-            continue
-        acyl_count += 1
-        
-    if acyl_count < 2:
-        return False, f"Found {acyl_count} acyl ester group(s); at least 2 are required for the diacylglycerol moiety."
+        # In our pattern, atom indices: 0 is carbonyl C, 1 is carbonyl O, 2 is the bridging O, 3 is next C.
+        bridging_O_idx = match[2]
+        bridging_O = mol.GetAtomWithIdx(bridging_O_idx)
+        bonded_P = any(neigh.GetAtomicNum() == 15 for neigh in bridging_O.GetNeighbors())
+        if not bonded_P:
+            acyl_count += 1
     
-    return True, "Molecule matches the 1-phosphatidyl-1D-myo-inositol structural criteria."
+    if acyl_count < 2:
+        return False, f"Found {acyl_count} acyl ester group(s); at least 2 are expected for a diacylglycerol unit."
+    
+    # If all checks pass, we classify the molecule as a 1-phosphatidyl-1D-myo-inositol.
+    return True, "Molecule matches 1-phosphatidyl-1D-myo-inositol structural criteria."
 
-# (Optional) Testing the function on a known example:
+# (Optional) Below lines could be used for testing.
 if __name__ == "__main__":
+    # Example test (one of the provided valid SMILES)
     test_smiles = "[C@](COC(=O)CCCCCCC/C=C\\C/C=C\\CCCC)(COP(O[C@H]1C(C(C([C@H](C1O)O)O)O)O)(O)=O)(OC(=O)CCCCC/C=C\\C/C=C\\C/C=C\\C/C=C\\CCCCC)[H]"
     result, reason = is_1_phosphatidyl_1D_myo_inositol(test_smiles)
     print("Result:", result)
