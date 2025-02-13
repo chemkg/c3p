@@ -6,11 +6,11 @@ Classifies: Phenyl acetates
 Definition: An acetate ester obtained by formal condensation of the carboxy group of acetic acid 
 with the hydroxy group of any phenol.
 Improvement strategy:
-  1. Use a SMARTS pattern that exactly requires the acetate to be CH3C(=O)–.
-     (That is, the substructure “cOC(=O)[CH3]” which requires the ester oxygen to be directly bound to an aromatic carbon.)
-  2. Reject molecules that are far too large to be “simple” phenyl acetates (here, we reject if the molecular weight > 350 Da).
-  
-Note: This heuristic may not be perfect – it sacrifices some recall in order to improve precision.
+  1. Use a SMARTS pattern that exactly requires the acetate ester part as CH3C(=O)–.
+  2. Check that the oxygen is directly attached to an aromatic carbon that belongs to at least one
+     six-membered ring which is a simple benzene ring (i.e. all atoms in that ring are aromatic carbons).
+  3. Reject molecules that are likely too complex (here, with molecular weight >350 Da) to be considered
+     simple phenyl acetates.
 """
 
 from rdkit import Chem
@@ -19,10 +19,12 @@ from rdkit.Chem import rdMolDescriptors
 def is_phenyl_acetates(smiles: str):
     """
     Determines if a molecule is a phenyl acetate based on its SMILES string.
-    A phenyl acetate is an acetate ester (CH3C(=O)–O–) where the ester oxygen is attached directly
-    to an aromatic (phenol) ring. To reduce false positives (e.g. long‐chain esters, or complex molecules
-    with acetate groups on larger scaffolds), we also require that the overall molecular weight is not too high.
-    
+    A phenyl acetate is defined as an acetate ester (CH3C(=O)–O–) where the ester oxygen is attached
+    directly to a phenol-like (aromatic) ring. The method uses a strict SMARTS to find a CH3C(=O) group
+    connected by an oxygen to an aromatic carbon, then checks that this aromatic carbon belongs to 
+    at least one 6-membered benzene ring. Additionally, the overall weight must be within range for a 
+    simple phenyl acetate (here set as <=350 Da).
+
     Args:
         smiles (str): SMILES string of the molecule.
     
@@ -34,32 +36,38 @@ def is_phenyl_acetates(smiles: str):
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-
-    # Calculate molecular weight – most simple phenyl acetates are relatively light (<350 Da).
+    
+    # Calculate the exact molecular weight; reject if too heavy for a "simple" phenyl acetate.
     mol_wt = rdMolDescriptors.CalcExactMolWt(mol)
     if mol_wt > 350:
         return False, f"Molecular weight {mol_wt:.2f} too high for a simple phenyl acetate"
-
-    # Define a strict SMARTS pattern for a phenyl acetate.
-    # This pattern forces the acyl group to be exactly CH3C(=O) and requires that the oxygen is directly attached
-    # to an aromatic carbon (represented by lowercase 'c').
+    
+    # Define a SMARTS pattern for a phenyl acetate group: the pattern enforces:
+    # - an aromatic carbon (c) bound to an oxygen (O)
+    # - that oxygen is bound to a carbonyl carbon (C(=O)) which in turn is bound to a CH3 group.
     acetate_pattern = Chem.MolFromSmarts("cOC(=O)[CH3]")
     if acetate_pattern is None:
         return False, "Error in SMARTS pattern"
-
-    # Look for the phenyl acetate substructure in the molecule.
-    if mol.HasSubstructMatch(acetate_pattern):
-        return True, "Found phenyl acetate group (acetate ester directly attached to an aromatic ring)"
     
-    return False, "No phenyl acetate substructure found"
+    # Find all substructure matches for the acetate pattern.
+    matches = mol.GetSubstructMatches(acetate_pattern)
+    if not matches:
+        return False, "No phenyl acetate substructure found"
 
-# Example test cases (commented out):
-# test_smiles = [
-#     "COc1cc(ccc1OC(C)=O)C(C)=O",  # 4-acetyl-2-methoxyphenyl acetate (TP)
-#     "CC(=O)Oc1ccc(\C=C\C=O)cc1",   # 4-acetoxy cinnamaldehyde (TP)
-#     "N1C=C(C2=C1C=CC(=C2)Br)OC(CCCCCCCCC)=O", # 5-bromo-3-indolyl decanoate (FP)
-#     "O(C1=C(OC)C=C(OC)C=C1OC)C(=O)C",         # 2,4,6-Trimethoxyphenyl acetate (FP)
-# ]
-# for s in test_smiles:
-#     verdict, reason = is_phenyl_acetates(s)
-#     print(f"SMILES: {s}\n Verdict: {verdict}, Reason: {reason}\n")
+    # Get ring information for checking the aromatic benzene ring
+    ring_info = mol.GetRingInfo().AtomRings()
+
+    # For each match, verify that the aromatic carbon (first atom in the match) is part of a 6-membered ring
+    # composed entirely of aromatic carbons.
+    for match in matches:
+        aromatic_atom_idx = match[0]  # this should be the aromatic carbon attached to the oxygen
+        # Check over all rings that contain this atom
+        for ring in ring_info:
+            if aromatic_atom_idx in ring and len(ring) == 6:
+                # Verify that all atoms in the ring are aromatic carbons (atomic number 6)
+                if all(mol.GetAtomWithIdx(idx).GetAtomicNum() == 6 and mol.GetAtomWithIdx(idx).GetIsAromatic() 
+                       for idx in ring):
+                    return True, "Found phenyl acetate group (acetate ester directly attached to a benzene ring)"
+    
+    # If none of the acetate pattern matches are connected to a simple benzene ring, reject it.
+    return False, "Phenyl acetate substructure found, but not attached to a simple benzene ring"
