@@ -8,46 +8,45 @@ the C10 skeleton of the parent monoterpene has been rearranged or modified by th
 of one or more skeletal atoms (generally methyl groups).
 
 Heuristic:
-    - Compute the Bemis–Murcko scaffold of the molecule which represents the core framework.
+    - Extract the Bemis–Murcko scaffold of the molecule using MurckoScaffold.GetScaffoldForMol.
     - Count the number of carbon atoms in the scaffold.
-    - If the carbon count is in the approximate range of 7–12, then we consider it having a 
-      monoterpene-derived core.
-Note: This heuristic may not be perfect given the high structural diversity of monoterpenoids.
+    - If the count is in the range of 7–12, assume the molecule has a monoterpenoid-like core.
 """
 
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
+# Import the MurckoScaffold module to extract the scaffold
+from rdkit.Chem.Scaffolds import MurckoScaffold
 
 def is_monoterpenoid(smiles: str):
     """
     Determines if a molecule is a monoterpenoid based on its SMILES string.
 
-    The function extracts the molecule's Bemis–Murcko scaffold and counts the number of carbon atoms.
-    If the scaffold contains between 7 and 12 carbon atoms (allowing for rearrangement or slight loss 
-    of carbons in modified monoterpenes), the molecule is considered to have a monoterpenoid core.
+    The function extracts the molecule's Bemis–Murcko scaffold (core framework) using MurckoScaffold,
+    then counts the number of carbon atoms. If the count is between 7 and 12, the molecule is considered
+    to derive from a monoterpene precursor (C10, allowing for rearrangement or loss of minor substituents).
 
     Args:
-        smiles (str): SMILES string of the molecule
+        smiles (str): SMILES string of the molecule.
 
     Returns:
-        bool: True if the molecule is consistent with a monoterpenoid, False otherwise
-        str: Reason for the classification decision
+        bool: True if the molecule is consistent with a monoterpenoid, False otherwise.
+        str: Reason for the classification decision.
     """
-    # Parse the SMILES string into an RDKit molecule
+    # Parse the SMILES string
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
 
-    # Extract the Bemis-Murcko scaffold of the molecule which usually represents the core structure.
-    scaffold = rdMolDescriptors.GetScaffoldForMol(mol)
+    # Extract the Bemis–Murcko scaffold for the molecule using MurckoScaffold
+    scaffold = MurckoScaffold.GetScaffoldForMol(mol)
     if scaffold is None:
         return False, "Could not extract scaffold from molecule"
 
     # Count the number of carbon atoms in the scaffold
     c_count = sum(1 for atom in scaffold.GetAtoms() if atom.GetAtomicNum() == 6)
 
-    # For a monoterpenoid derived from a C10 precursor (allowing for slight modifications),
-    # we accept a range of carbon counts in the scaffold between 7 and 12.
+    # Use a heuristic range (7 to 12 carbons) for monoterpenoid cores
     if 7 <= c_count <= 12:
         return True, f"Scaffold has {c_count} carbons, consistent with a monoterpenoid core"
     else:
