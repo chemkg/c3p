@@ -3,16 +3,7 @@ Classifies: CHEBI:35910 2-oxo monocarboxylic acid
 """
 """
 Classifies: 2-oxo monocarboxylic acid
-Definition: Any monocarboxylic acid having a 2-oxo substituent on the alpha carbon.
-Improved criteria:
-  1. Identify a carboxylic acid group in a tolerant way (allow [OX2H] or [OX2-]).
-  2. Require that exactly one acid group is present.
-  3. From the acid carbon, get non‐oxygen neighbors (alpha carbons). For each candidate,
-     check that it has a double bond to an oxygen (that is not the carboxyl oxygen)
-     and that its heavy atom connectivity is consistent with a simple 2‑oxo motif (exactly 3 neighbors).
-     
-Note: This ad hoc method may not capture every nuance of challenging natural product structures,
-but it attempts to reduce both false positives and false negatives.
+Definition: Any monocarboxylic acid having a 2-oxo substituent.
 """
 
 from rdkit import Chem
@@ -20,94 +11,63 @@ from rdkit import Chem
 def is_2_oxo_monocarboxylic_acid(smiles: str):
     """
     Determines if a molecule is a 2-oxo monocarboxylic acid based on its SMILES string.
-
-    The criteria are:
-      1. The molecule must have exactly one carboxylic acid group.
-         (The acid group is identified by [CX3](=O)[OX2H,OX2-]).
-      2. The carboxyl carbon must be attached via a single bond to an alpha carbon.
-      3. That alpha carbon (i.e. the one directly bonded to the acid carbon) must have a 
-         keto (C=O) group attached. In order to reduce mis‐classifications, we also check that
-         the alpha carbon is not “over‐substituted” (i.e. it exactly connects to three heavy atoms:
-         the acid carbon, the keto oxygen and one other substituent).
+    This requires:
+      1. The molecule to have exactly one carboxylic acid group (-C(=O)O[H]).
+      2. The carbon attached to the carboxyl carbon (the alpha carbon) must contain a C=O bond,
+         representing the "2-oxo" substituent.
 
     Args:
         smiles (str): SMILES string of the molecule
 
     Returns:
-        bool: True if the molecule is classified as a 2-oxo monocarboxylic acid, False otherwise.
-        str: Explanation of the reasoning.
+        bool: True if the molecule is a 2-oxo monocarboxylic acid, False otherwise.
+        str: Reason for the classification decision.
     """
-    # Parse the SMILES string to an RDKit molecule
+    # Parse the SMILES string into a molecule
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-    
+
     # Define a SMARTS pattern for a carboxylic acid group.
-    # This pattern allows for either a hydroxyl (-OH) or a deprotonated acid (-O^-)
-    acid_pattern = Chem.MolFromSmarts("[CX3](=O)[OX2H,OX2-]")
+    # This pattern matches a carbon (sp2) doubly bonded to oxygen and single bonded to an -OH group.
+    acid_pattern = Chem.MolFromSmarts("[CX3](=O)[OX2H]")
     acid_matches = mol.GetSubstructMatches(acid_pattern)
     
+    # Ensure that exactly one carboxylic acid group is present (monocarboxylic acid)
     if len(acid_matches) == 0:
         return False, "No carboxylic acid group found"
     if len(acid_matches) > 1:
         return False, "More than one carboxylic acid group found; not a monocarboxylic acid"
-    
-    # Get the acid match: by our SMARTS the first atom (index 0) is the carboxyl carbon.
+
+    # The match returns a tuple of atom indices matching the pattern.
+    # According to our SMARTS, index 0 is the carboxyl carbon.
     acid_carbon_idx = acid_matches[0][0]
     acid_carbon = mol.GetAtomWithIdx(acid_carbon_idx)
-    
-    # Find the candidate alpha carbon as any neighbor that is not oxygen.
-    candidate_alpha_atoms = []
+
+    # Identify the alpha carbon: it should be a neighbor of the carboxyl carbon that is not oxygen.
+    alpha_atom = None
     for neighbor in acid_carbon.GetNeighbors():
-        if neighbor.GetAtomicNum() != 8:  # skip oxygens (part of the acid group)
-            candidate_alpha_atoms.append(neighbor)
-    
-    if not candidate_alpha_atoms:
-        return False, "No alpha carbon (non-oxygen neighbor) found attached to the carboxyl group"
-    
-    # For each candidate alpha atom, attempt to confirm it carries the 2-oxo (ketone) substituent.
-    for alpha_atom in candidate_alpha_atoms:
-        # Check heavy atom connectivity of alpha: expect exactly 3 neighbors
-        heavy_neighbors = [nbr for nbr in alpha_atom.GetNeighbors() if nbr.GetAtomicNum() > 1]
-        # Our expectation: one bond is to the acid carbon, one should be the keto oxygen and one other group.
-        if len(heavy_neighbors) != 3:
-            # if not exactly three, skip this candidate (might be part of complex ring systems)
+        # Skip if the neighbor is oxygen (carboxyl oxygens)
+        if neighbor.GetAtomicNum() == 8:
             continue
+        alpha_atom = neighbor
+        break
+    if alpha_atom is None:
+        return False, "No suitable alpha carbon found attached to the carboxyl group"
 
-        # Now check that one of the bonds from alpha_atom is a C=O bond (not the acid bond).
-        has_oxo = False
-        for bond in alpha_atom.GetBonds():
-            # We want a double bond to oxygen.
-            if bond.GetBondType() == Chem.rdchem.BondType.DOUBLE:
-                other_atom = bond.GetOtherAtom(alpha_atom)
-                # skip if this oxygen is already connected to the acid carbon 
-                # (i.e. one of the acid group's oxygens)
-                if other_atom.GetAtomicNum() == 8:
-                    # We double-check: if this oxygen is also bonded to the acid carbon then it might be part of the acid group.
-                    # So we exclude it if its neighbor list includes our acid carbon.
-                    if acid_carbon_idx in [nbr.GetIdx() for nbr in other_atom.GetNeighbors()]:
-                        continue
-                    # Otherwise, this double bond qualifies as the 2-oxo substituent.
-                    has_oxo = True
-                    break
-        
-        if has_oxo:
-            return True, "Found a monocarboxylic acid with a 2-oxo substituent on the alpha carbon"
-    
-    # If no candidate alpha atom meets the criteria, classification fails.
-    return False, "No suitable alpha carbon with a C=O substituent (2-oxo group) found on the acid group"
+    # Check that the alpha carbon has a carbonyl substituent (C=O).
+    # This is done by looking through the bonds of the alpha carbon to see if it is double bonded to an oxygen.
+    has_oxo = False
+    for bond in alpha_atom.GetBonds():
+        # A double bond to oxygen qualifies as the 2-oxo group
+        if bond.GetBondType() == Chem.rdchem.BondType.DOUBLE:
+            # Identify the neighboring atom in this bond
+            other_atom = bond.GetOtherAtom(alpha_atom)
+            if other_atom.GetAtomicNum() == 8:
+                has_oxo = True
+                break
 
-# Example usage:
-if __name__ == "__main__":
-    # List of example SMILES (both from true positives and edge cases)
-    examples = [
-        "C[C@H](C(=O)C(O)=O)c1c[nH]c2ccccc12",  # true positive
-        "Nc1ccc(O)c(\\C=C\\C(=O)C(O)=O)c1",         # true positive
-        "F[C@H]1C[C@]2([C@]3([C@@]([C@H]([C@@H](C3)C)C(=O)C(O)=O)(C[C@H](O)[C@@]2([C@@]4(C1=CC(=O)C=C4)C)[H])C)[H])[H]",  # false positive: fluocortin
-        "OC(=O)C(CCCCN)=O",                         # true positive: 6-amino-2-oxohexanoic acid
-        "CC(=O)C(O)=O",                            # true positive: pyruvic acid
-    ]
-    
-    for sm in examples:
-        result, reason = is_2_oxo_monocarboxylic_acid(sm)
-        print(f"SMILES: {sm}\nResult: {result}\nReason: {reason}\n{'-'*40}")
+    if not has_oxo:
+        return False, "No 2-oxo substituent found on the alpha carbon of the carboxyl group"
+
+    return True, "Found a monocarboxylic acid with a 2-oxo substituent on the alpha carbon"
