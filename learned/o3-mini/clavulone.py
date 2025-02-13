@@ -2,40 +2,27 @@
 Classifies: CHEBI:36092 clavulone
 """
 """
-Classifies: clavulone family – esterified prostanoids from marine corals.
+Classifies: clavulone family – esterified prostanoids from marine corals
 Definition: A class of esterified prostanoids obtained from marine corals.
-Heuristic criteria (improved):
-  • Molecule must be parseable from SMILES.
-  • The overall molecular weight should be relatively high (≥300 Da)
-    and the molecule should have at least 15 carbon atoms.
-  • It must contain a non‐aromatic cyclopentenone ring.
-      – If the five‐membered ring has an in‐ring carbonyl conjugated to a C=C bond
-        (or if the carbonyl is exocyclic), we regard that as the “enone” prostanoid core.
-      – For epoxidized derivatives (where the double bond is replaced by an epoxide),
-        we relax the requirement on the C=C bond if a ketone functionality is present.
-  • It must contain at least one ester group (–O–C(=O)–).
-  • To reduce false positives we also require that the total number of rings is not too high (≤ 3).
-Note: This heuristic won’t perfectly capture every clavulone, but should help improve the F1 score.
+Criteria (heuristic):
+  • Must contain a cyclopentenone ring (a five-membered ring with a carbonyl group and at least one C=C double bond).
+  • Must contain at least one ester group (–O–C(=O)–).
+Note: Due to the structural complexity of these natural products, the SMARTS patterns here are only an approximation.
 """
 
 from rdkit import Chem
+from rdkit.Chem import AllChem
 from rdkit.Chem import rdMolDescriptors
 
 def is_clavulone(smiles: str):
     """
-    Determines if a molecule is a clavulone (esterified prostanoid from marine corals)
-    based on its SMILES string and heuristic structural features.
+    Determines if a molecule is a clavulone (an esterified prostanoid from marine corals)
+    based on its SMILES string.
     
-    Criteria:
-      1. SMILES must be parsed.
-      2. The molecule should be large enough: MW >=300 Da and at least 15 carbon atoms.
-      3. The molecule should contain a non‐aromatic cyclopentenone ring. We try two SMARTS:
-             a. One that finds a five‐membered ring containing an in‐ring carbonyl and a C=C bond.
-             b. One that finds a five‐membered ring with a substituent carbonyl (exocyclic).
-         If neither matches, we (if an epoxide group is present anywhere)
-         iterate over five‐membered non‐aromatic rings and look for at least one ketone bond.
-      4. The molecule must have at least one ester group.
-      5. The total number of rings is limited (≤ 3).
+    Checks (heuristically):
+    1. The molecule can be parsed.
+    2. It contains a cyclopentenone ring (5-membered ring with one ketone and at least one C=C).
+    3. It contains at least one ester group.
     
     Args:
         smiles (str): SMILES string of the molecule.
@@ -44,78 +31,38 @@ def is_clavulone(smiles: str):
         bool: True if the molecule is classified as a clavulone, False otherwise.
         str: Reason for the classification decision.
     """
+    # Parse SMILES string
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-    
-    # Check global size: molecular weight and carbon count.
-    mol_wt = rdMolDescriptors.CalcExactMolWt(mol)
-    if mol_wt < 300:
-        return False, f"Molecular weight too low ({mol_wt:.1f} Da) for a clavulone"
-    n_carbons = sum(1 for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6)
-    if n_carbons < 15:
-        return False, f"Too few carbons ({n_carbons}) for a typical clavulone"
-    
-    # Prepare SMARTS patterns for cyclopentenone:
-    # Pattern 1: five‐membered non‐aromatic ring with an in‐ring ketone and a C=C bond.
-    cp_pattern1 = Chem.MolFromSmarts("[C;r5;!a]1[C;r5;!a]=[C;r5;!a][C;r5;!a](=O)[C;r5;!a]1")
-    # Pattern 2: five‐membered non‐aromatic ring where the carbonyl is exocyclic
-    cp_pattern2 = Chem.MolFromSmarts("[C;r5;!a]1[C;r5;!a]=[C;r5;!a]([C;r5;!a]1)C(=O)")
-    
-    cyclopentenone_found = False
-    if mol.HasSubstructMatch(cp_pattern1) or mol.HasSubstructMatch(cp_pattern2):
-        cyclopentenone_found = True
-    else:
-        # Sometimes the enone is altered by epoxidation.
-        # If an epoxide is present anywhere (SMARTS for epoxide ring: three‐membered ring with oxygen),
-        epoxide_pattern = Chem.MolFromSmarts("[OX2r3]")
-        has_epoxide = mol.HasSubstructMatch(epoxide_pattern)
-        # Then attempt a manual search: iterate over every five‐membered non‐aromatic ring,
-        # and check if at least one carbon in the ring has a double bond to oxygen (ketone)
-        ring_info = mol.GetRingInfo().AtomRings()
-        for ring in ring_info:
-            if len(ring) != 5:
-                continue
-            if any(mol.GetAtomWithIdx(idx).GetIsAromatic() for idx in ring):
-                continue
-            ketone = False
-            for atom_idx in ring:
-                atom = mol.GetAtomWithIdx(atom_idx)
-                # Only carbons can form the needed ketone
-                if atom.GetAtomicNum() != 6:
-                    continue
-                # Look for a double bond to oxygen where the oxygen is not part of the ring.
-                for bond in atom.GetBonds():
-                    if bond.GetBondTypeAsDouble() == 2.0:
-                        nbr = bond.GetOtherAtom(atom)
-                        if nbr.GetAtomicNum() == 8 and nbr.GetIdx() not in ring:
-                            ketone = True
-                            break
-                if ketone:
-                    break
-            if ketone and has_epoxide:
-                cyclopentenone_found = True
-                break
 
-    if not cyclopentenone_found:
-         return False, "No cyclopentenone ring found (required prostanoid core missing)"
-    
-    # Check for at least one ester group (pattern: oxygen single-bonded to carbon that is double-bonded to oxygen).
+    # Define a SMARTS for a cyclopentenone ring.
+    # This pattern looks for a five-membered ring of carbons (R5) where one position is a carbonyl (C=O)
+    # and at least one double bond is present.
+    cyclopentenone_smarts = "[#6;R5]1[#6;R5]=[#6;R5][#6;R5](=O)[#6;R5]1"
+    cyclopentenone_pattern = Chem.MolFromSmarts(cyclopentenone_smarts)
+    if not mol.HasSubstructMatch(cyclopentenone_pattern):
+        return False, "No cyclopentenone ring found (required prostanoid core missing)"
+
+    # Define a SMARTS for an ester group.
+    # This pattern matches an oxygen atom connected to a carbonyl group that in turn is bound to any carbon.
     ester_smarts = "[OX2][CX3](=O)[#6]"
     ester_pattern = Chem.MolFromSmarts(ester_smarts)
-    if not mol.HasSubstructMatch(ester_pattern):
-         return False, "No ester group found (molecule is not esterified)"
-    
-    # Limit the total number of rings to reduce false positives.
-    total_rings = mol.GetRingInfo().NumRings()
-    if total_rings > 3:
-         return False, f"Too many rings ({total_rings}) for a typical clavulone"
-    
-    return True, "Molecule contains a valid cyclopentenone core and ester group consistent with clavulones"
+    ester_matches = mol.GetSubstructMatches(ester_pattern)
+    if len(ester_matches) < 1:
+        return False, "No ester group found (molecule is not esterified)"
 
-# Example usage (you may add more tests):
+    # (Optional) Additional checks may be added. For example, one could check the number of rings,
+    # the presence of long alkyl chains, or the molecular weight to further restrict the classification.
+    # Here we check that the molecular weight is in a plausible range (>300 Da) for these natural products.
+    mol_wt = rdMolDescriptors.CalcExactMolWt(mol)
+    if mol_wt < 300:
+        return False, f"Molecular weight too low ({mol_wt:.1f} Da) for a typical clavulone"
+
+    return True, "Molecule contains a cyclopentenone ring and at least one ester group consistent with clavulones"
+
+# Example of how one might call the function:
 if __name__ == "__main__":
-    # This is one example (7-Acetoxy-7,8-dihydrobromovulone II)
     test_smiles = "BrC1=C[C@@](O)([C@@]([C@@H](OC(=O)C)/C=C/CCCC(OC)=O)(C1=O)[H])C/C=C\\CCCCC"
     result, reason = is_clavulone(test_smiles)
     print("Result:", result)
