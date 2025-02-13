@@ -2,21 +2,18 @@
 Classifies: CHEBI:75874 para-terphenyl
 """
 """
-Classifies: A ring assembly based on a 1,4-diphenylbenzene skeleton and its substituted derivatives thereof – para-terphenyl.
+Classifies: Para-terphenyl class.
+Definition: A ring assembly based on a 1,4-diphenylbenzene skeleton and its substituted derivatives.
+That is, a central benzene ring substituted (in non-fused fashion) with two benzene rings at para positions.
 """
 from rdkit import Chem
 
 def is_para_terphenyl(smiles: str):
     """
     Determines if a molecule belongs to the para-terphenyl class based on its SMILES string.
-    A para-terphenyl is defined as a ring assembly with a 1,4-diphenylbenzene skeleton 
-    (i.e. a central benzene ring substituted at opposite (para) positions with two other benzene rings)
-    possibly with additional substituents.
-    
-    This implementation first collects all six-membered aromatic rings. Then, for each pair of candidate benzene rings,
-    it determines if they are connected via a single (non-fused) bond (i.e. they share exactly one atom).
-    Finally, for each benzene ring we check if there are two distinct external connections at positions that are para 
-    relative (separated by three atoms along the ring order).
+    The criteria is that one of the benzene rings (six-membered aromatic rings) in the molecule
+    must be substituted at two para positions with two distinct benzene rings
+    (with which it shares exactly one atom via a single bond). This corresponds to a 1,4-diphenylbenzene core.
     
     Args:
         smiles (str): SMILES string of the molecule.
@@ -25,104 +22,82 @@ def is_para_terphenyl(smiles: str):
         bool: True if the molecule is classified as para-terphenyl, False otherwise.
         str: Reason for the classification.
     """
-    
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-
-    # Retrieve ring information.
-    ri = mol.GetRingInfo()
-    atom_rings = ri.AtomRings()
     
-    # Collect candidate benzene rings: six atoms, all aromatic.
-    benzene_rings = []  # list of tuples of atom indices
+    # Retrieve ring information.
+    ring_info = mol.GetRingInfo()
+    atom_rings = ring_info.AtomRings()
+    
+    # Collect candidate benzene (six-membered aromatic) rings.
+    benzene_rings = []
     for ring in atom_rings:
         if len(ring) == 6 and all(mol.GetAtomWithIdx(idx).GetIsAromatic() for idx in ring):
             benzene_rings.append(ring)
     
     if len(benzene_rings) < 3:
-        return False, "Less than three aromatic six-membered rings detected. p-Terphenyl requires a 1,4-diphenylbenzene core."
+        return False, "Fewer than three benzene rings detected. A para-terphenyl core requires a central benzene and two peripheral benzene rings."
     
-    # For each candidate benzene ring, we will record external connections.
-    # A connection is defined when an atom in one benzene ring is bonded via a single bond to an atom in a different benzene ring,
-    # and the two rings share exactly one atom overall (so they are not fused).
-    # We'll store for each candidate central ring a list of tuples:
-    #   (pos, other_ring_index, atom idx in other ring)
-    # where 'pos' is the index (position) of the atom within the ring (according to the ring ordering) that connects externally.
-    connections = {i: [] for i in range(len(benzene_rings))}
-    
-    # Loop over each pair of candidate rings. To avoid double‐counting, we compare each pair only once.
-    for i in range(len(benzene_rings)):
-        ring_i = benzene_rings[i]
-        set_i = set(ring_i)
-        for j in range(len(benzene_rings)):
-            if i == j:
-                continue
-            ring_j = benzene_rings[j]
-            set_j = set(ring_j)
-            # We want to check if ring_i and ring_j are connected via exactly one common atom.
-            common = set_i.intersection(set_j)
-            if len(common) != 1:
-                continue  # skip if fused (more than one) or not connected at all
-            common_atom = list(common)[0]
-            # Now find the bond that links the two rings.
-            # In ring_i, the connection atom (common_atom) might be bonded to an atom in ring_j;
-            # we verify that at least one bond from common_atom connects to an atom that is in ring_j but not in ring_i except the common atom itself.
-            atom_i = mol.GetAtomWithIdx(common_atom)
-            found = False
-            for bond in atom_i.GetBonds():
-                # Look for a bond that connects an atom inside ring_i to an atom inside ring_j.
-                a1 = bond.GetBeginAtom()
-                a2 = bond.GetEndAtom()
-                idx1, idx2 = a1.GetIdx(), a2.GetIdx()
-                if (idx1 in set_i and idx2 in set_j and idx1 not in set_j) or (idx2 in set_i and idx1 in set_j and idx2 not in set_i):
-                    # Verify that the bond is a single bond (the aromatic bond type in RDKit is often SINGLE with an aromatic flag).
-                    if bond.GetBondType() == Chem.rdchem.BondType.SINGLE or bond.GetIsAromatic():
-                        found = True
-                        break
-            # If found, record the connection for ring_i.
-            if found:
-                # In ring_i, we want to record which position corresponds to the connection.
-                # The connection is at the common atom.
-                try:
-                    pos = ring_i.index(common_atom)
-                    # Record this connection if not already recorded from ring_i to ring_j.
-                    if not any(x[1] == j for x in connections[i]):
-                        connections[i].append((pos, j, common_atom))
-                    # Also record the reverse connection for ring_j.
-                    pos_j = ring_j.index(common_atom)
-                    if not any(x[1] == i for x in connections[j]):
-                        connections[j].append((pos_j, i, common_atom))
-                except Exception:
-                    pass
-
-    # Now search for a candidate central ring that has connections to at least 2 distinct other rings
-    # and where the connection positions are in a para (i.e. 1,4-) relationship.
-    for i, conn_list in connections.items():
-        if len(conn_list) < 2:
+    # For each candidate benzene ring, treat it as the potential central ring.
+    # We want to see if it has two attachments (via a single non-fused bond) to two other benzene rings,
+    # and that these attachments occur at para positions (opposite vertices of the ring).
+    for central_ring in benzene_rings:
+        # For clarity, we assume the order provided in the ring (central_ring) is the ring ordering.
+        connections = []  # list of tuples: (position_index, peripheral_ring index)
+        # Loop over each atom (by order) in the central ring
+        for pos, atom_idx in enumerate(central_ring):
+            atom = mol.GetAtomWithIdx(atom_idx)
+            # Look at each neighbor that is NOT in the central ring.
+            for nb in atom.GetNeighbors():
+                nb_idx = nb.GetIdx()
+                if nb_idx in central_ring:
+                    continue  # skip neighbors that are in the central ring itself
+                # For every benzene ring candidate (peripheral candidate), check if nb is one of its atoms.
+                for per_idx, per_ring in enumerate(benzene_rings):
+                    # We do not want to consider the central ring itself as peripheral.
+                    if per_ring == central_ring:
+                        continue
+                    # Check if the peripheral ring and the central ring share exactly one atom.
+                    # (This avoids fused systems.)
+                    common = set(central_ring).intersection(set(per_ring))
+                    if len(common) != 1:
+                        continue
+                    # Check that the bond from the central atom to the neighbor is a single (or aromatic) bond.
+                    for bond in mol.GetAtomWithIdx(atom_idx).GetBonds():
+                        if bond.GetOtherAtom(atom).GetIdx() == nb_idx:
+                            if bond.GetBondType() == Chem.rdchem.BondType.SINGLE or bond.GetIsAromatic():
+                                # We found an attachment from the central ring (at position pos) to a peripheral benzene ring.
+                                # Record the peripheral ring id (we use its index in benzene_rings to differentiate).
+                                connections.append((pos, per_idx))
+                            break
+        # Now, in our central ring candidate, we require at least two distinct attachments.
+        # Moreover the positions of attachment must be para relative; for a benzene ring, para positions 
+        # are separated by 3 edges (in a 6-membered ring, the minimum of |i-j| and 6-|i-j| should be 3).
+        if len(connections) < 2:
             continue
-        # We now examine connection positions on ring i.
-        # Sort the positions (the order in ring_i as given by the ring ordering)
-        positions = sorted([pos for pos, other_idx, atm in conn_list])
-        # Check if any two positions are separated by 3 (or equivalently, 6-3 = 3) modulo 6.
-        for a in range(len(positions)):
-            for b in range(a+1, len(positions)):
-                diff = abs(positions[b] - positions[a])
+        # Check each distinct pair among the connections.
+        for i in range(len(connections)):
+            for j in range(i+1, len(connections)):
+                pos_i, per_id_i = connections[i]
+                pos_j, per_id_j = connections[j]
+                # They must be attached to two distinct benzene rings.
+                if per_id_i == per_id_j:
+                    continue
+                # Compute circular distance on a six-membered ring.
+                diff = abs(pos_i - pos_j)
                 circ_dist = min(diff, 6 - diff)
                 if circ_dist == 3:
-                    # Also confirm that the two connections come from distinct outer rings.
-                    outer1 = conn_list[a][1]
-                    outer2 = conn_list[b][1]
-                    if outer1 != outer2:
-                        return True, "Para-terphenyl core found: central benzene ring with two para-connected benzene rings."
+                    return True, "Para-terphenyl core found: central benzene ring with two para-connected benzene rings."
+                    
     return False, "Para-terphenyl core not found in the molecule."
 
 # Debug/test section (can be removed or commented out in production)
 if __name__ == "__main__":
-    # Some test SMILES (one from true positives and one from a false positive shown above)
-    test_smiles_true = "COc1cc(-c2ccccc2)c(OC)c(O)c1-c1ccc(O)c(O)c1"  # 4''-dehydro-3-hydroxyterphenyllin
-    test_smiles_false = "COC1=CC(=CC(=C1)C2=CC3=C(C=C(C=C3)OCC(=O)N)OC2=O)OC"  # a false positive example
-    res_true, reason_true = is_para_terphenyl(test_smiles_true)
-    res_false, reason_false = is_para_terphenyl(test_smiles_false)
-    print("True test:", res_true, reason_true)
-    print("False test:", res_false, reason_false)
+    # Some test SMILES strings:
+    test_smiles_true = "c1ccc(cc1)-c2ccc(cc2)-c3ccccc3"  # Basic 1,4-diphenylbenzene example.
+    test_smiles_false = "c1ccccc1"  # Just benzene.
+    res_t, reason_t = is_para_terphenyl(test_smiles_true)
+    res_f, reason_f = is_para_terphenyl(test_smiles_false)
+    print("Test true:", res_t, reason_t)
+    print("Test false:", res_f, reason_f)
