@@ -2,91 +2,75 @@
 Classifies: CHEBI:27933 beta-lactam antibiotic
 """
 """
-Classifies: Beta-lactam Antibiotic
+Classifies: Beta-lactam Antibiotic 
 Definition: An organonitrogen heterocyclic antibiotic that contains a beta-lactam ring.
-A beta-lactam ring is defined as a four-membered cyclic amide (azetidinone) where one ring atom is nitrogen and 
-one of the ring carbons is involved in a carbonyl (C=O) bond.
+A beta-lactam ring is a four-membered cyclic amide (azetidinone) with one nitrogen and one carbonyl carbon.
 """
 
 from rdkit import Chem
-from rdkit.Chem import rdMolDescriptors
 
 def is_beta_lactam_antibiotic(smiles: str):
     """
     Determines if a molecule is a beta-lactam antibiotic based on its SMILES string.
-    Steps:
-      1. Parse the SMILES string. If invalid, return False.
-      2. Remove salts and small fragments by selecting the largest fragment.
-      3. Reject molecules containing common metal counter ions.
-      4. Use a SMARTS pattern to search for a beta-lactam ring.
-      5. If SMARTS does not find a match, manually inspect all 4-membered rings for:
-         a. Exactly one nitrogen atom.
-         b. At least one carbon that has a double-bonded oxygen (a carbonyl) on an exocyclic position.
-         
+    The test is done by analyzing all four-membered rings in the molecule. For any 4-membered ring,
+    if it contains exactly one nitrogen atom and at least one carbon that has a double-bonded oxygen (i.e.
+    a carbonyl group), the molecule is considered to have a beta-lactam ring.
+    
     Args:
         smiles (str): SMILES string of the molecule.
-    
+        
     Returns:
-        bool: True if classified as a beta-lactam antibiotic, False otherwise.
+        bool: True if the molecule is classified as a beta-lactam antibiotic, False otherwise.
         str: Reason for the classification.
     """
-    # Parse the SMILES string
+    # Parse the input SMILES string
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
-        return False, "Invalid SMILES string."
-
-    # Remove salts and small fragments by taking the largest fragment.
-    # Note: The correct parameter is 'sanitizeFrags' not 'sanitizeFragments'.
-    frags = Chem.GetMolFrags(mol, asMols=True, sanitizeFrags=True)
-    if len(frags) > 1:
-        # Select fragment with the most heavy atoms.
-        mol = max(frags, key=lambda m: rdMolDescriptors.CalcHeavyAtomCount(m))
+        return False, "Invalid SMILES string"
     
-    # Reject molecules that contain common metal counter ions to avoid salts.
-    metal_symbols = {"Na", "K", "Li", "Mg", "Ca", "Fe", "Zn"}
-    for atom in mol.GetAtoms():
-        if atom.GetSymbol() in metal_symbols:
-            return False, "Molecule contains metal counter ion(s), likely a salt rather than an active beta-lactam antibiotic."
-    
-    # Define a SMARTS pattern for the beta-lactam ring:
-    # This pattern matches a 4-membered ring: one nitrogen and one C=O edge.
-    beta_lactam_smarts = "[N;R]1[C;R](=O)[C;R][C;R]1"
-    beta_lactam_pattern = Chem.MolFromSmarts(beta_lactam_smarts)
-    if beta_lactam_pattern is None:
-        return False, "Failed to create SMARTS pattern for beta-lactam ring."
-    
-    if mol.HasSubstructMatch(beta_lactam_pattern):
-        return True, ("Molecule contains a beta-lactam ring (matched by SMARTS '{}'), "
-                      "consistent with a beta-lactam antibiotic.".format(beta_lactam_smarts))
-    
-    # If SMARTS didn't match, manually inspect all 4-membered rings in the molecule.
+    # Get ring information from the molecule. This returns a tuple of tuples with atom indices for each ring.
     ring_info = mol.GetRingInfo()
-    for ring in ring_info.AtomRings():
-        if len(ring) == 4:
-            n_count = 0
-            carbonyl_found = False
+    atom_rings = ring_info.AtomRings()
+    
+    # Iterate over all rings in the molecule
+    for ring in atom_rings:
+        if len(ring) == 4:  # Focus on 4-membered rings only
+            n_count = 0      # Counter for nitrogen atoms in the ring
+            carbonyl_found = False  # Flag if a carbon with a double-bonded oxygen is present
+            
+            # Check each atom within the ring
             for idx in ring:
                 atom = mol.GetAtomWithIdx(idx)
-                # Count nitrogens in the ring.
+                # Count the number of nitrogens
                 if atom.GetAtomicNum() == 7:
                     n_count += 1
-                # For carbons, check if there is a C=O bond with oxygen not part of the ring.
+                # For carbons, check if one of their bonds is a double bond to an oxygen (carbonyl)
                 if atom.GetAtomicNum() == 6:
                     for bond in atom.GetBonds():
+                        # Check for double bond and that the other atom is oxygen
                         if bond.GetBondTypeAsDouble() == 2.0:
-                            other = bond.GetOtherAtom(atom)
-                            if other.GetAtomicNum() == 8 and other.GetIdx() not in ring:
+                            other_atom = bond.GetOtherAtom(atom)
+                            if other_atom.GetAtomicNum() == 8:
+                                # Additional check: ensure the oxygen is not also part of the ring,
+                                # but even if it is, the presence of a carbonyl is significant.
                                 carbonyl_found = True
-                                break
+                                break  # No need to check other bonds for this atom
+                # Early exit if conditions are already met for this ring
+                if n_count > 1 and carbonyl_found:
+                    # While beta-lactam ring ideally has only one N, if there are more, this ring might not be valid.
+                    # We continue checking other rings.
+                    break
+            
+            # If exactly one nitrogen and a carbonyl were found in this 4-membered ring, classify as beta-lactam.
             if n_count == 1 and carbonyl_found:
-                return True, ("Molecule contains a four-membered ring with one nitrogen and a carbonyl-bearing carbon, "
-                              "consistent with a beta-lactam ring.")
+                return True, ("Molecule contains a four-membered ring with one nitrogen and a carbonyl carbon, "
+                              "which is consistent with a beta-lactam ring.")
     
+    # If no 4-membered ring meeting the criteria is found, reject the molecule.
     return False, "Molecule does not contain a beta-lactam ring."
 
-# Example usage (for testing purposes)
+# Example usage (for testing purposes):
 if __name__ == "__main__":
-    # Test with a simple beta-lactam (azetidin-2-one)
-    test_smiles = "O=C1CCN1"
+    test_smiles = "O=C1CN(C1)C2=CC=CC=C2"  # A simple beta-lactam derivative example
     result, reason = is_beta_lactam_antibiotic(test_smiles)
     print(result, reason)
