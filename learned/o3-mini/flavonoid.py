@@ -4,10 +4,8 @@ Classifies: CHEBI:47916 flavonoid
 #!/usr/bin/env python
 """
 Classifies: Flavonoid
-Definition: A flavonoid is any compound whose skeleton is based on 1‐benzopyran (chromene)
+Definition: Any member of the 'superclass' flavonoids whose skeleton is based on 1-benzopyran 
 with an aryl substituent at position 2.
-This module uses improved SMARTS patterns that anchor the 2-phenyl substitution using recursive SMARTS 
-and allow for extra substituents on the rings.
 """
 
 from rdkit import Chem
@@ -15,54 +13,43 @@ from rdkit import Chem
 def is_flavonoid(smiles: str):
     """
     Determines if a molecule is a flavonoid based on its SMILES string.
-    A flavonoid is defined as a compound with a 1-benzopyran (chromene) core having an aryl (phenyl) 
-    substituent attached at the C2 position.
+    Flavonoids are defined as compounds having a 1-benzopyran skeleton (chromene)
+    with an aryl substituent at position 2.
     
-    Two SMARTS patterns are used:
-      1. For the fully aromatic (flavone/flavonol-like) scaffold:
-         "c1ccc2c(c1)oc(c2)[$(c3ccccc3)]"
-         - This pattern requires a benzopyran core (aromatic ring fused to an oxacycle)
-           with a substituent that is recognized recursively as a benzene ring.
-      2. For the dihydro (flavanone/flavan-like) scaffold:
-         "c1ccc2c(c1)OC(C2)[$(c3ccccc3)]"
-         - Similar to the aromatic version, but with the C2 carbon saturated.
-         
-    The recursive SMARTS syntax "$(...)" ensures that the substituent exactly matches a phenyl group,
-    while the rest of the pattern allows other substituents to be present.
+    For this purpose two SMARTS patterns are used:
+    1. A "flavan" pattern (saturated at C2–C3) with the required aryl substituent.
+    2. A "flavone" pattern (featuring a carbonyl group at position 4) with the aryl group.
     
     Args:
         smiles (str): SMILES string of the molecule.
     
     Returns:
-        bool: True if the molecule is classified as a flavonoid, False otherwise.
+        bool: True if molecule is a flavonoid, False otherwise.
         str: Reason for the classification.
     """
-    # Parse the SMILES string into an RDKit molecule
+    # Parse the SMILES string to a molecule
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Define the improved SMARTS for the aromatic flavonoid scaffold:
-    # This requires a benzopyran (chromene) system with a phenyl substituent at position 2.
-    pattern_arom = Chem.MolFromSmarts("c1ccc2c(c1)oc(c2)[$(c3ccccc3)]")
+    # Define SMARTS patterns for common flavonoid cores.
+    # Pattern 1 - flavan type (2-phenylchroman):
+    # This pattern describes a fused benzopyran system (chroman) with a phenyl substituent at the carbon adjacent to the oxygen.
+    pattern_flavan = Chem.MolFromSmarts("c1ccc2c(c1)O[C](c3ccccc3)c2")
+    # Pattern 2 - flavone type (2-phenylchromen-4-one):
+    # This pattern is similar to the above but includes a carbonyl group (C(=O)) indicating oxidation at position 4.
+    pattern_flavone = Chem.MolFromSmarts("c1ccc2c(c1)oc(=O)c(c2)c3ccccc3")
     
-    # Define the improved SMARTS for the dihydro (flavanone/flavan) flavonoid scaffold.
-    pattern_dihydro = Chem.MolFromSmarts("c1ccc2c(c1)OC(C2)[$(c3ccccc3)]")
-    
-    # Check for aromatic flavonoid scaffold match.
-    if mol.HasSubstructMatch(pattern_arom):
-        return True, "Matches aromatic flavonoid skeleton: 1-benzopyran with phenyl substituent at C2"
-    
-    # Check for dihydro flavonoid scaffold match.
-    elif mol.HasSubstructMatch(pattern_dihydro):
-        return True, "Matches dihydro flavonoid skeleton: 1-benzopyran (saturated at C2) with phenyl substituent at C2"
-    
+    # Check if the molecule matches either of the flavonoid core patterns.
+    if mol.HasSubstructMatch(pattern_flavan):
+        return True, "Matches flavan skeleton: 1-benzopyran with aryl substituent at position 2"
+    elif mol.HasSubstructMatch(pattern_flavone):
+        return True, "Matches flavone skeleton: 1-benzopyran with aryl substituent at position 2 (with a 4-oxo group)"
     else:
         return False, "Does not match common flavonoid skeleton patterns"
 
-# Example usage (for testing the function):
+# Example usage:
 if __name__ == "__main__":
-    # Example flavonoid: azaleatin (should be classified as a flavonoid)
     test_smiles = "COc1cc(O)cc2oc(-c3ccc(O)c(O)c3)c(O)c(=O)c12"  # azaleatin
     is_fla, reason = is_flavonoid(test_smiles)
     print("Is flavonoid?", is_fla)
