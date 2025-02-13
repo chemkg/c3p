@@ -3,10 +3,10 @@ Classifies: CHEBI:134363 tertiary amine oxide
 """
 """
 Classifies: Tertiary Amine Oxide
-A tertiary amine oxide is defined as an N-oxide in which one nitrogen atom (with a formal +1 charge)
-is bonded to one oxygen atom (with a formal –1 charge) and three carbon atoms. Moreover, the first
-atom in each organic substituent must be a carbon that is either sp3-hybridized or aromatic.
-The classification uses a SMARTS substructure search to capture the desired motif.
+A tertiary amine oxide is defined as an N-oxide where there are three organic groups bonded to the nitrogen atom.
+This means that one nitrogen atom should carry a formal positive charge, be bonded to one oxygen atom carrying a negative charge 
+(via a single bond) and three organic substituents. For additional robustness we require that each organic substituent’s first atom 
+(which is directly bonded to the nitrogen) is either aliphatic (sp3-hybridized) or is part of an aromatic system.
 """
 from rdkit import Chem
 
@@ -14,71 +14,80 @@ def is_tertiary_amine_oxide(smiles: str):
     """
     Determines if a molecule is a tertiary amine oxide based on its SMILES string.
     
-    The molecule must contain an N-oxide functional group where one nitrogen atom meets ALL of these criteria:
-      • It has four explicit bonds and a formal charge of +1.
-      • Exactly one of its substituents is an oxygen (with a formal charge of –1) attached via a single bond.
-      • The other three substituents are carbon atoms.
-      • Each such carbon substituent (i.e. the atom directly attached to the nitrogen) is either aromatic
-        or sp3-hybridized.
+    The criteria are:
+    • The molecule contains at least one nitrogen atom with a formal charge of +1.
+    • That nitrogen atom is bonded to exactly four atoms.
+    • One neighbor is an oxygen atom with a formal charge of -1 and is connected by a single bond.
+    • The other three substituents (neighbors) must be carbon atoms.
+    • Each of those carbon atoms must be either sp3-hybridized or aromatic.
     
     Args:
         smiles (str): SMILES string of the molecule
         
     Returns:
-        bool: True if the molecule meets the tertiary amine oxide criteria; False otherwise.
-        str: A reason string explaining the classification.
+        bool: True if the molecule contains a tertiary amine oxide meeting the above criteria, False otherwise.
+        str: Reason for the classification.
     """
-    # Parse the SMILES string.
+    # Parse the SMILES string
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Define a SMARTS pattern that captures a nitrogen with 4 bonds having exactly three carbon substituents and one oxygen.
-    # [N+X4] ensures the N is tetravalent and carries a formal +1 charge.
-    # ([#6]) means that the substituent is any atom with atomic number 6 (carbon).
-    # [O-] requires an oxygen atom with a formal charge of -1.
-    pattern = Chem.MolFromSmarts("[N+X4]([#6])([#6])([#6])[O-]")
-    matches = mol.GetSubstructMatches(pattern)
-    if not matches:
-        return False, "No tertiary amine oxide pattern matched"
-    
-    # Check each match until one of them qualifies.
-    for match in matches:
-        # The match returns a tuple of atom indices corresponding to:
-        # (nitrogen, carbon1, carbon2, carbon3, oxygen)
-        idx_N = match[0]
-        idx_c1 = match[1]
-        idx_c2 = match[2]
-        idx_c3 = match[3]
-        idx_O = match[4]
+    # Loop over all atoms to find a candidate nitrogen atom.
+    for atom in mol.GetAtoms():
+        # Look only at nitrogen atoms.
+        if atom.GetSymbol() != "N":
+            continue
+        # Check for the expected formal charge on the nitrogen.
+        if atom.GetFormalCharge() != 1:
+            continue
+        # A tertiary amine oxide nitrogen should be bonded to four atoms.
+        if atom.GetDegree() != 4:
+            continue
         
-        # Retrieve the nitrogen atom to be sure it has exactly 4 explicit neighbors.
-        n_atom = mol.GetAtomWithIdx(idx_N)
-        if n_atom.GetTotalDegree() != 4:
-            continue  # defensive check
+        # Initialize flags and lists for neighbors.
+        oxide_found = False
+        organic_neighbors = []
         
-        # For each carbon neighbor, confirm that it is either aromatic or sp3-hybridized.
-        valid = True
-        for c_idx in (idx_c1, idx_c2, idx_c3):
-            c_atom = mol.GetAtomWithIdx(c_idx)
-            # Check that the atom is a carbon.
-            if c_atom.GetAtomicNum() != 6:
-                valid = False
-                reason = "One substituent attached to the N is not carbon-based"
-                break
-            # The attached carbon must be aromatic OR sp3-hybridized.
-            if not (c_atom.GetIsAromatic() or c_atom.GetHybridization() == Chem.rdchem.HybridizationType.SP3):
-                valid = False
-                reason = "One substituent carbon is neither aromatic nor sp3-hybridized"
-                break
-        if valid:
-            return True, "Found tertiary amine oxide with N(+)-O(-) and three appropriate organic substituents."
+        # Loop over neighbors of the nitrogen.
+        for neigh in atom.GetNeighbors():
+            # Get the bond between nitrogen and this neighbor.
+            bond = mol.GetBondBetweenAtoms(atom.GetIdx(), neigh.GetIdx())
+            # If neighbor is oxygen with -1 charge and the bond is a single bond,
+            # mark that we've found the oxidized oxygen.
+            if neigh.GetSymbol() == "O" and neigh.GetFormalCharge() == -1:
+                # Check that the N-O bond is a single bond.
+                if bond is None or bond.GetBondType() != Chem.rdchem.BondType.SINGLE:
+                    continue
+                oxide_found = True
+            else:
+                organic_neighbors.append(neigh)
+                
+        # Make sure we have exactly one oxide and the remaining three are supposed to be organic.
+        if not oxide_found:
+            continue
+        if len(organic_neighbors) != 3:
+            continue
+        
+        # To be considered organic in this scheme, the atom directly attached to the nitrogen must be carbon
+        # AND either be sp3-hybridized (alkyl, for example) or be aromatic (aryl).
+        for sub in organic_neighbors:
+            if sub.GetSymbol() != "C":
+                # Reject if any substituent is not carbon.
+                return False, "Found an N-oxide but one substituent is not carbon-based"
+            # Accept if the carbon is aromatic.
+            if not sub.GetIsAromatic():
+                # If not aromatic, require that it is sp3-hybridized.
+                if sub.GetHybridization() != Chem.rdchem.HybridizationType.SP3:
+                    return False, "One substituent is not a simple organic group (must be sp3 or aromatic)"
+        
+        # If we have satisfied all criteria, then this molecule contains a tertiary amine oxide.
+        return True, "Found tertiary amine oxide with N(+)-O(-) and three appropriate organic substituents."
     
-    return False, "Pattern found but one or more substituents do not fulfill the required carbon characteristics."
+    # No nitrogen matching the criteria was found.
+    return False, "No tertiary amine oxide pattern found"
 
-# Example test invocation:
-if __name__ == "__main__":
-    # Testing one of the true positive examples: trimethylamine N-oxide SMILES: "C[N+](C)([O-])C"
-    tp_smiles = "C[N+](C)([O-])C"
-    result, reason = is_tertiary_amine_oxide(tp_smiles)
-    print(f"SMILES: {tp_smiles}\nClassified: {result}\nReason: {reason}")
+# Example usage:
+# test_smiles = "C[N+](C)([O-])C"  # trimethylamine N-oxide should return True.
+# result, reason = is_tertiary_amine_oxide(test_smiles)
+# print(result, reason)
