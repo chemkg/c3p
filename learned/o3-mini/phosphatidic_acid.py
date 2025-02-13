@@ -5,79 +5,112 @@ Classifies: CHEBI:16337 phosphatidic acid
 Classifies: phosphatidic acid
 Definition: A derivative of glycerol in which one hydroxy group (commonly but not necessarily primary) 
 is esterified with phosphoric acid and the other two are esterified with fatty acids.
-We approximate this by requiring:
-  - a valid molecule with exactly one phosphorus atom;
-  - a glycerol-like backbone (a three‐carbon chain with oxygen neighbors);
-  - exactly two fatty acid ester groups (–O–C(=O)–R) not attached to phosphorus;
-  - and the presence of a phosphate ester linkage (a C–O–P(=O)(O)O motif).
+Our approach (approximate):
+  1. The molecule must be valid.
+  2. It must contain exactly one phosphorus atom.
+  3. It should not contain nitrogen or rings (to help exclude other phospholipids with extra head‐groups).
+  4. It must show at least two fatty acid ester groups – defined by the SMARTS pattern [O]-C(=O)[#6] 
+     (but we ignore any O directly attached to phosphorus).
+  5. It must show a phosphate ester linkage – we check that at least one oxygen attached to the unique 
+     phosphorus is itself bound to an sp3 carbon that does not appear to be carbonylated.
+If these criteria are met we return True.
+Note: This “rule‐based” classifier is approximate.
 """
+
 from rdkit import Chem
 
 def is_phosphatidic_acid(smiles: str):
     """
     Determines if a molecule is a phosphatidic acid based on its SMILES string.
     
-    The criteria used (approximate):
-      1. Molecule parses successfully.
-      2. Contains exactly one phosphorus atom.
-      3. Contains a glycerol-like backbone (we look for a three-carbon chain with two terminal oxygens).
-      4. Contains exactly two fatty acid ester groups (–OC(=O)– observing that the ester oxygen is not attached to P).
-      5. Contains a phosphate ester linkage (a C–O–P(=O)(O)O motif).
+    Our criteria (approximate):
+      - Valid molecule.
+      - Exactly one phosphorus (P) atom.
+      - No nitrogen atoms (to exclude headgroups from e.g. PC, PE, etc).
+      - No rings (PA backbone should be acyclic).
+      - At least two fatty acid ester groups (–O–C(=O)–R) not directly attached to P.
+      - Presence of a phosphate ester linkage: at least one oxygen bound to the P
+          is also bound to an aliphatic carbon (i.e. not a carbonyl carbon).
     
     Args:
-        smiles (str): SMILES string of the molecule.
+        smiles (str): SMILES string of the molecule
         
     Returns:
-        bool: True if molecule is phosphatidic acid, False otherwise.
+        bool: True if molecule is a phosphatidic acid, False otherwise.
         str: Reason for classification.
     """
-    # Parse the SMILES string
+    # Parse SMILES
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # --- Criterion 1: Exactly one phosphorus atom ---
+    # Criterion 1: Exactly one phosphorus atom (atomic number 15)
     phos_atoms = [atom for atom in mol.GetAtoms() if atom.GetAtomicNum() == 15]
     if len(phos_atoms) != 1:
         return False, f"Expected exactly 1 phosphorus atom, found {len(phos_atoms)}"
         
-    # --- Criterion 2: Check for a glycerol-like backbone ---
-    # We attempt to capture the central 3-carbon motif of glycerol.
-    # Glycerol is HOCH2-CHOH-CH2OH but here many –OHs are esterified. We search for a chain:
-    # An approximate SMARTS: a three-carbon chain with oxygens attached at the terminal carbons.
-    glycerol_pattern = Chem.MolFromSmarts("OCC(O)CO")
-    if not mol.HasSubstructMatch(glycerol_pattern):
-        return False, "No clear glycerol backbone pattern found"
+    # Criterion 2: Exclude molecules with nitrogen (N) since extra headgroups (like choline, ethanolamine, etc) are present in other lipids.
+    if any(atom.GetAtomicNum() == 7 for atom in mol.GetAtoms()):
+        return False, "Presence of nitrogen detected – likely not phosphatidic acid"
     
-    # --- Criterion 3: Count fatty acid ester groups ---
-    # Fatty acid esters appear as –O–C(=O)–R.
-    # We define a SMARTS: an oxygen (not bound to phosphorus) single-bonded to a carbonyl group which is in turn bonded to any carbon.
+    # Criterion 3: Exclude molecules containing rings.
+    if mol.GetRingInfo().NumRings() > 0:
+        return False, "Molecule contains rings – expected an acyclic glycerol backbone"
+    
+    # Criterion 4: Look for fatty acid ester groups.
+    # A fatty acid ester group (as attached from the glycerol backbone) is approximated by the pattern:
+    #   [O]-C(=O)[#6]
+    # We ignore any match where the oxygen is directly attached to a phosphorus.
     fatty_ester_pattern = Chem.MolFromSmarts("[O]-C(=O)[#6]")
-    fatty_matches = mol.GetSubstructMatches(fatty_ester_pattern)
+    matches = mol.GetSubstructMatches(fatty_ester_pattern)
     fatty_ester_oxygens = set()
-    for match in fatty_matches:
-        # match[0] is the oxygen atom index from the pattern.
+    for match in matches:
+        # 'match[0]' corresponds to the oxygen atom in the pattern.
         oxy_atom = mol.GetAtomWithIdx(match[0])
-        # Exclude the case where this oxygen is directly attached to a phosphorus.
-        if any(neigh.GetAtomicNum() == 15 for neigh in oxy_atom.GetNeighbors()):
+        # Exclude if any neighbor of this oxygen is phosphorus.
+        if any(neighbor.GetAtomicNum() == 15 for neighbor in oxy_atom.GetNeighbors()):
             continue
         fatty_ester_oxygens.add(match[0])
-    if len(fatty_ester_oxygens) != 2:
-        return False, f"Expected exactly 2 fatty acid ester groups, found {len(fatty_ester_oxygens)}"
+    if len(fatty_ester_oxygens) < 2:
+        return False, f"Expected at least 2 fatty acid ester groups, found {len(fatty_ester_oxygens)}"
     
-    # --- Criterion 4: Look for the phosphate ester linkage ---
-    # We search for a C–O–P motif where the phosphorus is in a phosphate group.
-    # An approximate SMARTS is "C-O-P(=O)(O)O" (ignoring chirality) capturing a linkage from glycerol to phosphate.
-    phosphate_pattern = Chem.MolFromSmarts("C-O-P(=O)(O)O")
-    if not mol.HasSubstructMatch(phosphate_pattern):
-        return False, "No phosphate ester linkage (C-O-P(=O)(O)O) found"
+    # Criterion 5: Check for a phosphate ester linkage.
+    # We require that at least one oxygen attached to the unique phosphorus is also linked to an sp3 carbon
+    # that does not appear to be a carbonyl carbon.
+    p_atom = phos_atoms[0]
+    phosphate_linkage_found = False
+    for nbr in p_atom.GetNeighbors():
+        if nbr.GetAtomicNum() == 8:  # oxygen neighbor
+            # Look at each neighbor of this oxygen (other than the phosphorus)
+            for subnbr in nbr.GetNeighbors():
+                if subnbr.GetIdx() == p_atom.GetIdx():
+                    continue
+                # We expect a carbon (atomic num 6) that is sp3 rather than double-bonded to oxygen (carbonyl).
+                if subnbr.GetAtomicNum() == 6:
+                    # Check bonds of this carbon: if any bond (other than to oxygen nbr) is a double bond to O, skip.
+                    is_carbonyl = False
+                    for bond in subnbr.GetBonds():
+                        if bond.GetBondType().name == "DOUBLE":
+                            # If the other atom is oxygen then we consider this carbonyl (thus not the glycerol linkage).
+                            other = bond.GetOtherAtom(subnbr)
+                            if other.GetAtomicNum() == 8:
+                                is_carbonyl = True
+                                break
+                    if not is_carbonyl:
+                        phosphate_linkage_found = True
+                        break
+            if phosphate_linkage_found:
+                break
+    if not phosphate_linkage_found:
+        return False, "No phosphate ester linkage found (an oxygen on P is not linked to an aliphatic carbon)"
     
-    # If all criteria pass, we consider the molecule a phosphatidic acid.
-    return True, "Molecule has one phosphate, a glycerol backbone, two fatty acid ester groups, and a phosphate ester linkage"
+    # If all tests pass, assume the molecule is phosphatidic acid.
+    return True, ("Molecule has one phosphate, at least two fatty acid ester groups and a phosphate "
+                   "ester linkage with no extra headgroup features (e.g. nitrogen or rings), consistent with phosphatidic acid.")
 
-# For testing purposes, one can call the function with one of the provided SMILES strings.
+# For testing purposes (one can call the function with one of the provided SMILES):
 if __name__ == "__main__":
-    # Example: PA(14:0/16:1(9Z)) (one of the provided examples)
+    # Example: PA(14:0/16:1(9Z))
     test_smiles = "[C@](COC(=O)CCCCCCCCCCCCC)(OC(=O)CCCCCCC/C=C\\CCCCCC)([H])COP(O)(O)=O"
     result, reason = is_phosphatidic_acid(test_smiles)
     print("Result:", result)
