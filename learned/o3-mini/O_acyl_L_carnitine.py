@@ -2,21 +2,22 @@
 Classifies: CHEBI:75659 O-acyl-L-carnitine
 """
 """
-Classifies: O-acyl-L-carnitine (an O-acylcarnitine in which the carnitine component has L-configuration)
-
-We use the following approach:
-  1. Parse the SMILES.
-  2. Look for a substructure matching the carnitine moiety with an O-acyl substituent.
-     In our examples, this substructure is roughly:
-       a chiral carbon (mapped as atom 1) attached to:
-         - an oxygen that in turn is bonded to a carbonyl (the acyl group),
-         - a propanoate (carboxylate) chain,
-         - and a trimethylammonium moiety.
-  3. Then, after assigning stereochemistry using RDKit, we check that the CIP label
-     at the mapped chiral center is "R" (which corresponds to L-carnitine).
-     
-If the molecule does not contain the expected pattern, the function returns False
-and an explanation.
+Classifies: O-acyl-L-carnitine 
+Definition: An O-acylcarnitine in which the carnitine component has L-configuration.
+We require that the molecule contains a carnitine substructure with the following features:
+  - A chiral carbon (the carnitine center) which is attached to:
+      • an oxygen that is esterified with a carbonyl group (the acyl substituent),
+      • a carboxylate group (the propanoate part of carnitine),
+      • and a trimethylammonium moiety.
+  - When assigned CIP stereochemistry, the carnitine chiral center must have code “R” 
+    (which corresponds to naturally occurring L-carnitine).
+    
+The improvements made compared to the earlier attempt are:
+  • We use two SMARTS patterns (one for each chirality flag) but do not immediately return a negative
+    result if one match has the wrong CIP code. We iterate over all matches and accept if any have the expected (R) configuration.
+  • We define the SMARTS in a manner that does not require explicit hydrogen/deuterium annotations.
+  
+If no substructure is found, the function returns False with an explanation.
 """
 
 from rdkit import Chem
@@ -25,36 +26,42 @@ from rdkit.Chem import rdMolDescriptors
 
 def is_O_acyl_L_carnitine(smiles: str):
     """
-    Determines if a molecule is an O-acyl-L-carnitine based on its SMILES string.
-    An O-acyl-L-carnitine must contain a carnitine skeleton with an acyl group esterified
-    to its hydroxyl group, and the carnitine chiral center must have the natural L-configuration,
-    which in CIP nomenclature for carnitine is “R”.
+    Determine if a molecule is an O-acyl-L-carnitine based on its SMILES string.
+    The molecule must contain an O-acyl-carnitine skeleton and the carnitine chiral center must have
+    the natural configuration for L-carnitine. In CIP naming this is "R".
     
     Args:
         smiles (str): SMILES string of the molecule.
     
     Returns:
-        bool: True if the molecule is an O-acyl-L-carnitine, False otherwise.
-        str: Reason for the classification decision.
+        bool: True if the molecule meets the criteria, False otherwise.
+        str: Explanation for the decision.
     """
     # Parse the SMILES string
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Assign stereochemistry so that the CIP code (_CIPCode property) can be computed
+    # Assign stereochemistry so that CIP codes are set
     Chem.AssignStereochemistry(mol, cleanIt=True, force=True)
     
-    # Define two SMARTS patterns to cover both possible chirality annotations [C@H] and [C@@H]
-    # The pattern seeks a chiral carbon (mapped as atom 1) that is bound to:
-    #   - [O][C](=O)[*]   : an oxygen connected to a carbonyl (the acyl substituent; [*] allows any acyl chain)
-    #   - C[N+](C)(C)C   : a trimethylammonium group
-    #   - CC(=O)[O-]     : a carboxylate portion (the propionate side-chain)
-    pattern_smarts1 = "[C@H:1]([O][C](=O)[*])(C[N+](C)(C)C)(CC(=O)[O-])"
-    pattern_smarts2 = "[C@@H:1]([O][C](=O)[*])(C[N+](C)(C)C)(CC(=O)[O-])"
+    # The SMARTS below look for a carnitine-like fragment:
+    #   • A chiral center (mapped as atom :1) that is attached to:
+    #       - An oxygen that is further bonded to a carbonyl (O-acyl group).
+    #       - A propanoate-like fragment: "CC(=O)[O-]" (the carboxylate group).
+    #       - A trimethylammonium substituent: "C[N+](C)(C)C".
+    #
+    # We omit explicit isotopic specification so that deuterated forms still match.
+    pattern_smarts1 = "[C@H:1]([O][C](=O)[*!#1])([C,N][N+](C)(C)C)(CC(=O)[O-])"
+    pattern_smarts2 = "[C@@H:1]([O][C](=O)[*!#1])([C,N][N+](C)(C)C)(CC(=O)[O-])"
+    # Note: The fragment [O][C](=O)[*!#1] means an oxygen bonded to a carbonyl carbon 
+    # (the [*!#1] wildcard will match any non-hydrogen so that the acyl chain is free-form)
     
     patt1 = Chem.MolFromSmarts(pattern_smarts1)
     patt2 = Chem.MolFromSmarts(pattern_smarts2)
+    
+    if patt1 is None and patt2 is None:
+        return False, "Could not compile SMARTS patterns"
     
     matches = []
     if patt1:
@@ -65,23 +72,30 @@ def is_O_acyl_L_carnitine(smiles: str):
     if not matches:
         return False, "No substructure matching an O-acyl-carnitine skeleton was found"
     
-    # Loop over all matches. For each, check the stereochemistry at the mapped chiral atom.
-    # Our SMARTS was defined so that the first atom in the query (index 0 in the match tuple) is the chiral carbon.
+    # Instead of returning on the very first match, check all matches.
+    valid_matches = 0
+    wrong_config = 0
     for match in matches:
-        # Get the chiral center atom (from the molecule) corresponding to the mapped atom (map number 1)
-        chiral_atom = mol.GetAtomWithIdx(match[0])
-        # Ensure that the CIP code property is present for this atom.
+        # The first atom in the match (mapped from :1) is the carnitine center.
+        try:
+            chiral_atom = mol.GetAtomWithIdx(match[0])
+        except IndexError:
+            continue
+        # Check if the CIP code property is available
         if not chiral_atom.HasProp("_CIPCode"):
-            continue  # try next match if CIP info is missing
+            continue
         cip = chiral_atom.GetProp("_CIPCode")
-        # In carnitine, the naturally occurring L-form has CIP code "R". (L-carnitine is (R)-carnitine.)
         if cip == "R":
-            return True, "Matches O-acyl-L-carnitine pattern with correct (R) stereochemistry at carnitine center"
+            valid_matches += 1
         else:
-            # The acylcarnitine motif is present but the chiral center is not the L (R) configuration.
-            return False, f"carnitine center has CIP code {cip} (expected 'R' for L-carnitine)"
+            wrong_config += 1
     
-    return False, "No match found with defined stereochemistry information"
+    if valid_matches > 0:
+        return True, "Matches O-acyl-L-carnitine pattern with correct (R) stereochemistry at carnitine center"
+    elif wrong_config > 0:
+        return False, f"Found matches but the carnitine center(s) have wrong CIP configuration (none had 'R')"
+    else:
+        return False, "No match found with sufficient stereochemistry information"
 
 # Example usage:
 if __name__ == '__main__':
