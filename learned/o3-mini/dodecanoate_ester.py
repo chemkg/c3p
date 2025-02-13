@@ -5,18 +5,12 @@ Classifies: CHEBI:87659 dodecanoate ester
 """
 Classifies: dodecanoate ester
 Defined as: Any fatty acid ester in which the carboxylic acid component is lauric acid.
-Lauric acid (dodecanoic acid) is CH3(CH2)10COOH; when esterified the acyl moiety is
-CH3(CH2)10C(=O)O–. Hence, we search for an ester group that exactly encodes a laurate residue.
-
-Algorithm:
-  1. Parse the SMILES.
-  2. Use a SMARTS that “hard‐codes” the laurate acyl group using proper repetition:
-       "[CH3]-([CH2]){10}-C(=O)O[C]"
-     This means a terminal CH3, followed by exactly 10 CH2’s, then a carbonyl (C(=O)) 
-     and an oxygen that is attached to a carbon.
-  3. For each substructure match found, check that the first atom (the CH3) is terminal; 
-     that is, it should have exactly one bonded carbon that is part of the match.
-  4. If any match passes this test, report the molecule as containing a dodecanoate ester.
+Lauric acid (dodecanoic acid) is CH3(CH2)10COOH. When esterified the acyl part becomes
+CH3(CH2)10C(=O)O– (attached to an alcohol). The idea is to recognize an acyl fragment
+with exactly 12 carbons (one CH3 + 10 CH2 + a carbonyl C) that is linked via an ester bond.
+This improved program first looks for a SMARTS match for an ester fragment that contains
+the laurate acyl group and then verifies that the first (terminal) carbon is not
+“extended” (i.e. not part of a longer chain).
 """
 
 from rdkit import Chem
@@ -24,61 +18,73 @@ from rdkit import Chem
 def is_dodecanoate_ester(smiles: str):
     """
     Determines if a molecule (given by its SMILES string) is a dodecanoate ester.
-    We require that the molecule contains an ester group in which the acyl part
-    is exactly lauric acid, CH3(CH2)10C(=O)O – where the terminal CH3 is isolated.
-
+    The molecule must contain an ester linkage in which the acyl (fatty acid) part is
+    exactly lauric acid (dodecanoic acid): CH3(CH2)10C(=O)O–.
+    
+    The algorithm is as follows:
+      1. Parse the SMILES string.
+      2. Search for a substructure matching a laurate ester fragment.
+         We build a SMARTS that explicitly encodes the acyl chain:
+         We want the acyl group to be exactly 12 carbons in a row ending in a carboxylate part.
+         In lauric acid ester the fragment appears as:
+           CH3-(CH2)10-C(=O)O–  (attached to some R group).
+         We build the SMARTS by first writing out 11 consecutive aliphatic carbons (which,
+         when followed by one more “C(=O)” gives 12 carbons total) and then appending the carbonyl and ester oxygen.
+         Finally, we require that the oxygen is bonded to a carbon (and not, say, to a non‐carbon atom).
+         The resulting SMARTS is: "CCCCCCCCCCCC(=O)O[C]"
+         (Note: When concatenated, the pattern “CCCCCCCCCCC” (11 C’s) plus “C(=O)O[C]” gives a total
+         of 12 carbons in the acyl fragment.)
+      3. For each substructure match found, check that the very first matched carbon is terminal
+         (i.e. it does not have a neighboring carbon outside the match which would indicate the chain continues).
+      4. If any match passes that “end‐group” test, return True with an explanation.
+    
     Args:
-      smiles (str): A SMILES string.
-
+        smiles (str): SMILES string of the molecule.
+        
     Returns:
-      (bool, str): A tuple with classification and a reason.
+        bool: True if the molecule is classified as a dodecanoate ester, False otherwise.
+        str: Explanation for the classification decision.
     """
-    # Parse the SMILES string to a molecule
+    # Parse the SMILES string
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string."
-
-    # Build the SMARTS query for a laurate ester.
-    # Use parentheses for the repeated [CH2] group.
-    laurate_smarts = "[CH3]-([CH2]){10}-C(=O)O[C]"
+    
+    # Define a SMARTS pattern for a laurate ester fragment.
+    # Explanation:
+    #   "CCCCCCCCCCC" is 11 consecutive aliphatic carbons.
+    #   When we append "C(=O)O[C]" the extra C becomes the carbonyl carbon, making the acyl group exactly 12 carbons.
+    #   The "[C]" after the ester oxygen ensures that the oxygen is linked to a carbon (the alcohol part).
+    laurate_smarts = "CCCCCCCCCCC" + "C(=O)O[C]"
     query = Chem.MolFromSmarts(laurate_smarts)
     if query is None:
         return False, "Error creating SMARTS for laurate ester."
-
-    # Find all substructure matches.
+    
+    # Get all substructure matches.
     matches = mol.GetSubstructMatches(query)
     if not matches:
         return False, "Molecule does not contain a dodecanoate (laurate) ester moiety."
-
-    # For each match, confirm that the first matched atom (the terminal CH3) is isolated.
+    
+    # For each match, ensure the acyl chain is not part of a longer chain.
+    # The first atom of the match (match[0]) is expected to be the terminal CH3 group.
+    # Check that none of its carbon neighbors lies outside of the matched substructure.
     for match in matches:
-        # The first atom in our SMARTS is the terminal CH3.
-        first_idx = match[0]
-        first_atom = mol.GetAtomWithIdx(first_idx)
-        # Check that this CH3 does not have any additional carbon neighbors outside the match.
-        # A terminal methyl should only have one carbon neighbor.
-        carbon_neighbors = [nbr for nbr in first_atom.GetNeighbors() if nbr.GetAtomicNum() == 6]
-        # If there is not exactly one carbon neighbor, then this CH3 may be extended.
-        if len(carbon_neighbors) != 1:
-            continue
-        # Also ensure that the single carbon neighbor is part of the match.
-        if carbon_neighbors[0].GetIdx() not in match:
-            continue
-        # If we pass all conditions, we have found a dodecanoate ester.
-        return True, "Molecule contains a dodecanoate (laurate) ester functionality."
-
-    # If no valid match is found, the acyl chain may be extended.
-    return False, ("Molecule contains a fragment matching laurate ester connectivity, "
-                   "but the acyl chain is extended (the terminal CH3 is not isolated).")
+        # match is a tuple of atom indices corresponding to the SMARTS pattern.
+        first_atom = mol.GetAtomWithIdx(match[0])
+        valid = True
+        for nbr in first_atom.GetNeighbors():
+            if nbr.GetAtomicNum() == 6 and nbr.GetIdx() not in match:
+                # The terminal CH3 should not be connected to another carbon (i.e. it must be terminal).
+                valid = False
+                break
+        if valid:
+            return True, "Molecule contains a dodecanoate (laurate) ester functionality."
+    
+    return False, "Molecule contains a fragment matching laurate ester connectivity but it seems embedded in a longer chain."
 
 # Example usage:
 if __name__ == "__main__":
-    # Some test SMILES strings.
-    test_smiles_list = [
-        "CCCCCCCCCCCC(=O)OCC",  # simple dodecanoate ester (laurate ester)
-        "O(CCCCCC(C)C)C(=O)CCCCCCCCCCCC",  # another example; may be more complex
-        "invalid_smiles"
-    ]
-    for s in test_smiles_list:
-        result, reason = is_dodecanoate_ester(s)
-        print(f"SMILES: {s}\nResult: {result}\nReason: {reason}\n")
+    # A test example: one known laurate ester fragment.
+    test_smiles = "O(CCCCCC(C)C)C(=O)CCCCCCCCCCCC"  # This one is only for demo; real examples may be more complex.
+    result, reason = is_dodecanoate_ester(test_smiles)
+    print(f"Result: {result}\nReason: {reason}")
