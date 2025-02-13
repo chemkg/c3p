@@ -3,8 +3,9 @@ Classifies: CHEBI:24128 furanocoumarin
 """
 #!/usr/bin/env python
 """
-Classifies: Any furochromene that consists of a furan ring fused with a coumarin 
-(i.e. furanocoumarins)
+Classifies: Any furochromene that consists of a furan ring fused with a coumarin (furanocoumarin)
+The function is_furanocoumarin uses improved SMARTS patterns for the coumarin (benzopyrone) core
+and verifies that an aromatic furan ring is fused (sharing >=2 atoms) with the coumarin core.
 """
 
 from rdkit import Chem
@@ -13,9 +14,9 @@ def is_furanocoumarin(smiles: str):
     """
     Determines if a molecule is a furanocoumarin based on its SMILES string.
     A furanocoumarin is defined as a coumarin (benzopyrone) with a fused furan ring.
-    This function searches for the coumarin core (using an updated SMARTS pattern to capture
-    aromatic coumarin cores) and an aromatic furan ring, then checks whether they are fused 
-    (sharing at least two atoms).
+    This function searches for the coumarin core (using one of two SMARTS variations to be more tolerant)
+    and for an aromatic furan ring. Then it checks whether a furan match shares at least two atoms 
+    with any coumarin match, which is our proxy for fusion.
 
     Args:
         smiles (str): SMILES string of the molecule
@@ -24,40 +25,42 @@ def is_furanocoumarin(smiles: str):
         bool: True if the molecule is classified as a furanocoumarin, False otherwise.
         str: Reason for classification.
     """
-    # Parse the SMILES string into a molecule
+    # Parse SMILES string into a molecule
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
+
+    # Define two SMARTS patterns for the coumarin (benzopyrone) core.
+    # The first is the classic pattern and the second a slight variation to catch substituted or fused cases.
+    coumarin_smarts_list = [
+        "c1ccc2oc(=O)cc2c1",   # common representation
+        "c1ccc2c(c1)oc(=O)cc2"  # variation (ring order swapped)
+    ]
     
-    # Define a SMARTS pattern for the coumarin core.
-    # Coumarin (benzopyrone) is now represented with an aromatic pattern:
-    # "c1ccc2oc(=O)cc2c1" where:
-    #    - The aromatic benzene ring (c1ccc...c1)
-    #    - The fused lactone ring (oc(=O)cc) where the carbonyl is included.
-    coumarin_smarts = "c1ccc2oc(=O)cc2c1"
-    coumarin_pattern = Chem.MolFromSmarts(coumarin_smarts)
-    if coumarin_pattern is None:
-        return False, "Invalid coumarin SMARTS pattern"
+    coumarin_matches = []
+    for smarts in coumarin_smarts_list:
+        pattern = Chem.MolFromSmarts(smarts)
+        if pattern is None:
+            continue
+        matches = mol.GetSubstructMatches(pattern)
+        if matches:
+            coumarin_matches.extend(matches)
+    if not coumarin_matches:
+        return False, "Coumarin (benzopyrone) core not found"
     
     # Define a SMARTS pattern for an aromatic furan ring.
-    # Furan is a five-membered aromatic ring containing one oxygen.
+    # Furan is a five-membered ring with one oxygen atom.
     furan_smarts = "c1ccoc1"
     furan_pattern = Chem.MolFromSmarts(furan_smarts)
     if furan_pattern is None:
         return False, "Invalid furan SMARTS pattern"
     
-    # Find all matches for the coumarin core
-    coumarin_matches = mol.GetSubstructMatches(coumarin_pattern)
-    if not coumarin_matches:
-        return False, "Coumarin (benzopyrone) core not found"
-    
-    # Find all matches for the furan ring
     furan_matches = mol.GetSubstructMatches(furan_pattern)
     if not furan_matches:
         return False, "Furan ring not found"
     
-    # Check whether any coumarin match and furan match are fused
-    # Fusion is assumed if at least two atoms are shared between the matches.
+    # Check for fusion: require that at least one furan match and one coumarin match share
+    # two or more atoms. This is our proxy for the rings being fused.
     fusion_found = False
     for c_match in coumarin_matches:
         set_c = set(c_match)
@@ -69,16 +72,16 @@ def is_furanocoumarin(smiles: str):
                 break
         if fusion_found:
             break
-    
+
     if not fusion_found:
-        return False, "No fused furan and coumarin (benzopyrone) substructures found"
+        return False, "Coumarin core and furan ring not properly fused"
     
-    # If both substructures are found and are fused, then classify as a furanocoumarin.
-    return True, "Contains a coumarin core fused with a furan ring (furanocoumarin)"
+    return True, "Contains a coumarin (benzopyrone) core fused with a furan ring (furanocoumarin)"
+
 
 # Example usage:
 if __name__ == "__main__":
-    # Example: Isobergapten SMILES: COc1cc2occc2c2oc(=O)ccc12
+    # Test with one of the known furanocoumarins - for instance, Isobergapten
     test_smiles = "COc1cc2occc2c2oc(=O)ccc12"
     result, reason = is_furanocoumarin(test_smiles)
     print(result, ":", reason)
