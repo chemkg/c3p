@@ -6,27 +6,23 @@ Classifies: CHEBI:18179 phosphoinositide
 Classifies: Phosphoinositide
 
 Definition:
-  A phosphoinositide is any phosphatidylinositol that is phosphorylated
-  at one or more of the hydroxyl groups of the inositol ring.
+  A phosphoinositide is any phosphatidylinositol that is phosphorylated at one or more of 
+  the hydroxy groups of the inositol ring. In addition to the extra phosphorylation on the ring,
+  a phosphoinositide must present a bridging phosphate that connects the inositol ring to a diacylglycerol fragment.
   
 Revised strategy:
   1. Parse the SMILES and add explicit hydrogens.
-  2. Verify that the molecule contains two or more ester groups
-     (to capture the diacylglycerol fragment). Also record the ester oxygen atoms.
-  3. Identify a candidate inositol-like ring:
-       • Look for a six-membered ring in which every atom is a carbon and is sp3 hybridized.
-       • For each ring carbon, check for at least one substituent on an external oxygen that is “OH‐like.”
-         An “OH‐like” substituent is defined as an oxygen (with formal charge 0) that has at least one hydrogen,
-         or an oxygen bound to phosphorus.
-       • Accept the ring if at least 4 of its 6 carbons carry an OH-like substituent.
-  4. For the candidate inositol ring, look over its substituents. Gather all phosphate (P) atoms that are attached
-     via an oxygen. In addition, we require that at least one phosphate be “bridging” to the diacylglycerol,
-     as indicated by its oxygen being one of the ester oxygens found earlier.
-  5. Finally, to be a phosphoinositide we require that the ring shows at least two unique phosphate attachments
-     (one for the glycerol bridge and at least one extra phosphorylation).
+  2. Identify candidate inositol rings: six-membered rings composed entirely 
+     of sp³ carbon atoms. Each ring carbon is checked for “OH-like” substituents 
+     (an oxygen with either a hydrogen or bound to P). At least 4 of 6 must have such a substituent.
+  3. For the candidate ring, collect phosphate (P) atoms attached through oxygen substituents.
+  4. For each phosphate attached to the ring, check for a “bridging” oxygen:
+     One of its non-ring oxygen neighbors must be attached to a carbonyl group [CX3](=O).
+  5. Require that at least one phosphate shows the bridging feature and that 
+     at least 2 distinct phosphate groups are attached.
      
 Note:
-  This approach is heuristic; depending on non‐standard representations some edge cases may be missed.
+  This algorithm is heuristic and may not capture every edge case.
 """
 
 from rdkit import Chem
@@ -35,62 +31,50 @@ from rdkit.Chem import rdMolDescriptors
 def is_phosphoinositide(smiles: str):
     """
     Determines if a molecule is a phosphoinositide based on its SMILES string.
-    A phosphoinositide is defined as a phosphatidylinositol that (in addition to its bridging phosphate)
-    carries at least one extra phosphate on the inositol ring.
+    
+    A phosphoinositide is defined as a phosphatidylinositol carrying at least one extra phosphate
+    on the inositol ring, with at least one phosphate linking the inositol to a diacylglycerol fragment.
     
     Args:
         smiles (str): SMILES representation of the molecule.
         
     Returns:
         bool: True if the molecule is classified as a phosphoinositide, False otherwise.
-        str: The reasoning behind the classification.
+        str: Reason for classification.
     """
-    # Attempt to parse the SMILES string.
+    # Parse the SMILES string.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Add explicit hydrogens so that OH groups are correctly represented.
+    # Add explicit hydrogens so OH groups are visible.
     mol = Chem.AddHs(mol)
     
-    # --- Criterion 1: Check for the presence of diacylglycerol ester groups ---
-    # Use a simple SMARTS to find an ester motif: carbonyl carbon attached to an oxygen which is then attached to a carbon.
-    ester_smarts = "C(=O)O[C]"
-    ester_pattern = Chem.MolFromSmarts(ester_smarts)
-    ester_matches = mol.GetSubstructMatches(ester_pattern)
-    if len(ester_matches) < 2:
-        return False, f"Found only {len(ester_matches)} ester group(s); at least 2 are required to indicate diacylglycerol chains"
-    
-    # Record the indices of ester oxygen atoms (the atom at position 1 in the SMARTS pattern).
-    ester_oxygens = set(match[1] for match in ester_matches)
-    
-    # --- Criterion 2: Identify an inositol-like ring.
-    # We iterate over all rings; candidate rings must be six-membered, all carbon, sp3.
+    # --- Step 1: Identify candidate inositol ring ---
+    # We require a six-membered, all-carbon, sp3 ring with at least 4 carbons bearing an “OH-like” substituent.
     ring_info = mol.GetRingInfo()
     candidate_ring = None
     for ring in ring_info.AtomRings():
         if len(ring) != 6:
             continue
         valid_ring = True
-        substitution_count = 0  # count of ring carbons with an OH-like substituent
+        substitution_count = 0  # how many ring carbons have an 'OH-like' substituent
         for idx in ring:
             atom = mol.GetAtomWithIdx(idx)
-            # Must be carbon and sp3 hybridized (to avoid aromatic or hetero rings)
             if atom.GetAtomicNum() != 6 or atom.GetHybridization() != Chem.rdchem.HybridizationType.SP3:
                 valid_ring = False
                 break
-            # Look among neighbors not in the ring. We consider a substituent valid if it is
-            # an oxygen (with formal charge 0) that carries at least one hydrogen OR is bound to phosphorus.
+            # Look in neighbors outside the ring.
             found_substituent = False
             for nbr in atom.GetNeighbors():
                 if nbr.GetIdx() in ring:
                     continue
                 if nbr.GetAtomicNum() == 8:
-                    # Check for an OH group: must have at least one hydrogen and formal charge zero.
+                    # Check for an OH-like group: oxygen with at least one hydrogen and formal charge zero
                     if nbr.GetFormalCharge() == 0 and any(n.GetAtomicNum() == 1 for n in nbr.GetNeighbors()):
                         found_substituent = True
                         break
-                    # Or, check if the oxygen is bound to phosphorus (even if deprotonated).
+                    # Alternatively, if the oxygen is connected to a phosphorus.
                     if any(n.GetAtomicNum() == 15 for n in nbr.GetNeighbors()):
                         found_substituent = True
                         break
@@ -99,38 +83,78 @@ def is_phosphoinositide(smiles: str):
         if valid_ring and substitution_count >= 4:
             candidate_ring = ring
             break
-
+    
     if candidate_ring is None:
         return False, "No inositol-like six-membered (cyclohexane) ring with sufficient OH-like substituents was found"
     
-    # --- Criterion 3: Count phosphate attachments on the candidate inositol ring ---
-    # For each ring carbon, look at neighbor oxygen atoms and check for attached phosphorus.
-    phosphate_indices = set()
-    bridging_found = False  # A flag to confirm the phosphate linking the ring to a diacylglycerol (i.e. via an ester oxygen)
+    # --- Step 2: Gather phosphate groups attached to the candidate ring ---
+    # For each ring atom, check neighbor oxygens. If an oxygen is bonded to a phosphorus, record that phosphorus.
+    phosphate_set = set()
+    # Also keep a mapping: phosphate index -> associated ring oxygen indices (for bridging check)
+    phosphate_ring_oxygens = {}
+    
     for idx in candidate_ring:
         atom = mol.GetAtomWithIdx(idx)
         for nbr in atom.GetNeighbors():
-            # Skip if neighbor is part of the ring.
             if nbr.GetIdx() in candidate_ring:
                 continue
             if nbr.GetAtomicNum() != 8:
                 continue
-            # For each oxygen substituent, see if it is bonded to a phosphorus.
+            # Check if this oxygen is connected to any phosphorus:
             for subnbr in nbr.GetNeighbors():
                 if subnbr.GetAtomicNum() == 15:
-                    phosphate_indices.add(subnbr.GetIdx())
-                    # Check if this oxygen is one of the ester oxygens (bridging the diacylglycerol).
-                    if nbr.GetIdx() in ester_oxygens:
-                        bridging_found = True
-    # A normal phosphatidylinositol will always have one bridging phosphate;
-    # a phosphoinositide should have at least one extra phosphate on the ring (i.e. count at least 2).
-    if len(phosphate_indices) < 2:
-        return False, f"Only {len(phosphate_indices)} phosphate group(s) found on the inositol ring; additional phosphorylation required"
+                    phosphate_set.add(subnbr.GetIdx())
+                    phosphate_ring_oxygens.setdefault(subnbr.GetIdx(), []).append(nbr.GetIdx())
+    
+    if len(phosphate_set) < 2:
+        return False, f"Only {len(phosphate_set)} phosphate group(s) found on the inositol ring; additional phosphorylation required"
+    
+    # --- Step 3: Check for bridging phosphate(s) ---
+    # For each phosphate attached to the ring, we check if at least one of its other attached oxygens (not the ring oxygen)
+    # is connected to a carbonyl group (an ester linkage, indicating connection with a diacylglycerol fragment).
+    bridging_found = False
+    
+    # Define a helper function to check if an oxygen is part of an ester: it must be connected to a carbon 
+    # that has a double bond to an oxygen.
+    def is_ester_oxygen(oxygen):
+        for nbr in oxygen.GetNeighbors():
+            # Skip if neighbor is phosphorus or hydrogen.
+            if nbr.GetAtomicNum() in [1,15]:
+                continue
+            if nbr.GetAtomicNum() == 6:
+                # Check bonds of the carbon for a double bond to oxygen.
+                for bond in nbr.GetBonds():
+                    # Look only for bonds not involving the oxygen we are testing.
+                    if oxygen.GetIdx() in [bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()]:
+                        continue
+                    if bond.GetBondTypeAsDouble() == 2 and (bond.GetOtherAtom(nbr).GetAtomicNum() == 8):
+                        return True
+        return False
+
+    for pho_idx in phosphate_set:
+        phosphate = mol.GetAtomWithIdx(pho_idx)
+        ring_connected_oxygens = set(phosphate_ring_oxygens.get(pho_idx, []))
+        # Iterate over all oxygen neighbors of the phosphate.
+        for nbr in phosphate.GetNeighbors():
+            if nbr.GetAtomicNum() != 8:
+                continue
+            # Skip if this oxygen is the one that connects to the inositol ring.
+            if nbr.GetIdx() in ring_connected_oxygens:
+                continue
+            # If this oxygen qualifies as part of an ester (i.e. connected to a carbonyl), mark bridging.
+            if is_ester_oxygen(nbr):
+                bridging_found = True
+                break
+        if bridging_found:
+            break
+
     if not bridging_found:
         return False, "No bridging phosphate connecting the diacylglycerol fragment to the inositol ring was found"
     
-    return True, ("Molecule has diacylglycerol ester groups, an inositol-like ring with sufficient OH-like substituents, "
-                  "and extra phosphorylation on the ring (with a bridging phosphate) – classified as a phosphoinositide")
+    # If we reach this point, the molecule shows the proper inositol ring, has multiple phosphates (one of which is bridging).
+    return True, ("Molecule has an inositol-like ring with sufficient OH-like substituents, multiple phosphate attachments, "
+                  "and at least one of the phosphate groups bridges to a diacylglycerol fragment via an ester linkage – "
+                  "classified as a phosphoinositide.")
 
 # For quick testing (these lines may be removed or commented out in production)
 if __name__ == '__main__':
