@@ -4,14 +4,8 @@ Classifies: CHEBI:27325 xanthophyll
 """
 Classifies: Xanthophyll
 Definition: A subclass of carotenoids consisting of the oxygenated carotenes.
-Xanthophylls are characterized by a long conjugated polyene chain, an extensive carbon skeleton,
-and oxygen-based functional groups. Many have cyclic endgroups, but some acyclic xanthophylls exist.
-For classification, we require:
-  - At least one oxygen atom.
-  - A sufficiently large carbon backbone (≥30 carbons).
-  - A long conjugated polyene chain: if a ring is present we require at least 4 consecutive C=C bonds;
-    if no ring is present (acyclic) we require a longer conjugated chain (≥5 consecutive C=C bonds).
-  - A relatively high molecular weight (≥400 Da).
+Xanthophylls typically have a long conjugated polyene chain (common to carotenoids) and contain oxygen-based 
+functional groups (such as hydroxyls, ketones, or epoxides) that differentiate them from purely hydrocarbon carotenoids.
 """
 
 from rdkit import Chem
@@ -21,80 +15,50 @@ def is_xanthophyll(smiles: str):
     """
     Determines if a molecule is a xanthophyll based on its SMILES string.
     
-    A xanthophyll is defined as an oxygenated carotenoid. Here, we enforce that the molecule:
-      - Has at least one oxygen atom.
-      - Contains at least 30 carbon atoms.
-      - Possesses a long conjugated polyene chain.
-         * If at least one ring exists, we require a pattern of 4 consecutive C=C bonds.
-         * If no ring exists (acyclic candidate), we require a pattern of 5 consecutive C=C bonds.
-      - Has a molecular weight of at least 400 Da.
+    A xanthophyll is an oxygenated carotenoid and should have:
+    - A long conjugated polyene chain (e.g., several conjugated C=C bonds).
+    - At least one oxygen atom present.
+    - Sufficient number of carbon atoms to show an extended hydrocarbon framework (typical for carotenoids).
+    - A relatively high molecular weight.
     
     Args:
         smiles (str): SMILES string of the molecule.
     
     Returns:
         bool: True if the molecule is likely a xanthophyll, False otherwise.
-        str: Reason for the classification.
+        str: Reason for classification.
     """
     
-    # Parse the molecule
+    # Step 1: Parse the SMILES string into an RDKit molecule
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Check oxygenation
+    # Step 2: Check for the presence of oxygen atoms (the molecule must be oxygenated)
     o_count = sum(1 for atom in mol.GetAtoms() if atom.GetAtomicNum() == 8)
     if o_count < 1:
-        return False, "No oxygen atoms found; not an oxygenated carotene"
+        return False, "No oxygen atoms found; not oxygenated"
     
-    # Check carbon scaffold; require at least 30 carbon atoms
+    # Step 3: Check that the carbon skeleton is large enough (at least 20 carbons as a rough estimate)
     c_count = sum(1 for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6)
-    if c_count < 30:
-        return False, f"Too few carbon atoms ({c_count}); expected at least 30 for a carotenoid backbone"
+    if c_count < 20:
+        return False, "Too few carbon atoms to be a carotenoid"
     
-    # Molecular weight check (xanthophylls are large molecules)
-    mw = rdMolDescriptors.CalcExactMolWt(mol)
-    if mw < 400:
-        return False, f"Molecular weight too low ({mw:.1f} Da); expected ≥400 Da for a xanthophyll"
-    
-    # Check for rings.
-    rings = mol.GetRingInfo().AtomRings()
-    has_ring = len(rings) > 0
-    
-    # Depending on whether a ring exists, choose a SMARTS pattern for a conjugated polyene chain.
-    # (Note: these SMARTS patterns are simplified; more elaborate conjugation detection is possible.)
-    if has_ring:
-        # For cyclic xanthophylls, require at least 4 consecutive C=C bonds.
-        polyene_smarts = "C=C-C=C-C=C-C=C"
-        chain_info = "a conjugated chain with at least 4 consecutive C=C bonds"
-    else:
-        # For acyclic xanthophylls, require a longer chain (here: 5 consecutive C=C bonds).
-        polyene_smarts = "C=C-C=C-C=C-C=C-C=C"
-        chain_info = "a conjugated chain with at least 5 consecutive C=C bonds (typical for acyclic carotenoids)"
-    
-    polyene_pattern = Chem.MolFromSmarts(polyene_smarts)
-    if polyene_pattern is None:
-        return False, "Internal error: could not generate polyene SMARTS pattern"
-    
+    # Step 4: Look for a conjugated polyene chain indicative of carotenoids.
+    # Here we use a simple SMARTS pattern for a chain with three consecutive C=C bonds.
+    polyene_pattern = Chem.MolFromSmarts("C=C-C=C-C=C")
     if not mol.HasSubstructMatch(polyene_pattern):
-        return False, f"No long conjugated polyene chain found; expected {chain_info}"
+        return False, "No sufficiently long conjugated polyene chain found"
     
-    # All conditions met.
-    ring_info = "with at least one ring" if has_ring else "without ring structures (acyclic)"
-    return True, (f"Contains {ring_info}, a long conjugated polyene chain, sufficient carbon scaffold "
-                  f"({c_count} C atoms) and oxygen functionalities (O count: {o_count}), "
-                  f"with molecular weight {mw:.1f} Da consistent with xanthophylls")
+    # Step 5: Check that the molecular weight is high enough (carotenoids generally are large molecules)
+    mw = rdMolDescriptors.CalcExactMolWt(mol)
+    if mw < 300:
+        return False, "Molecular weight too low for a carotenoid"
+    
+    return True, "Contains a long polyene chain and oxygen functionalities consistent with xanthophylls"
 
-# Example usage (for testing); remove or comment out before production deployment:
+# Example usage (this line can be removed in production code):
 if __name__ == '__main__':
-    test_examples = [
-        # A cyclic example: (5R,5'R,6S,8'R)-Luteochrome
-        "O1C2(C1(CCCC2(C)C)\\C=C/C(/C)=C\\C=C\\C(\\C)=C\\C=C/C=C(/C=C/C=C(\\C3OC4(C(C(CCC4)(C)C)=C3)C)/C)\\C",
-        # An acyclic xanthophyll candidate: spheroidene
-        "COC(C)(C)C\\C=C\\C(C)=C\\C=C\\C(C)=C\\C=C\\C(C)=C\\C=C\\C=C(C)\\C=C\\C=C(/C)CC\\C=C(/C)CCC=C(C)C",
-    ]
-    for sm in test_examples:
-        result, reason = is_xanthophyll(sm)
-        print("SMILES:", sm)
-        print("Result:", result, "|", reason)
-        print("-" * 80)
+    test_smiles = "CC(\\C=C\\C=C(C)C=C\\C1=C(C)[C@@H](O)CC1(C)C)"  # partial structure example
+    result, reason = is_xanthophyll(test_smiles)
+    print(result, reason)
