@@ -4,14 +4,18 @@ Classifies: CHEBI:26267 proanthocyanidin
 """
 Classifies: Proanthocyanidin
 A proanthocyanidin is defined as a flavonoid oligomer obtained by the condensation 
-of two or more units of hydroxyflavans. 
+of two or more units of hydroxyflavans.
 
-Heuristic criteria used here:
-  1. The molecule must have a molecular weight > 500 Da (to favor oligomers over monomers).
-  2. The molecule should have multiple rings.
-  3. At least two occurrences of a flavan-like unit, identified by a simplified chroman
-     core SMARTS pattern "[#6]1CCOc2ccccc12", are required.
-Note: This is an approximate, heuristic approach.
+We use these heuristic criteria:
+  1. Molecular weight must be at least 480 Da (to include dimers like dracorubin).
+  2. The molecule should contain at least 6 rings.
+  3. At least two flavan-like units are required. We search for a chroman 
+     (benzopyran) core using a refined SMARTS pattern: “[#6]1CC[O]Cc2ccccc12”
+  4. In addition, we require that at least one pair of these flavan units 
+     is directly connected (i.e. a bond exists between an atom in one unit 
+     and an atom in another). This connection is our proxy for “condensation”.
+     
+Note: This is still an approximate, heuristic approach.
 """
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
@@ -19,56 +23,82 @@ from rdkit.Chem import rdMolDescriptors
 def is_proanthocyanidin(smiles: str):
     """
     Determines if a molecule is a proanthocyanidin based on its SMILES string.
-    A proanthocyanidin, being an oligomer of hydroxyflavan (catechin-like) units, is expected to be large
-    and to contain multiple flavan-like (chroman) substructures.
-    
+    A proanthocyanidin should have a sufficient molecular weight, a rich ring system,
+    and at least two flavan (chroman) units that are connected (consistent with an oligomer).
+
     Args:
         smiles (str): SMILES string of the molecule
 
     Returns:
         bool: True if the molecule is classified as a proanthocyanidin, False otherwise.
-        str: A reason describing the classification decision.
+        str: A reason explaining the classification decision.
     """
-    # Parse the SMILES string into a molecule
+    # Parse the SMILES string
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-        
-    # First criterion: check molecular weight.
-    # Oligomeric proanthocyanidins (dimers or higher) are usually >500 Da.
+
+    # Criterion 1: molecular weight must be at least 480 Da.
     mol_wt = rdMolDescriptors.CalcExactMolWt(mol)
-    if mol_wt < 500:
+    if mol_wt < 480:
         return False, f"Molecular weight is {mol_wt:.1f} Da; too low for a flavonoid oligomer."
         
-    # Second criterion: check the total number of rings.
+    # Criterion 2: count rings. We require at least 6 rings.
     ring_info = mol.GetRingInfo()
     num_rings = ring_info.NumRings()
-    if num_rings < 5:
-        return False, f"Only {num_rings} rings detected; expected several rings in an oligomer."
-    
-    # Third criterion: count the number
-    # of flavan-like units using a simplified SMARTS for a chroman core.
-    # A hydroxyflavan unit (like catechin) has a benzopyran (chroman) motif.
-    # The SMARTS "[#6]1CCOc2ccccc12" represents a saturated 6-membered ring (with an oxygen) fused to a benzene ring.
-    flavan_smarts = "[#6]1CCOc2ccccc12"
+    if num_rings < 6:
+        return False, f"Only {num_rings} rings detected; expected at least 6 rings."
+
+    # Criterion 3: identify flavan-like units via a SMARTS pattern for a chroman core.
+    # This refined SMARTS pattern represents a saturated 6-membered ring containing one oxygen
+    # fused to an aromatic ring.
+    flavan_smarts = "[#6]1CC[O]Cc2ccccc12"
     flavan_pat = Chem.MolFromSmarts(flavan_smarts)
     if flavan_pat is None:
         return False, "Error in SMARTS pattern for flavan unit."
-    
-    # Use substructure search ignoring chirality to allow some variation.
+        
+    # Use substructure search (ignoring chirality) to count the flavan units.
+    # Get all non-overlapping matches.
     matches = mol.GetSubstructMatches(flavan_pat, useChirality=False)
     num_flavan_units = len(matches)
     if num_flavan_units < 2:
         return False, f"Only {num_flavan_units} flavan-like unit(s) found; need at least 2 for an oligomer."
-        
-    # If all criteria are met, classify molecule as a proanthocyanidin.
-    return True, ("Molecule has a molecular weight of {:.1f} Da, {} rings, "
-                  "and {} flavan-like unit match(es), consistent with a proanthocyanidin oligomer."
-                 .format(mol_wt, num_rings, num_flavan_units))
 
-# Example usage (uncomment for testing):
+    # Criterion 4: check connectivity between at least one pair of flavan unit matches.
+    # Two units are considered connected if any atom in one match is directly bonded to any atom in the other.
+    connected = False
+    for i in range(len(matches)):
+        set_i = set(matches[i])
+        for j in range(i+1, len(matches)):
+            set_j = set(matches[j])
+            # If the two matches overlap, skip (we want distinct units)
+            if set_i.intersection(set_j):
+                continue
+            # Check all bonds between atoms in set_i and set_j
+            for atom_idx_i in set_i:
+                for atom_idx_j in set_j:
+                    if mol.GetBondBetweenAtoms(atom_idx_i, atom_idx_j):
+                        connected = True
+                        break
+                if connected:
+                    break
+            if connected:
+                break
+        if connected:
+            break
+
+    if not connected:
+        return False, "Flavan-like units detected but no inter-unit bond found (lack of condensation)."
+
+    reason = (
+        "Molecule has a molecular weight of {:.1f} Da, {} rings, and {} flavan-like unit match(es); "
+        "at least one pair of units is connected, consistent with a proanthocyanidin oligomer."
+        .format(mol_wt, num_rings, num_flavan_units)
+    )
+    return True, reason
+
+# Example usage (for testing, uncomment below):
 # if __name__ == '__main__':
-#     # Example SMILES: (-)-epigallocatechin-(4beta->6)-(+)-catechin
 #     sample_smiles = "O[C@H]1Cc2c(O[C@@H]1c1ccc(O)c(O)c1)cc(O)c([C@@H]1[C@@H](O)[C@H](Oc3cc(O)cc(O)c13)c2O)c2O"
-#     result, reason = is_proanthocyanidin(sample_smiles)
-#     print(result, reason)
+#     result, classification_reason = is_proanthocyanidin(sample_smiles)
+#     print(result, classification_reason)
