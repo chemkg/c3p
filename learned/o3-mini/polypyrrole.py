@@ -4,16 +4,20 @@ Classifies: CHEBI:38077 polypyrrole
 #!/usr/bin/env python
 """
 Classifies: A compound composed of two or more pyrrole units.
-A pyrrole unit is defined here as a five‐membered aromatic ring 
-that contains exactly one nitrogen atom and four carbon atoms.
-To avoid false positives from isolated pyrrole fragments appended to a larger scaffold,
-this version requires that at least two pyrrole matches are connected in the molecule.
-Furthermore, we compute the fraction of heavy atoms (non‐hydrogens) that belong to the 
-union of those connected pyrrole units. If exactly two connected rings are found we require
-a lower fraction (>=20%), but if three or more connected rings are found we demand that they
-contain at least 40% of the molecule’s heavy atoms.
-Note that this rule‐based method is imperfect – some known polypyrroles may be missed and
-some false positives may still pass.
+A pyrrole unit here is defined as a 5‐membered aromatic ring 
+with exactly one nitrogen and four carbon atoms.
+We first extract rings from the molecule (via GetRingInfo), confirm which rings 
+meet the pyrrole criteria, and then group nearby rings into connected clusters.
+Two rings are considered “connected” if the ring plus its immediate neighbors 
+(over its bonds) touches the other ring. In addition, if two rings are directly fused 
+(i.e. share at least one atom) we lower the fraction threshold.
+Finally, for the largest connected cluster found we compute 
+the fraction f = (# unique heavy atoms in the pyrrole units)/(# heavy atoms in molecule).
+If the cluster has:
+  • 2 pyrrole units: if they are fused, we require f >= 0.20, otherwise we require f >= 0.35.
+  • ≥3 pyrrole units: we require f >= 0.40.
+If at least one cluster meets the above criteria the molecule qualifies as a polypyrrole.
+Note: This rule‐based method remains heuristic and may miss some examples or yield false positives.
 """
 
 from rdkit import Chem
@@ -21,78 +25,80 @@ from rdkit.Chem import rdMolDescriptors
 
 def is_polypyrrole(smiles: str):
     """
-    Determines if a molecule is a polypyrrole – i.e. it contains two or more pyrrole units in a connected network.
-    A pyrrole unit is a five-membered aromatic ring containing one nitrogen atom and four carbon atoms.
+    Determines if a molecule is a polypyrrole – i.e. it contains at least two pyrrole units 
+    (as defined: 5-membered aromatic rings with one nitrogen and four carbons) arranged in a connected network.
     
-    Our algorithm uses the following steps:
+    The algorithm proceeds as follows:
       1. Parse and sanitize the molecule.
-      2. Count heavy atoms (non‐hydrogen atoms).
-      3. Find all substructures that match a pyrrole SMARTS.
-      4. If fewer than 2 pyrrole matches are found, return False.
-      5. For each match, we "expand" its atom indices by including all direct neighbors.
-      6. We then cluster pyrrole matches into connected (or near‐connected) groups.
-         Two matches are considered connected if the expanded neighborhood of one overlaps 
-         with the actual atom set of the other.
-      7. For each connected cluster we compute (a) the number ("n_ring") of pyrrole units 
-         and (b) the fraction (f) = (# unique heavy atoms in all pyrrole rings in the cluster)/(# heavy atoms in the molecule)
-      8. Finally, we require that at least one cluster has:
-           - n_ring >= 2 and,
-           - if n_ring == 2: f >= 0.20, else (n_ring >= 3): f >= 0.40.
-           
+      2. Count heavy atoms (non‐H) for later fraction computation.
+      3. Identify all rings (from GetRingInfo) and keep only those 5-membered, aromatic rings with exactly one N.
+      4. For each candidate pyrrole ring, expand its atom set to include all directly-bonded neighbors.
+      5. Cluster pyrrole rings as “connected” if one ring’s expanded set overlaps the other ring’s atom set.
+      6. Mark clusters as “fused” if any two rings in the cluster share at least one atom.
+      7. For each cluster, compute the union of the actual ring atoms and its heavy atom fraction.
+         • For a two‐ring cluster: require f >= 0.20 if fused, else f >= 0.35.
+         • For clusters of 3 or more rings, require f >= 0.40.
+      8. Return True if at least one cluster meets the criteria.
+      
     Args:
        smiles (str): SMILES string of the molecule.
        
     Returns:
-       bool: True if the molecule qualifies as a (connected) polypyrrole, False otherwise.
-       str: Detailed reason for the classification decision.
+       bool: True if the molecule qualifies as a polypyrrole, False otherwise.
+       str: Detailed reason for the decision.
     """
     # Parse SMILES string.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
-        return False, "Invalid SMILES string"
+        return False, "Invalid SMILES string."
     
-    # Sanitize the molecule (to assign aromaticity etc.)
+    # Sanitize the molecule to assign aromaticity etc.
     try:
         Chem.SanitizeMol(mol)
     except Exception as e:
         return False, f"Sanitization failed: {e}"
     
-    # Count heavy (non-hydrogen) atoms in the molecule.
+    # Count heavy atoms (non-hydrogens) for fraction computation.
     heavy_atoms = [atom for atom in mol.GetAtoms() if atom.GetAtomicNum() > 1]
     if not heavy_atoms:
-        return False, "No heavy atoms found in molecule"
+        return False, "No heavy atoms in molecule."
     total_heavy = len(heavy_atoms)
     
-    # Define the SMARTS for a pyrrole unit. This pattern matches a 5-membered aromatic ring
-    # with one nitrogen ([n;a,r]) and four aromatic carbons ([c;a,r]).
-    pyrrole_smarts = "[n;a,r]1[c;a,r][c;a,r][c;a,r][c;a,r]1"
-    pyrrole_query = Chem.MolFromSmarts(pyrrole_smarts)
-    if pyrrole_query is None:
-        return None, None  # in case SMARTS fails to compile
+    # Extract rings from the molecule.
+    ring_info = mol.GetRingInfo()
+    candidate_rings = []
+    for ring in ring_info.AtomRings():
+        # Only 5-membered rings are candidate for a pyrrole unit.
+        if len(ring) != 5:
+            continue
+        # Check that every ring atom is aromatic.
+        if not all(mol.GetAtomWithIdx(idx).GetIsAromatic() for idx in ring):
+            continue
+        # Count nitrogen atoms.
+        n_count = sum(1 for idx in ring if mol.GetAtomWithIdx(idx).GetAtomicNum() == 7)
+        if n_count == 1:
+            candidate_rings.append(set(ring))
     
-    # Find all matches of the pyrrole substructure.
-    # Each match is a tuple of atom indices.
-    pyrrole_matches = mol.GetSubstructMatches(pyrrole_query, uniquify=True)
-    num_matches = len(pyrrole_matches)
-    if num_matches < 2:
-        return False, f"Found {num_matches} pyrrole unit(s); at least 2 are required."
+    if len(candidate_rings) < 2:
+        return False, f"Found {len(candidate_rings)} pyrrole ring(s); at least 2 are required."
     
-    # For each pyrrole match, construct an "expanded" set:
-    # the atoms in the match plus any direct neighbor (bond-connected) atoms.
-    expanded_matches = []
-    for match in pyrrole_matches:
-        atoms_set = set(match)
-        for idx in match:
+    # For connectivity we expand each ring's atom set by including neighbors.
+    expanded_rings = []
+    for ring in candidate_rings:
+        expanded = set(ring)
+        for idx in ring:
             atom = mol.GetAtomWithIdx(idx)
             for nbr in atom.GetNeighbors():
-                atoms_set.add(nbr.GetIdx())
-        expanded_matches.append(atoms_set)
+                expanded.add(nbr.GetIdx())
+        expanded_rings.append(expanded)
     
-    # Cluster the pyrrole matches into connected groups.
-    # We use a simple union-find logic over the indices of pyrrole_matches.
-    parent = list(range(num_matches))
+    # Cluster the rings via union-find; two rings are “connected” if the expanded set of one overlaps
+    # the actual atom set of the other.
+    n_rings = len(candidate_rings)
+    parent = list(range(n_rings))
     
     def find(i):
+        # Find with path compression.
         while parent[i] != i:
             parent[i] = parent[parent[i]]
             i = parent[i]
@@ -103,75 +109,92 @@ def is_polypyrrole(smiles: str):
         if ri != rj:
             parent[rj] = ri
     
-    # Two pyrrole matches are considered connected if the expanded set of one 
-    # overlaps the original atom set of the other.
-    for i in range(num_matches):
-        for j in range(i+1, num_matches):
-            set_i = set(pyrrole_matches[i])
-            set_j = set(pyrrole_matches[j])
-            # Check if the expanded neighbourhood of match i touches match j or vice versa.
-            if (expanded_matches[i] & set_j) or (expanded_matches[j] & set_i):
+    for i in range(n_rings):
+        for j in range(i+1, n_rings):
+            if expanded_rings[i] & candidate_rings[j] or expanded_rings[j] & candidate_rings[i]:
                 union(i, j)
-    
-    # Group the matches by cluster root.
+                
+    # Group rings by their cluster roots.
     clusters = {}
-    for i in range(num_matches):
+    for i in range(n_rings):
         root = find(i)
         clusters.setdefault(root, []).append(i)
     
+    # Evaluate each cluster.
     # For each cluster, compute:
-    #  a) the number of pyrrole units (n_ring),
-    #  b) the union of atom indices (only those in the actual pyrrole rings, not the expansion).
-    cluster_info = []
-    for clust in clusters.values():
-        n_ring = len(clust)
+    #   a) The number of pyrrole rings (n_ring)
+    #   b) The union of the ring atoms (actual atoms in the candidate rings)
+    #   c) Whether the cluster is "fused" (any two rings share at least one atom directly)
+    cluster_found = False
+    for cluster_indices in clusters.values():
+        n_ring = len(cluster_indices)
+        if n_ring < 2:
+            continue  # we need at least 2 pyrrole units in a cluster
         union_atoms = set()
-        for idx in clust:
-            union_atoms.update(pyrrole_matches[idx])
-        cluster_info.append((n_ring, union_atoms))
-    
-    # Choose the largest cluster (by number of rings) that is a candidate.
-    best = None
-    for n_ring, atoms_set in cluster_info:
-        fraction = len(atoms_set) / total_heavy
-        if best is None or n_ring > best[0]:
-            best = (n_ring, atoms_set, fraction)
-    
-    # If no cluster found:
-    if best is None:
-        return False, "No connected pyrrole clusters found."
-    
-    n_ring, atoms_set, fraction = best
-    # Set threshold based on the size of the connected cluster.
-    if n_ring == 2:
-        threshold = 0.20
-    else:
-        threshold = 0.40
-    
-    reason = (f"Connected cluster has {n_ring} pyrrole unit(s) covering {fraction:.2f} "
-              f"of heavy atoms (threshold {threshold}); ")
-    
-    if n_ring < 2:
-        return False, reason + "At least 2 connected pyrrole units are required."
-    if fraction < threshold:
-        return False, reason + "Molecule is not sufficiently composed of pyrrole units."
-    
-    return True, reason + "Qualifies as a polypyrrole."
+        rings_in_cluster = []
+        for idx in cluster_indices:
+            ring_atoms = candidate_rings[idx]
+            union_atoms |= ring_atoms
+            rings_in_cluster.append(ring_atoms)
+        fraction = len(union_atoms) / total_heavy
+        
+        # Determine if any pair is directly fused (i.e. share at least one atom)
+        fused = False
+        for i in range(len(rings_in_cluster)):
+            for j in range(i+1, len(rings_in_cluster)):
+                if rings_in_cluster[i] & rings_in_cluster[j]:
+                    fused = True
+                    break
+            if fused:
+                break
+                
+        # Set threshold based on cluster type.
+        if n_ring == 2:
+            threshold = 0.20 if fused else 0.35
+        else:
+            threshold = 0.40
 
-# Example usage:
+        # If cluster meets threshold, we can classify as polypyrrole.
+        if fraction >= threshold:
+            reason = (f"Connected cluster has {n_ring} pyrrole unit(s) "
+                      f"(fused: {fused}) covering {fraction:.2f} of heavy atoms "
+                      f"(threshold {threshold}). Qualifies as a polypyrrole.")
+            return True, reason
+            
+    # If no cluster qualifies, return details based on the best (largest or highest fraction) cluster.
+    best_cluster = None
+    best_n = 0
+    best_frac = 0.0
+    for cluster_indices in clusters.values():
+        n_ring = len(cluster_indices)
+        union_atoms = set()
+        for idx in cluster_indices:
+            union_atoms |= candidate_rings[idx]
+        frac = len(union_atoms) / total_heavy
+        if n_ring > best_n or (n_ring == best_n and frac > best_frac):
+            best_n = n_ring
+            best_frac = frac
+            best_cluster = cluster_indices
+    return False, (f"No connected pyrrole cluster met the threshold. "
+                   f"Best cluster had {best_n} pyrrole unit(s) covering {best_frac:.2f} "
+                   f"of heavy atoms.")
+
+# Example usage for testing:
 if __name__ == "__main__":
-    # Here are a few examples.
     test_cases = [
-        # A true positive example (porphyrin-like: several connected pyrrole units).
-        ("Cc1c2Cc3[nH]c(Cc4[nH]c(Cc5[nH]c(Cc([nH]2)c1CCC(O)=O)c(C)c5CCC(O)=O)c(C)c4CCC(O)=O)c(C)c3CCC(O)=O",
-         "coproporphyrinogen III"),
-        # A dipyrromethane example.
-        ("C(c1ccc[nH]1)c1ccc[nH]1", "dipyrromethane"),
-        # Example that previously was a false negative: (1R)-primary fluorescent chlorophyll catabolite.
-        ("C=1(C2=C(NC1CC=3NC(C(=O)[H])=C(C)C3CC)/C(=C/4\\N=C(C[C@@]5(C(C)=C(C=C)C(=O)N5)[H])[C@@H](C)[C@@H]4CCC(=O)O)/[C@@H](C(=O)OC)C2=O)",
+        # True positive examples:
+        ("CN(C)CCNC(=O)CCC1=[N+]2C(C=C1)=Cc1ccc(-c3ccc[nH]3)n1[B-]2(F)F", "DND-99 dye"),
+        ("O(C=1C(N=C(C1)C=2NC=CC2)=CC=3NC(C=4NC=CC4)=CC3OC)C", "Purple pigment"),
+        ("c1cc2cc3ccc([nH]3)c3ccc(cc4ccc(cc5ccc(cc1n2)[nH]5)n4)[nH]3", "Sapphyrin"),
+        ("[H]C(=C([H])C1=[N+]2C(C=C1)=Cc1ccc(-c3ccc[nH]3)n1[B-]2(F)F)c1ccc(OCC(=O)NCCCCCC(=O)ON2C(=O)CCC2=O)", "BODIPY 650/665-X"),
+        ("O(C1=C2NC(=C1)C=3NC(CCCCCCCCCC4=NC(=C2)C=C4)=CC3)C", "Nonylprodigiosin"),
+        
+        # False positive example:
+        ("ClC1=CC2=C(N([C@@H]3O[C@@H]([C@@H](O)[C@@H]([C@H]3O)O)C)C4=C2C=CC5=C4NC=6C=CC=CC56)C=C1", "Tjipanazole C1"),
+        
+        # False negative examples (should be rejected because fewer than 2 connected pyrrole rings detected):
+        ("C=1(C2=C(NC1CC=3NC(C(=O)[H])=C(C)C3CC)/C(=C/4\\N=C(C[C@@]5(C(C)=C(C=C)C(=O)N5)[H])[C@@H](C)[C@@H]4CCC(=O)O)/[C@@H](C(=O)OC)C2=O", 
          "(1R)-primary fluorescent chlorophyll catabolite"),
-        # Example that was a false positive in the previous version.
-        ("ClC1=C(Cl)C=C2C(C=3C(=C(C(=O)OC)NC3)C=4C5=C(C=CC(=C5)Cl)NC4)=CNC2=C1", "Lynamicin B")
     ]
     
     for smi, name in test_cases:
