@@ -4,118 +4,151 @@ Classifies: CHEBI:15904 long-chain fatty acid
 """
 Classifies: Long-chain fatty acid (chain length ranging from C13 to C22)
 
-A long-chain fatty acid is defined as a fatty acid with a chain length
-ranging from C13 to C22. In our implementation, we require that the molecule
-contains a terminal carboxylic acid group (–C(=O)O, where the acid proton might
-be implicit or expressed as a negative charge) and that the longest continuous carbon
-chain containing that carboxyl group (i.e. starting at its unique carbon neighbor)
-has a total length (including the carboxyl carbon) between 13 and 22.
+A long-chain fatty acid is defined as a fatty acid with a chain length ranging 
+from C13 to C22. In our implementation we require that the molecule contains a terminal 
+carboxyl group, which we detect by finding a carbon atom (acid carbon) that:
+  - Is bonded to exactly two oxygens: one via a double bond (carbonyl) and one via a single bond (hydroxyl or anionic oxygen)
+  - Is attached to exactly one other carbon (making it “terminal”)
+Then we “walk” the connected carbon chain (ignoring non-carbon atoms) while enforcing that:
+  - The chain is acyclic (none of the chain carbons is in a ring)
+  - The chain is unbranched (each chain carbon along the path extends in only one direction)
+If the total number of carbons in this chain (including the carboxyl carbon) is between 13 and 22, 
+the molecule is classified as a long-chain fatty acid.
 """
 from rdkit import Chem
 
 def is_long_chain_fatty_acid(smiles: str):
     """
-    Determines if a molecule is a long-chain fatty acid based on its SMILES string.
-    
-    A long-chain fatty acid is defined as a fatty acid with a chain length ranging 
-    from C13 to C22. Here we require that the molecule contains a terminal carboxyl group,
-    which we (heuristically) define as the presence of a carboxyl moiety ([CX3](=O)[OX1])
-    whose carbon (the acid carbon) is attached to exactly one other carbon atom. Then, 
-    we compute the longest continuous carbon chain (via a DFS on the carbon-only graph)
-    that is attached to that acid group. If the chain length (including the acid carbon)
-    is between 13 and 22 (inclusive), we return True.
-    
+    Determines if a molecule qualifies as a long-chain fatty acid based on its SMILES string.
+
+    A long-chain fatty acid is defined as having a terminal carboxyl group (C(=O)O or C(=O)[O-])
+    whose acid carbon is attached to exactly one other carbon, and the longest linear carbon chain 
+    (starting at that neighbor and including the acid carbon) has a length between 13 and 22. Additionally,
+    the carbon chain must be acyclic and unbranched.
+
     Args:
         smiles (str): SMILES string of the molecule
-        
+
     Returns:
         bool: True if the molecule qualifies as a long-chain fatty acid, False otherwise.
-        str: Reason for the classification.
+        str: Reason detailing the classification outcome.
     """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
 
-    # We define a SMARTS for a carboxyl group.
-    # This pattern [CX3](=O)[OX1] will match a carbonyl carbon attached to an oxygen,
-    # either as -OH or as [O-]. This is more general than requiring an explicit H.
-    acid_smarts = "[CX3](=O)[OX1]"
-    acid_pattern = Chem.MolFromSmarts(acid_smarts)
-    acid_matches = mol.GetSubstructMatches(acid_pattern)
-    if not acid_matches:
-        return False, "Molecule does not have a carboxyl group (C(=O)O or C(=O)[O-])"
-    
-    # Build a carbon connectivity graph for the molecule.
-    # The graph keys are atom indices of carbon atoms (atomic number 6)
-    # and the values are lists of bonded carbon atom indices.
-    carbon_graph = {}
+    # First, iterate over atoms to find a candidate acid carbon
+    # Our criteria for an acid (carboxyl) carbon are:
+    #  1. It is a carbon (atomic num 6)
+    #  2. It is bonded to exactly two oxygens: one by a double bond and one by a single bond.
+    #  3. Aside from these oxygens, it is bonded to exactly one other carbon.
+    candidate_found = False
+    candidate_acid_atom = None
+    candidate_chain_neighbor = None
+
     for atom in mol.GetAtoms():
-        if atom.GetAtomicNum() == 6:
-            idx = atom.GetIdx()
-            carbon_graph[idx] = []
-            for nbr in atom.GetNeighbors():
-                if nbr.GetAtomicNum() == 6:
-                    carbon_graph[idx].append(nbr.GetIdx())
-    
-    # Now search among all acid matches for one that is "terminal".
-    # We require that the acid carbon (first atom in the match) has exactly one bonded carbon neighbor.
-    valid_acid_found = False
-    chain_length_found = None
-    acid_atom_idx = None
-    chain_start_idx = None
-    for match in acid_matches:
-        # In the SMARTS pattern "[CX3](=O)[OX1]", the first atom is the acid carbon.
-        acid_idx = match[0]
-        # Get the carbon neighbors of this acid carbon
-        acid_atom = mol.GetAtomWithIdx(acid_idx)
-        carbon_neighbors = [nbr.GetIdx() for nbr in acid_atom.GetNeighbors() if nbr.GetAtomicNum() == 6]
-        if len(carbon_neighbors) != 1:
-            # Not terminal (could be attached to more than one carbon); skip this match.
+        if atom.GetAtomicNum() != 6:
             continue
-        # We have found a candidate. Record the acid carbon and its unique carbon neighbor.
-        acid_atom_idx = acid_idx
-        chain_start_idx = carbon_neighbors[0]
-        valid_acid_found = True
+        # Find oxygen neighbors (ignoring any other atoms)
+        oxy_neighbors = []
+        for nbr in atom.GetNeighbors():
+            if nbr.GetAtomicNum() == 8:
+                # record the bond type as well
+                bond = mol.GetBondBetweenAtoms(atom.GetIdx(), nbr.GetIdx())
+                oxy_neighbors.append((nbr, bond.GetBondType()))
+        if len(oxy_neighbors) != 2:
+            continue
+        
+        # Check that one oxygen is double bonded and one is single bonded.
+        dbl_bond = False
+        sgl_bond = False
+        for nbr, btype in oxy_neighbors:
+            if btype.name == "DOUBLE":
+                dbl_bond = True
+            elif btype.name == "SINGLE":
+                sgl_bond = True
+        if not (dbl_bond and sgl_bond):
+            continue
+
+        # Now, count carbon neighbors (excluding the oxygens)
+        carbon_neighbors = []
+        for nbr in atom.GetNeighbors():
+            if nbr.GetAtomicNum() == 6:
+                carbon_neighbors.append(nbr)
+        if len(carbon_neighbors) != 1:
+            continue
+
+        # We have a candidate terminal carboxyl carbon.
+        candidate_found = True
+        candidate_acid_atom = atom
+        candidate_chain_neighbor = carbon_neighbors[0]
         break
 
-    if not valid_acid_found:
-        return False, "No terminal carboxyl group found (the acid carbon is not at the chain terminus)"
-    
-    # Now compute the length of the long carbon chain that is connected to the acid group.
-    # We define a recursive DFS to find the longest simple path in the carbon_graph.
-    def dfs(current, visited):
-        max_length = 1  # Count the current node
-        for nbr in carbon_graph.get(current, []):
-            if nbr in visited:
-                continue
-            new_visited = visited | {nbr}
-            candidate = 1 + dfs(nbr, new_visited)
-            if candidate > max_length:
-                max_length = candidate
-        return max_length
+    if not candidate_found:
+        return False, "No terminal carboxyl group found (acid carbon not identified with required bonding)"
 
-    # Our chain includes the acid carbon plus the chain starting from its unique carbon neighbor.
-    # Start the DFS from the chain_start_idx; mark the acid carbon as visited so we don't go back.
-    chain_length = 1 + dfs(chain_start_idx, {acid_atom_idx, chain_start_idx})
-    
-    # Check if the measured chain length falls within the allowed range
+    # For the fatty acid chain to be valid, the acid carbon itself should not be in a ring.
+    if candidate_acid_atom.IsInRing():
+        return False, "Acid carbon is in a ring; not a linear fatty acid chain"
+
+    # Now follow the chain from the unique carbon neighbor.
+    # We require an unbranched, acyclic path. Here we do an iterative “walk”:
+    chain_length = 1  # start with acid carbon
+    current = candidate_chain_neighbor
+    previous_idx = candidate_acid_atom.GetIdx()
+
+    # Check: the chain neighbor should not itself be in a ring.
+    if current.IsInRing():
+        return False, "Chain carbon is in a ring; not a valid fatty acid chain"
+
+    chain_length += 1  # counting the first chain carbon
+
+    # Walk the chain until no unambiguous next carbon is found.
+    while True:
+        # For the current atom, get its carbon neighbors (excluding the one we came from)
+        nbr_carbon_indices = []
+        for nbr in current.GetNeighbors():
+            if nbr.GetAtomicNum() != 6:
+                continue
+            if nbr.GetIdx() == previous_idx:
+                continue
+            nbr_carbon_indices.append(nbr.GetIdx())
+        
+        # For a linear unbranched chain, there must be exactly one next carbon.
+        if len(nbr_carbon_indices) == 0:
+            # reached terminal end
+            break
+        if len(nbr_carbon_indices) > 1:
+            return False, f"Chain is branched at carbon index {current.GetIdx()}; not a linear fatty acid chain"
+
+        # Otherwise, continue along the unique path
+        next_idx = nbr_carbon_indices[0]
+        next_atom = mol.GetAtomWithIdx(next_idx)
+        if next_atom.IsInRing():
+            return False, f"Chain carbon at index {next_idx} is in a ring; not a valid fatty acid chain"
+        chain_length += 1
+        previous_idx = current.GetIdx()
+        current = next_atom
+
+    # Finally, check the chain length criterion (including the acid carbon).
     if chain_length < 13:
         return False, f"Chain length too short: {chain_length} carbons (< 13 required)"
     if chain_length > 22:
         return False, f"Chain length too long: {chain_length} carbons (> 22 allowed)"
-    
-    return True, f"Terminal carboxyl group found with chain length of {chain_length} carbons"
 
-# Example test cases (uncomment for local testing):
-# examples = [
+    return True, f"Terminal carboxyl group found with linear chain of {chain_length} carbons"
+
+# Example test cases (for local testing, uncomment if needed)
+# test_smiles = [
 #     ("O(O)[C@H](CCCCC)\\C=C\\CCCCCCCCCC(O)=O", "13R-HpOME(11E)"),
 #     ("O[C@H]([C@@H](O)C/C=C/CCCCC)C(=O)CCCCCCC(O)=O", "(9R,10S,12Z)-9,10-Dihydroxy-8-oxo-12-octadecenoic acid"),
 #     ("CCCCCCCCCCCCC(O)=O", "Tridecanoic acid"),
 # ]
-# for s, name in examples:
+# for s, name in test_smiles:
 #     result, reason = is_long_chain_fatty_acid(s)
 #     print(f"SMILES: {s}\nNAME: {name}\nResult: {result}, Reason: {reason}\n")
     
-# Note: This heuristic defines the chain based on the longest simple path through carbon atoms
-# that is connected at the terminal carboxyl group. This approach may need refinement for
-# very complex structures, but it addresses the issues encountered previously.
+# Note: This heuristic focuses on identifying a terminal carboxyl carbon that is bonded as expected
+# and then “walking” the unbranched, acyclic carbon chain attached to it. Molecules with additional
+# functional groups or cyclic/branched structures (such as carnitines or prostaglandins) will thus be 
+# excluded from the classification. This approach may still require further refinement for edge cases.
