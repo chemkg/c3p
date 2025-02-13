@@ -4,15 +4,13 @@ Classifies: CHEBI:28765 phosphatidylinositol phosphate
 #!/usr/bin/env python3
 """
 Classifies: phosphatidylinositol phosphate (a phosphoinositide)
-Definition: Any member of the phosphoinositide family of compounds, of which seven occur naturally.
+Definition: Any member of the phosphoinositide family with an additional phosphate on the inositol ring.
 Improved criteria:
-  1. The molecule must have at least two ester bonds as a proxy for fatty acid chains.
-     We require the pattern "[#6][C](=O)O" to minimize matching free carboxylic acids.
-  2. The molecule must contain an inositol ring. We search for a six‐membered ring made entirely of carbons 
-     with at least three exocyclic oxygen substituents.
-  3. At least one of the oxygens attached to the inositol ring must be linked to a phosphate group,
-     i.e. to a phosphorus atom that has at least one double‐bonded oxygen.
-Note: This is still a simplified filter.
+  1. The molecule must have at least two ester bonds reflecting two fatty acid chains via a glycerol backbone.
+  2. The molecule must contain an inositol ring: a six‐membered non‐aromatic carbon ring with at least three exocyclic oxygen substituents.
+  3. The molecule must have at least two phosphorus atoms so that one P is the connecting phosphate and the extra phosphate(s) come from phosphorylation on the inositol ring.
+  4. At least one exocyclic oxygen on the inositol ring must be directly connected to a phosphorus that bears a double‐bonded oxygen.
+Note: This remains a simplified heuristic.
 """
 from rdkit import Chem
 
@@ -21,16 +19,19 @@ def is_phosphatidylinositol_phosphate(smiles: str):
     Determines if a molecule is a phosphatidylinositol phosphate based on its SMILES string.
     
     A candidate should have:
-      1. Two ester bonds representing two fatty acid chains linked via a glycerol backbone.
-      2. An inositol ring (a six‐membered aliphatic ring made of carbons with several exocyclic -OH or phosphate substituents).
-      3. At least one hydroxyl (or phosphate‐substituted) on the inositol ring is further bound to a phosphate group.
-      
+      1. At least two ester bonds (as a proxy for two fatty acyl chains).
+      2. An inositol ring defined as a six‐membered aliphatic ring (all carbons)
+         with at least three exocyclic oxygen substituents.
+      3. At least two phosphorus atoms (ensuring that one phosphate is present
+         beyond the basic phosphatidylinositol connectivity).
+      4. At least one exocyclic oxygen on the inositol ring must be directly bound
+         to a phosphate group (verified by the presence of a P–O double bond on that phosphorus).
+         
     Args:
         smiles (str): SMILES representation of the molecule.
         
     Returns:
-        bool: True if the molecule meets the criteria for a phosphatidylinositol phosphate,
-              False otherwise.
+        bool: True if the molecule meets the criteria for a phosphatidylinositol phosphate, False otherwise.
         str: Explanation for the classification.
     """
     # Parse the SMILES string.
@@ -38,65 +39,66 @@ def is_phosphatidylinositol_phosphate(smiles: str):
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # 1. Check for at least two ester bonds (fatty acid chains linked to a glycerol backbone)
+    # 1. Check for at least two ester bonds.
+    # We use the pattern: a carbonyl carbon (attached to any carbon) with an oxygen.
     ester_pattern = Chem.MolFromSmarts("[#6][C](=O)O")
     ester_matches = mol.GetSubstructMatches(ester_pattern)
     if len(ester_matches) < 2:
-        return False, f"Found less than 2 ester groups (found {len(ester_matches)}); require at least 2 for fatty acid chains"
+        return False, f"Found {len(ester_matches)} ester group(s); require at least 2 for fatty acid chains"
 
-    # 2. Search for an inositol ring.
-    # Look for six-membered rings (non-aromatic) made entirely of carbon atoms.
+    # 2. Count phosphorus atoms. Phosphatidylinositol phosphates should have at least 2 phosphorus atoms.
+    p_atoms = [atom for atom in mol.GetAtoms() if atom.GetAtomicNum() == 15]
+    if len(p_atoms) < 2:
+        return False, f"Found {len(p_atoms)} phosphorus atom(s); phosphatidylinositol phosphates require at least 2"
+
+    # 3. Look for an inositol ring.
+    # Find any non-aromatic ring of 6 atoms where each atom is carbon.
     ring_info = mol.GetRingInfo()
     inositol_candidate = None  # will store a tuple: (ring_atom_indices, list of (ring atom index, exocyclic oxygen index))
     for ring in ring_info.AtomRings():
         if len(ring) == 6:
-            # Check if all atoms in the ring are carbon (atomic num = 6)
             if all(mol.GetAtomWithIdx(idx).GetAtomicNum() == 6 for idx in ring):
-                # Now count the exocyclic oxygen substituents on the ring atoms.
+                # Count exocyclic oxygen substituents on ring atoms.
                 oxy_subs = []
                 for idx in ring:
                     atom = mol.GetAtomWithIdx(idx)
                     for nbr in atom.GetNeighbors():
                         if nbr.GetIdx() not in ring and nbr.GetSymbol() == "O":
-                            oxy_subs.append( (idx, nbr.GetIdx()) )
-                # You can adjust the threshold (e.g. require at least 3 substituents)
+                            oxy_subs.append((idx, nbr.GetIdx()))
                 if len(oxy_subs) >= 3:
                     inositol_candidate = (ring, oxy_subs)
                     break
     if not inositol_candidate:
-        return False, "No inositol ring (a six-membered carbon ring with at least 3 oxygen substituents) detected"
+        return False, "No inositol ring (six-membered carbon ring with at least 3 exocyclic oxygens) detected"
 
-    # 3. Verify that at least one of the exocyclic oxygens attached to the inositol ring is linked to a phosphate group.
-    phosphate_found = False
-    # For each oxygen substituent on the inositol ring:
+    # 4. Check that at least one of the inositol's exocyclic oxygens is attached to a phosphate group.
+    # We require that the attached phosphorus atom has at least one double-bonded oxygen.
+    phosphate_attached = False
     for ring_atom_idx, oxy_idx in inositol_candidate[1]:
         oxy_atom = mol.GetAtomWithIdx(oxy_idx)
-        # Check the neighbors of the oxygen (other than the inositol carbon)
         for nbr in oxy_atom.GetNeighbors():
-            if nbr.GetIdx() == ring_atom_idx:
-                continue
-            # Look for a phosphorus atom:
             if nbr.GetSymbol() == "P":
-                # Check if this phosphorus has at least one double-bonded oxygen.
+                # Verify that this phosphorus has a double-bonded oxygen.
                 dblO_count = 0
                 for p_nbr in nbr.GetNeighbors():
-                    # Skip oxygen that is the same as our oxy_atom because we came from there.
-                    if p_nbr.GetSymbol() != "O":
+                    if p_nbr.GetIdx() == oxy_idx:
                         continue
-                    bond = mol.GetBondBetweenAtoms(nbr.GetIdx(), p_nbr.GetIdx())
-                    if bond is not None and bond.GetBondTypeAsDouble() >= 2:
-                        dblO_count += 1
+                    if p_nbr.GetSymbol() == "O":
+                        bond = mol.GetBondBetweenAtoms(nbr.GetIdx(), p_nbr.GetIdx())
+                        if bond is not None and bond.GetBondTypeAsDouble() >= 2:
+                            dblO_count += 1
                 if dblO_count >= 1:
-                    phosphate_found = True
+                    phosphate_attached = True
                     break
-        if phosphate_found:
+        if phosphate_attached:
             break
-    if not phosphate_found:
+    if not phosphate_attached:
         return False, "No phosphate group found directly attached to an oxygen substituent of the inositol ring"
     
-    # All criteria are met.
-    return True, "Contains two acyl chains linked via ester bonds, an inositol ring with sufficient oxygen substituents, and a phosphate attached to the inositol ring"
+    # All criteria met.
+    return True, ("Contains at least two acyl chains (ester bonds), an inositol ring with sufficient exocyclic oxygens, "
+                  "and an extra phosphate (total P count >= 2 with a phosphate attached to the inositol ring)")
 
-# Example usage (uncomment for testing):
+# Example usage (for testing, uncomment as needed):
 # test_smiles = "[C@@H]1(C(C(C([C@H](C1O)OP(=O)(O)O)O)O)O)OP(OC[C@](COC(CCCCCCCCCCCCCCCCC)=O)([H])OC(CCCCCCCCCCCCCCC)=O)(O)=O"
 # print(is_phosphatidylinositol_phosphate(test_smiles))
