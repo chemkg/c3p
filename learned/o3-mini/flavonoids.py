@@ -3,10 +3,9 @@ Classifies: CHEBI:72544 flavonoids
 """
 """
 Classifies: Flavonoids (a superclass comprising various flavonoid‐related chemotypes)
-Definition (heuristic): Organic molecules whose aglycone is based on a phenyl‐substituted 
-1-phenylpropane (typically a C15 or C16 skeleton) and often contains a characteristic benzopyrone 
-or chalcone fragment.
-Note: Because of the variability of glycosylation and other modifications the classification is heuristic.
+Definition (heuristic): Organic molecules whose aglycone is based on derivatives of a phenyl‐substituted 
+1-phenylpropane (typically a C15 or C16 skeleton, sometimes extended by condensation with C6–C3 lignans). 
+Because of glycosylation and other modifications the classification is necessarily heuristic.
 """
 
 from rdkit import Chem
@@ -16,11 +15,10 @@ from rdkit.Chem.Scaffolds import MurckoScaffold
 def remove_sugars(mol):
     """
     Attempts to remove sugar rings from a molecule.
-    This is done iteratively: any 5- or 6-membered ring that is non‐aromatic
-    and is “isolated” (not fused to an aromatic ring) is removed.
-    (This is heuristic and may over- or under-remove sugar-like fragments.)
+    This is done iteratively. Any isolated (non-fused to an aromatic ring) 5- or 6-membered aliphatic
+    ring (with atoms mostly C and O) is removed.
+    This heuristic procedure may over– or under–remove sugar-like fragments.
     """
-    # We loop until no more removals occur.
     mol_work = Chem.Mol(mol)
     removal_occurred = True
     while removal_occurred:
@@ -30,16 +28,14 @@ def remove_sugars(mol):
         for ring in ri.AtomRings():
             ring_atoms = [mol_work.GetAtomWithIdx(idx) for idx in ring]
             n_atoms = len(ring)
-            # Only consider rings that are not aromatic (sugars are aliphatic) 
+            # Consider only non‐aromatic rings typically corresponding to sugars.
             if any(atom.GetIsAromatic() for atom in ring_atoms):
                 continue
             if n_atoms not in (5, 6):
                 continue
-            # Heuristic: if the ring atoms are mostly C and O, and at most one non C/O
-            atom_syms = [atom.GetSymbol() for atom in ring_atoms]
-            if all(sym in ('C','O') for sym in atom_syms):
-                # Also require that none of these atoms are shared with an aromatic ring outside
-                # (if fused with an aromatic ring, we expect it to be part of the flavonoid core)
+            # Heuristic: if all atoms are C or O, consider this as a candidate sugar ring.
+            if all(atom.GetSymbol() in ('C', 'O') for atom in ring_atoms):
+                # Also ensure that none is fused to an external aromatic ring.
                 is_fused = False
                 for idx in ring:
                     atom = mol_work.GetAtomWithIdx(idx)
@@ -52,7 +48,6 @@ def remove_sugars(mol):
                 if not is_fused:
                     sugar_indices.update(ring)
         if sugar_indices:
-            # Remove atoms in descending order
             rw_mol = Chem.RWMol(mol_work)
             for idx in sorted(sugar_indices, reverse=True):
                 try:
@@ -60,9 +55,10 @@ def remove_sugars(mol):
                 except Exception:
                     pass
             mol_work = rw_mol.GetMol()
+            # Sanitize and update before the next iteration.
             Chem.SanitizeMol(mol_work, catchErrors=True)
             removal_occurred = True
-    # After removal, if multiple fragments exist, keep the largest.
+    # After removal, if multiple fragments remain, pick the largest by molecular weight.
     frags = Chem.GetMolFrags(mol_work, asMols=True, sanitizeFrags=True)
     if frags:
         mol_work = max(frags, key=lambda m: rdMolDescriptors.CalcExactMolWt(m))
@@ -70,32 +66,34 @@ def remove_sugars(mol):
 
 def is_flavonoids(smiles: str):
     """
-    Determines if a molecule is flavonoid-like based on its SMILES string.
-    
-    The algorithm works as follows:
+    Determines if the molecule (given as a SMILES string) is flavonoid-like.
+
+    The algorithm is as follows:
       1. Parse the SMILES string.
-      2. Remove putative sugar moieties iteratively.
-      3. Search for one or both of two substructure motifs:
-           - A benzopyrone/flavone motif: e.g. c1ccc2oc(=O)cc2c1
-           - A chalcone-like fragment: e.g. an aromatic ring connected to a carbonyl and a short chain.
+      2. Remove putative sugar moieties (common in glycosylated flavonoids).
+      3. Search for typical flavonoid substructures:
+             - A flavone/benzopyrone motif (e.g., "c1ccc2oc(=O)cc2c1").
+             - A chalcone-like motif (an aromatic ring connected to a carbonyl and an sp2 carbon).
       4. Compute the Murcko scaffold of the sugar-removed aglycone and check:
-           - That it contains no nitrogen atoms (most flavonoids are N-free)
-           - That the number of carbon atoms is in a “flavonoid‐like” range (roughly 15–22)
-           - That at least two ring systems remain.
-      5. If either the motif is found or the Murcko scaffold criteria are met, classify as flavonoid.
+             - That it contains no nitrogen atoms.
+             - That the number of carbon atoms is roughly 15–30.
+             - That it has at least two rings.
+      5. Also count aromatic rings in the aglycone; many flavonoids contain at least three.
+      6. The final decision is positive if either a typical substructure is found or
+         if the scaffold fits the criteria and the molecule has at least three aromatic rings.
     
     Args:
-      smiles (str): SMILES string of the molecule.
+      smiles (str): SMILES string for the molecule.
     
     Returns:
-      bool: True if the molecule is flavonoid-like, False otherwise.
-      str: Reason for classification decision.
+      (bool, str): Tuple where the first element is True if classified as flavonoid-like,
+                   otherwise False; the second element gives the reason.
     """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
 
-    # Remove putative sugars from the molecule.
+    # Remove putative sugars to expose the aglycone.
     aglycone = remove_sugars(mol)
 
     # Count aromatic rings in the aglycone.
@@ -105,65 +103,65 @@ def is_flavonoids(smiles: str):
         if all(aglycone.GetAtomWithIdx(idx).GetIsAromatic() for idx in ring):
             aromatic_rings += 1
 
-    # Define two SMARTS patterns:
-    # (a) Flavone motif (a benzopyrone): common in flavonoids.
+    # Define SMARTS patterns for common flavonoid fragments.
+    # (a) A flavone/benzopyrone motif.
     flavone_smarts = "c1ccc2oc(=O)cc2c1"
     flavone_pattern = Chem.MolFromSmarts(flavone_smarts)
-    # (b) Chalcone-like fragment: an aromatic ring attached to a carbonyl and an sp2 carbon.
-    chalcone_smarts = "c1ccc(cc1)C(=O)[C;!R]"  # [C;!R] indicates a non-ring carbon after the carbonyl.
+    # (b) A chalcone-like motif: an aromatic ring attached to a carbonyl and then an sp2 carbon.
+    chalcone_smarts = "c1ccc(cc1)C(=O)[C;!R]"  # [C;!R] indicates a non-ring carbon.
     chalcone_pattern = Chem.MolFromSmarts(chalcone_smarts)
     
     match_flavone = aglycone.HasSubstructMatch(flavone_pattern)
     match_chalcone = aglycone.HasSubstructMatch(chalcone_pattern)
     motif_found = match_flavone or match_chalcone
 
-    # Compute the Murcko scaffold (the “core” framework) from the aglycone.
+    # Compute the Murcko scaffold of the aglycone.
     try:
         scaffold = MurckoScaffold.GetScaffoldForMol(aglycone)
     except Exception as e:
         return False, f"Error computing Murcko scaffold: {str(e)}"
-
-    # Count carbon and oxygen atoms in the scaffold.
+    
     scaffold_carbons = sum(1 for atom in scaffold.GetAtoms() if atom.GetAtomicNum() == 6)
-    scaffold_oxygens = sum(1 for atom in scaffold.GetAtoms() if atom.GetAtomicNum() == 8)
-    # Check for nitrogen atoms – flavonoid cores are usually nitrogen-free.
+    scaffold_ring_count = scaffold.GetRingInfo().NumRings()
+    
+    # Exclude if any nitrogen is present in the core.
     if any(atom.GetAtomicNum() == 7 for atom in scaffold.GetAtoms()):
         return False, "Aglycone scaffold contains nitrogen, which is unusual in flavonoids."
-
-    # Count number of rings in the scaffold.
-    scaffold_ri = scaffold.GetRingInfo()
-    scaffold_ring_count = scaffold_ri.NumRings()
-
-    # Use a relaxed set of conditions on the Murcko scaffold.
-    scaffold_ok = (15 <= scaffold_carbons <= 22) and (scaffold_ring_count >= 2)
     
-    # Formulate the reason based on our observations.
+    # Check for allowed atoms in the aglycone.
+    allowed_atomic_nums = {6, 8, 9, 17, 35}  # C, O, F, Cl, Br (nitrogen already forbidden)
+    for atom in aglycone.GetAtoms():
+        an = atom.GetAtomicNum()
+        if an > 20 and an not in allowed_atomic_nums:
+            return False, f"Aglycone contains atom {atom.GetSymbol()} that is unusual in flavonoids."
+
+    # Relaxed scaffold criteria: accept scaffolds with roughly 15–30 carbons and two or more rings.
+    scaffold_ok = (15 <= scaffold_carbons <= 30) and (scaffold_ring_count >= 2)
+    
+    # Formulate our decision.
     if motif_found:
         reason = "Molecule contains a flavonoid substructure motif (flavone or chalcone-like fragment) in its aglycone."
-    elif scaffold_ok:
+        decision = True
+    elif scaffold_ok and (aromatic_rings >= 3):
         reason = (f"Molecule’s aglycone Murcko scaffold has {scaffold_carbons} carbons and "
-                  f"{scaffold_ring_count} rings, consistent with a C15/C16 flavonoid core (allowing for modifications).")
+                  f"{scaffold_ring_count} rings with {aromatic_rings} aromatic rings, "
+                  "consistent with a typical flavonoid core (allowing for modifications).")
+        decision = True
     else:
-        reason = (f"No clear flavonoid features found: motifs found = {motif_found}, "
-                  f"scaffold carbons = {scaffold_carbons} (expected between 15 and 22), "
-                  f"scaffold ring count = {scaffold_ring_count}.")
+        reason = (f"No clear flavonoid features found: motif_found = {motif_found}, "
+                  f"scaffold carbons = {scaffold_carbons} (expected 15–30), "
+                  f"scaffold rings = {scaffold_ring_count}, aromatic rings = {aromatic_rings}.")
         return False, reason
 
-    # Additional sanity check: require that the aglycone has at least 2 aromatic rings.
-    if aromatic_rings < 2:
-        return False, f"Aglycone only has {aromatic_rings} aromatic rings; flavonoids normally have at least 2."
-    
-    # Also check that most atoms in the aglycone are typical (C, O and small halogens)
-    allowed_atomic_nums = {6, 7, 8, 9, 17, 35}  # C, N, O, F, Cl, Br (N already ruled out in scaffold)
-    for atom in aglycone.GetAtoms():
-        if atom.GetAtomicNum() > 20 and atom.GetAtomicNum() not in allowed_atomic_nums:
-            return False, f"Aglycone contains atom {atom.GetSymbol()} that is unusual in flavonoids."
-    
-    return True, f"Flavonoid-like: {reason}"
+    # Additional sanity: Most flavonoid aglycones have at least three aromatic rings.
+    if aromatic_rings < 3:
+        return False, f"Aglycone only has {aromatic_rings} aromatic rings; typical flavonoids usually exhibit ≥3."
 
-# Example usage:
+    return decision, f"Flavonoid-like: {reason}"
+
+# Example usage for testing purposes:
 if __name__ == "__main__":
-    # Test with one example (azaleatin)
+    # Test with azaleatin – one of the example flavonoids.
     test_smiles = "COc1cc(O)cc2oc(-c3ccc(O)c(O)c3)c(O)c(=O)c12"
-    result, message = is_flavonoids(test_smiles)
-    print(result, message)
+    result, msg = is_flavonoids(test_smiles)
+    print(result, msg)
