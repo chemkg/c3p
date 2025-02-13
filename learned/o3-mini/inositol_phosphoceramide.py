@@ -1,28 +1,16 @@
 """
 Classifies: CHEBI:60245 inositol phosphoceramide
 """
-#!/usr/bin/env python
 """
 Classifies: inositol phosphoceramide
 Definition:
-  A phosphosphingolipid in which an inositol residue and the ceramide moiety 
-  are linked via a phosphodiester bridge. The ceramide moiety contains 
-  substituents R(1) and R(2) which vary with different sphingoid bases and 
-  fatty acyl moieties.
+  A phosphosphingolipid in which an inositol residue and the ceramide moiety are linked via a phosphodiester bridge.
+  The ceramide moiety contains substituents R(1) and R(2) which vary with different sphingoid bases and fatty acyl moieties.
   
-Detection strategy:
-  1. Use SMARTS queries to detect an inositol substructure (a cyclohexanol with 6 hydroxyl groups)
-     and an amide function (as indicative of the ceramide part).
-  2. Identify phosphorus atoms and for each such atom, check:
-       a. At least one oxygen neighbor is part of an inositol match.
-       b. At least one oxygen neighbor (via its bonded atom) is part of an amide match.
-  3. Verify that the molecule has many carbons and a fair number of rotatable bonds 
-     (to ensure the presence of long aliphatic chains).
-  
-If these criteria are met, the compound is classified as an inositol phosphoceramide.
- 
-Note: The SMARTS for the inositol pattern is specific and may not catch every variant,
-but it seems to match many of the examples provided.
+We approximate detection by:
+ - Looking for an inositol ring substructure,
+ - Looking for a phosphate (phosphodiester) group, and
+ - Identifying a ceramide substructure represented by an amide group (C(=O)N) attached to at least one long aliphatic chain.
 """
 
 from rdkit import Chem
@@ -32,98 +20,60 @@ def is_inositol_phosphoceramide(smiles: str):
     """
     Determines if a molecule is an inositol phosphoceramide based on its SMILES string.
     
-    Detection steps:
-      1. Pre-match an inositol group using a SMARTS pattern typical for cyclohexane-1,2,3,4,5,6-hexol.
-      2. Pre-match an amide motif (C(=O)N) considered part of the ceramide moiety.
-      3. Loop over every phosphorus atom in the molecule. For each phosphorus, look at its oxygen neighbors:
-             a. One of the oxygens must belong to an inositol substructure.
-             b. One oxygen (or another neighboring atom in the oxygen’s bonds) must be part of an amide motif.
-      4. Also check that there are enough carbon atoms and rotatable bonds to support long acyl chains.
-    
+    Criteria used (approximate):
+      1. Presence of an inositol ring (six-membered ring with multiple hydroxyl groups)
+      2. Phosphodiester bridge (a phosphate connected via ester bonds; we search for OP(=O)(O)O)
+      3. Ceramide-like moiety: an amide group (C(=O)N) and a long aliphatic chain (assessed by total carbon count)
+     
     Args:
-        smiles (str): SMILES string of the molecule.
+        smiles (str): SMILES string of the molecule
         
     Returns:
-        bool: True if the molecule meets the inositol phosphoceramide criteria, False otherwise.
-        str: Explanation for the decision.
+        bool: True if molecule is classified as an inositol phosphoceramide, False otherwise
+        str: Reason for classification
     """
+    # Parse SMILES
     mol = Chem.MolFromSmiles(smiles)
-    if not mol:
+    if mol is None:
         return False, "Invalid SMILES string"
     
-    # Pre-match inositol: a rough SMARTS pattern for an inositol ring (cyclohexanol with 6 OH groups).
-    # This pattern covers a typical arrangement: O-[C@@H]1[C@H](O)[C@H](O)[C@@H](O)[C@H](O)[C@H]1O
+    # Check for inositol ring.
+    # This SMARTS approximates a myo-inositol ring pattern.
     inositol_smarts = "O[C@@H]1[C@H](O)[C@H](O)[C@@H](O)[C@H](O)[C@H]1O"
-    inositol_query = Chem.MolFromSmarts(inositol_smarts)
-    inositol_matches = mol.GetSubstructMatches(inositol_query)
-    if not inositol_matches:
-        return False, "No inositol substructure detected"
+    inositol_pattern = Chem.MolFromSmarts(inositol_smarts)
+    if not mol.HasSubstructMatch(inositol_pattern):
+        return False, "No inositol ring detected"
     
-    # Pre-match the amide motif, indicative of the ceramide moiety.
+    # Check for phosphodiester bridge.
+    # We look for a phosphate group with three oxygens (one typically linking to the inositol).
+    phosphate_smarts = "[O;D2]-P(=O)([O;D1])[O;D2]"  # this pattern looks for a phosphodiester moiety (O-P(=O)-O)
+    phosphate_pattern = Chem.MolFromSmarts(phosphate_smarts)
+    if not mol.HasSubstructMatch(phosphate_pattern):
+        return False, "No phosphodiester bridge (phosphate group) detected"
+    
+    # Look for ceramide-like moiety: an amide group.
     amide_smarts = "C(=O)N"
-    amide_query = Chem.MolFromSmarts(amide_smarts)
-    amide_matches = mol.GetSubstructMatches(amide_query)
+    amide_pattern = Chem.MolFromSmarts(amide_smarts)
+    amide_matches = mol.GetSubstructMatches(amide_pattern)
     if not amide_matches:
-        return False, "No amide substructure (ceramide indication) detected"
+        return False, "No amide bond detected to suggest a ceramide moiety"
     
-    # Optional: Ensure the molecule supports long fatty acyl chains.
+    # Check for long aliphatic chain (fatty acyl chains) typical in ceramides.
+    # We count the number of carbon atoms in the molecule.
     c_atoms = [atom for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6]
     if len(c_atoms) < 20:
-        return False, "Too few carbons to support long acyl chains in the ceramide moiety"
+        return False, "Total carbon count too low to suggest long fatty acyl chains in ceramide"
+    
+    # Optionally also check for rotatable bonds as a proxy for flexible, long chains.
     n_rotatable = rdMolDescriptors.CalcNumRotatableBonds(mol)
     if n_rotatable < 5:
         return False, "Not enough rotatable bonds; fatty acyl chains may be too short"
     
-    # Now, loop over phosphorus atoms to check for the phosphodiester bridge.
-    bridge_found = False
-    for atom in mol.GetAtoms():
-        if atom.GetAtomicNum() != 15:  # Must be phosphorus
-            continue
-        # Get oxygen neighbors of phosphorus.
-        oxy_neighbors = [nbr for nbr in atom.GetNeighbors() if nbr.GetAtomicNum() == 8]
-        if len(oxy_neighbors) < 2:
-            continue  # Not enough oxygen bridges
-      
-        inositol_connected = False
-        amide_connected = False
-        
-        # Check that at least one oxygen is directly part of an inositol substructure.
-        for oxy in oxy_neighbors:
-            for match in inositol_matches:
-                if oxy.GetIdx() in match:
-                    inositol_connected = True
-                    break
-            if inositol_connected:
-                break
+    # Passed all checks
+    return True, "Molecule contains an inositol ring, a phosphodiester bridge, and a ceramide-like amide bond with long aliphatic chains"
 
-        # Check that at least one oxygen neighbor (via one of its attached atoms) is connected to an amide.
-        for oxy in oxy_neighbors:
-            for nbr in oxy.GetNeighbors():
-                if nbr.GetIdx() == atom.GetIdx():
-                    continue  # skip back to phosphorus
-                for match in amide_matches:
-                    if nbr.GetIdx() in match:
-                        amide_connected = True
-                        break
-                if amide_connected:
-                    break
-            if amide_connected:
-                break
-        
-        if inositol_connected and amide_connected:
-            bridge_found = True
-            break
-
-    if not bridge_found:
-        return False, "Phosphodiester bridge linking inositol ring and ceramide moiety not detected"
-    
-    return True, "Molecule contains an inositol substructure, an amide-bearing ceramide moiety, and a bridging phosphate."
-
-# Example usage
-if __name__ == "__main__":
-    # One of the provided example SMILES strings (Man-beta1-6-Ins-1-P-Cer(t18:0/2-OH-24:0))
-    test_smiles = ("CCCCCCCCCCCCCCCCCCCCCC(O)C(=O)N[C@@H](COP(O)(=O)O"
-                   "[C@@H]1[C@H](O)[C@H](O)[C@@H](O)[C@H](O)[C@H]1O)"
-                   "[C@H](O)C(O)CCCCCCCCCCCCCC")
-    result, reason = is_inositol_phosphoceramide(test_smiles)
-    print(result, reason)
+# Example usage (if run as main, uncomment):
+# if __name__ == "__main__":
+#     test_smiles = "CCCCCCCCCCCCCCCCCCCCCC(O)C(=O)N[C@@H](COP(O)(=O)O[C@@H]1[C@H](O)[C@H](O)[C@@H](O)[C@H](O)[C@H]1O)[C@H](O)C(O)CCCCCCCCCCCCCC"
+#     result, reason = is_inositol_phosphoceramide(test_smiles)
+#     print(result, reason)
