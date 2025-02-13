@@ -4,15 +4,14 @@ Classifies: CHEBI:36836 3beta-hydroxy steroid
 #!/usr/bin/env python
 """
 Classifies: 3β-hydroxy steroid
-Defined as: A 3-hydroxy steroid in which the 3-hydroxy substituent is in the β-position.
+Defined as: A 3-hydroxy steroid in which the 3-hydroxy substituent is in the β–position.
 Note:
   Because determining the exact position (the 3–position) and β–orientation
-  from SMILES is nontrivial without full numbering and 3D analysis,
-  the following heuristic is used:
-    1. Check that the molecule has a fused tetracyclic ring system (i.e. at least 4 rings).
-    2. Look for an –OH group attached to a ring carbon that is chiral and has a CIP code of "S"
-       (a common assignment for 3β–OH in many steroids).
-This approach is heuristic and may fail for unusual cases.
+  from SMILES is nontrivial without full numbering and 3D analysis, this heuristic:
+    1. Checks for a fused tetracyclic (4-ring) system via a connectivity analysis of rings.
+    2. Searches for an exocyclic hydroxyl group (–OH) that is attached to a chiral ring-carbon 
+       that carries a CIP code “S” (commonly found for a 3β–OH).
+  This approach is heuristic and may fail for unusual cases.
 """
 
 from rdkit import Chem
@@ -29,68 +28,108 @@ def is_3beta_hydroxy_steroid(smiles: str):
         bool: True if the molecule is classified as a 3β-hydroxy steroid, else False.
         str: Explanation of the classification decision.
     """
-    # Parse the SMILES string.
+    # Parse the SMILES string
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-    
-    # Ensure stereochemistry is assigned.
+
+    # Add explicit hydrogens to help detect -OH groups
+    mol = Chem.AddHs(mol)
+    # Ensure stereochemical information is assigned
     AllChem.AssignStereochemistry(mol, cleanIt=True, force=True)
     
-    # Obtain information on the rings in the molecule.
+    # Obtain ring information (list of rings as tuples of atom indices)
     ri = mol.GetRingInfo()
-    rings = ri.AtomRings()
-    if len(rings) < 4:
-        return False, f"Found only {len(rings)} rings; a steroid nucleus typically has four fused rings"
+    rings = [set(r) for r in ri.AtomRings()]
+    if not rings:
+        return False, "No rings found; steroid nucleus expected to have four fused rings"
     
-    # For a steroid, we expect a fused tetracyclic ring system.
-    # Here we use a simple heuristic: we demand that at least one set of atoms appears in more than one ring.
-    # We collect all atoms that are in any ring.
-    atoms_in_rings = set()
-    for r in rings:
-        atoms_in_rings.update(r)
+    # Build a graph of rings: connect two rings if they share at least 2 atoms.
+    # Each node is the index of a ring (from the list 'rings').
+    n_rings = len(rings)
+    adj = {i: set() for i in range(n_rings)}
+    for i in range(n_rings):
+        for j in range(i+1, n_rings):
+            if len(rings[i].intersection(rings[j])) >= 2:
+                adj[i].add(j)
+                adj[j].add(i)
     
-    # (This check is heuristic; more rigorous checks could be implemented.)
+    # Now, find connected components among the rings
+    visited = set()
+    fused_components = []
+    for i in range(n_rings):
+        if i not in visited:
+            stack = [i]
+            comp = set()
+            while stack:
+                node = stack.pop()
+                if node in comp:
+                    continue
+                comp.add(node)
+                for neigh in adj[node]:
+                    if neigh not in comp:
+                        stack.append(neigh)
+            visited.update(comp)
+            fused_components.append(comp)
     
-    # Find candidate hydroxyl groups.
-    # We look for oxygen atoms with atomic num 8 that are –OH (i.e. connected to one carbon)
+    # Check if any connected component contains at least 4 rings.
+    found_tetracyclic = any(len(comp) >= 4 for comp in fused_components)
+    if not found_tetracyclic:
+        return False, ("Fused tetracyclic ring system not found; "
+                       f"largest fused component contains {max((len(comp) for comp in fused_components), default=0)} ring(s)")
+    
+    # Now search for candidate hydroxyl groups.
+    # We loop over oxygen atoms that are likely to be –OH groups.
     candidate_found = False
     candidate_msg = ""
     for atom in mol.GetAtoms():
-        if atom.GetAtomicNum() == 8:
-            # Check if this oxygen is part of an -OH (i.e. only 1 heavy neighbor)
-            neighbors = atom.GetNeighbors()
-            if len(neighbors) != 1:
-                continue
-            nbr = neighbors[0]
-            # Check that the oxygen is not in a ring (i.e. it is an exocyclic hydroxyl)
-            if atom.IsInRing():
-                continue
-            # Now, check that the neighbor is a carbon that is part of a ring.
-            if nbr.GetAtomicNum() != 6 or not nbr.IsInRing():
-                continue
-            # Check that this carbon shows chirality; in many steroids the 3β‐OH is attached
-            # to a chiral carbon. (Stereochemistry ‘S’ is often assigned to a 3β‐OH carbon.)
-            if nbr.HasProp('_CIPCode'):
-                cip = nbr.GetProp('_CIPCode')
-                if cip == "S":
-                    candidate_found = True
-                    candidate_msg = ("Steroid nucleus present and a candidate 3β-hydroxy group found "
-                                     f"(carbon {nbr.GetIdx()} with CIP code {cip}).")
-                    break
-            else:
-                # If no CIP code is assigned, we cannot be sure.
-                continue
+        if atom.GetAtomicNum() != 8:
+            continue
+        # Check if this oxygen has at least one hydrogen
+        # (GetTotalNumHs gives count of connected explicit+implicit hydrogens)
+        if atom.GetTotalNumHs() < 1:
+            continue
+        # Check neighbors: for an -OH, there should be exactly one heavy-atom neighbor
+        heavy_neighbors = [nbr for nbr in atom.GetNeighbors() if nbr.GetAtomicNum() > 1]
+        if len(heavy_neighbors) != 1:
+            continue
+        nbr = heavy_neighbors[0]
+        # We want the –OH to be exocyclic: oxygen should not be in a ring, but its attached carbon should be.
+        if atom.IsInRing():
+            continue
+        if nbr.GetAtomicNum() != 6 or not nbr.IsInRing():
+            continue
+        
+        # Check if the neighbor carbon has any chiral tag
+        if not nbr.HasProp('_CIPCode'):
+            continue  # Without the CIP code we cannot be sure of the stereochemistry.
+        cip = nbr.GetProp('_CIPCode')
+        if cip == "S":
+            candidate_found = True
+            candidate_msg = (f"Steroid nucleus found (largest fused component ≥4 rings) and candidate "
+                             f"3β-hydroxy group detected on carbon {nbr.GetIdx()} with CIP code {cip}.")
+            break
 
     if not candidate_found:
-        return False, "Steroid nucleus may be present, but no candidate 3β-hydroxy group (OH on a chiral ring-carbon with 'S' CIP) was found"
+        return False, ("Steroid nucleus may be present, but no candidate 3β-hydroxy group "
+                       "(exocyclic –OH on a chiral ring-carbon with CIP code 'S') was found")
     
     return True, candidate_msg
-     
-# If run as a script, you can test with one SMILES example (e.g., cholesterol derivative).
+
+# For module testing:
 if __name__ == "__main__":
-    # Example: 4alpha-methylcholest-8-en-3beta-ol
-    test_smiles = "[H][C@@]1(CC[C@@]2([H])C3=C(CC[C@]4(C)[C@]([H])(CC[C@@]34[H])[C@H](C)CCCC(C)C)[C@@]1(C)CC[C@H](O)C2"
-    result, reason = is_3beta_hydroxy_steroid(test_smiles)
+    # Some test cases (1 example that should be classified as positive and one negative)
+    test_smiles_positive = "CC(C)CCC[C@@H](C)[C@H]1CC[C@H]2C3=C(CC[C@]12C)[C@@]1(C)CC[C@H](O)[C@@](C)(CO)[C@@H]1CC3"
+    result, reason = is_3beta_hydroxy_steroid(test_smiles_positive)
+    print("Positive Test:")
+    print("SMILES:", test_smiles_positive)
+    print("Result:", result)
+    print("Reason:", reason)
+    print()
+
+    test_smiles_negative = "O=C1C2=CC=CC=C2C(=O)N1"  # for example, a phthalimide (non-steroid)
+    result, reason = is_3beta_hydroxy_steroid(test_smiles_negative)
+    print("Negative Test:")
+    print("SMILES:", test_smiles_negative)
     print("Result:", result)
     print("Reason:", reason)
