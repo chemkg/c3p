@@ -3,18 +3,27 @@ Classifies: CHEBI:35267 quaternary ammonium ion
 """
 """
 Classifies: Quaternary Ammonium Ion
+
 A quaternary ammonium ion is defined as a derivative of ammonium, NH4(+),
-in which all four hydrogens have been replaced by univalent (usually organyl) groups.
-Thus, in our approach we look for a nitrogen (atomic number 7) that
-• Has a formal charge of +1.
-• Is connected to exactly four atoms with no (explicit or implicit) hydrogens.
-• Has sp3 hybridization.
-Then, to improve specificity we:
-  - Discard candidate nitrogens that are completely embedded inside rings (i.e. all substituents are in rings).
-  - In larger molecules we require that the candidate be “choline‐like” – i.e. nearby (within 4 bonds) a phosphate (P) atom.
-  
-If any candidate nitrogen passes, we return True along with a message including its atom index.
-If no candidate is found, we return False along with the reason.
+in which all four hydrogens bonded to nitrogen have been replaced with 
+univalent (usually organyl) groups.
+
+Our approach is to first identify candidate nitrogen atoms that would be 
+expected in a tetraalkylammonium:
+  - Atomic number 7, formal charge +1.
+  - Connected to exactly 4 atoms and has no explicit (or implicit) hydrogens.
+  - sp3 hybridized.
+Then to improve specificity we further require that:
+  - The nitrogen’s substituents are not all inside rings.
+  - In larger molecules that contain phosphorus (e.g. phospholipids) the candidate
+    must be in “choline‐like” environment, that is within 5 bonds of a phosphorus atom.
+  - In molecules with no phosphorus, if they are large (>40 heavy atoms) then we require 
+    that the candidate nitrogen be attached to at least one aromatic fragment 
+    (as seen in dyes like bretylium or methyl green). If the molecule is small we accept 
+    the candidate.
+    
+If any candidate passes all tests, the function returns True along with the candidate’s 
+atom index. Otherwise, it returns False along with an explanation.
 """
 
 from rdkit import Chem
@@ -22,83 +31,103 @@ from rdkit.Chem import rdMolDescriptors
 
 def is_quaternary_ammonium_ion(smiles: str):
     """
-    Determines if a molecule contains a quaternary ammonium ion based on its SMILES string,
-    with additional filters to avoid false positives in large, rigid molecules.
+    Determines if a molecule contains a quaternary ammonium ion based on its SMILES string.
     
+    Our improved criteria are as follows:
+      - Candidate nitrogen must have atomic number 7, formal charge +1, degree 4,
+        no attached hydrogens, and sp3 hybridization.
+      - Discard candidate if all four substituents are in rings.
+      - If the molecule has phosphorus atoms (typical in phospholipids) then the candidate
+        must be within 5 bonds (topological distance) of at least one phosphorus atom.
+      - If no phosphorus is found and the molecule is relatively large (>40 atoms), then the 
+        candidate must have at least one neighbor that is aromatic (e.g. found in dyes).
+      - Smaller molecules (<40 atoms) lacking phosphorus are accepted if they fulfill the basic criteria.
+      
     Args:
-        smiles (str): SMILES string of the molecule.
-        
+       smiles (str): SMILES string of the molecule.
+       
     Returns:
-        bool: True if molecule contains a (free or choline-like) quaternary ammonium ion,
-              False otherwise.
-        str: Reason for the classification.
+       bool: True if a quaternary ammonium ion candidate is found, False otherwise.
+       str: A reason message including the candidate’s atom index if found.
     """
     # Parse the molecule
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Pre-calculate some helpful information:
-    # List of phosphorus atom indices (used to check for nearby phosphate groups)
+    # In larger molecules, we want to check for nearby phosphorus atoms.
     p_atom_indices = [a.GetIdx() for a in mol.GetAtoms() if a.GetAtomicNum() == 15]
-    # Total number of atoms (to help judge “small” vs “large” molecules)
     num_atoms = mol.GetNumAtoms()
     
-    # Define a helper to compute topological distance (number of bonds)
-    def distance_between(a_idx, b_idx):
-        # Use RDKit’s shortest path function, which returns a list of atom indices in the path.
-        paths = Chem.GetShortestPath(mol, a_idx, b_idx)
-        if paths:
-            return len(paths) - 1  # bonds count
-        else:
-            return None
+    # Helper: compute topological (bond) distance between two atoms
+    def bond_distance(idx1, idx2):
+        try:
+            path = Chem.GetShortestPath(mol, idx1, idx2)
+            if path:
+                return len(path) - 1
+        except Exception:
+            pass
+        return None
 
-    # Iterate over candidate nitrogen atoms.
+    # Iterate over atoms to find candidate nitrogen atoms
     for atom in mol.GetAtoms():
+        # Candidate must be nitrogen (atomic num 7)
         if atom.GetAtomicNum() != 7:
             continue
-        # Check for formal +1 charge.
+        # Must have formal charge +1
         if atom.GetFormalCharge() != 1:
             continue
-        # Check that degree is 4.
+        # Must have exactly 4 neighbors
         if atom.GetDegree() != 4:
             continue
-        # Check that there are no attached hydrogens (explicit or implicit)
+        # Must have no attached hydrogens (explicit or implicit)
         if atom.GetTotalNumHs() != 0:
             continue
-        # Check that the nitrogen is sp3 hybridized (typical for quaternary ammonium)
+        # Must be sp3 hybridized
         if atom.GetHybridization() != Chem.rdchem.HybridizationType.SP3:
             continue
         
-        # Now check that not all substituents are in rings.
+        # Check that not all substituents are in rings.
         neighbors = atom.GetNeighbors()
-        # If every neighbor is in a ring, skip this candidate.
         if all(neighbor.IsInRing() for neighbor in neighbors):
             continue
-
-        # For larger molecules, try to see if the candidate N is “choline‐like”
-        # That is, if a phosphorus atom is present in the molecule then one expects that the quaternary N
-        # (as in phosphatidylcholines) will be within a short topological path of a P atom.
-        if p_atom_indices and num_atoms > 35:
-            close_to_p = False
-            for p_idx in p_atom_indices:
-                dist = distance_between(atom.GetIdx(), p_idx)
-                if dist is not None and dist <= 4:
-                    close_to_p = True
-                    break
-            if not close_to_p:
-                # Not near a phosphate group; in a large molecule this candidate is less likely to be the desired ion.
-                continue
         
-        # If we reached here, we found a candidate that passes our tests.
-        return True, f"Found quaternary ammonium ion at atom index {atom.GetIdx()}"
+        # --- Now apply additional filters ---
+        candidate_idx = atom.GetIdx()
+        passes_extra = False
+        
+        # If the molecule contains phosphorus, require close proximity.
+        if p_atom_indices:
+            for p_idx in p_atom_indices:
+                dist = bond_distance(candidate_idx, p_idx)
+                if dist is not None and dist <= 5:
+                    passes_extra = True
+                    break
+            if not passes_extra:
+                # For phospholipid-like molecules, candidate N not close to any P atom is less likely.
+                continue
+        else:
+            # For molecules without phosphorus, we judge based on overall size.
+            if num_atoms > 40:
+                # In larger non-phosphorus molecules, require the N has at least one aromatic neighbor.
+                for nbr in neighbors:
+                    if nbr.GetIsAromatic():
+                        passes_extra = True
+                        break
+                if not passes_extra:
+                    continue
+            else:
+                # For small molecules (<40 atoms) we accept the candidate.
+                passes_extra = True
 
-    # If no candidate passed, return False.
+        if passes_extra:
+            return True, f"Found quaternary ammonium ion at atom index {candidate_idx}"
+    
     return False, "No suitable quaternary ammonium ion found in the molecule"
 
-# Testing (if desired) using one of the provided examples:
+# Testing examples (uncomment to run tests)
 if __name__ == "__main__":
-    # Example: bretylium (expected: True)
+    # Example: bretylium which should return True.
     test_smiles = "CC[N+](C)(C)Cc1ccccc1Br"
     result, reason = is_quaternary_ammonium_ion(test_smiles)
     print(result, reason)
