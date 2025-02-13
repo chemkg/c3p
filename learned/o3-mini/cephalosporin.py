@@ -3,11 +3,15 @@ Classifies: CHEBI:23066 cephalosporin
 """
 """
 Classifies: Cephalosporin
-A cephalosporin is defined as having a cephem nucleus – a beta‐lactam (4‐membered
-cyclic amide) fused to a 6‐membered heterocycle (typically a dihydrothiazine ring, but in some cases
-an oxygen may replace sulfur). This implementation attempts to detect that bicyclic core after cleaning
-the molecule from salts or small fragments.
+
+A cephalosporin is defined as having a cephem nucleus – a beta‐lactam (4‐membered cyclic amide)
+fused to a 6‐membered heterocycle (typically a dihydrothiazine ring, sometimes with oxygen instead of sulfur).
+This implementation attempts to detect that bicyclic core after cleaning the molecule from salts or small fragments.
+An important improvement compared to our previous version is that instead of accepting any fusion (≥2 common atoms)
+between a 4-membered ring and a 6-membered ring, we require that the two rings share exactly 2 atoms,
+producing an 8-atom fused system. This is more in line with the cephem nucleus.
 """
+
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
 
@@ -15,13 +19,14 @@ def is_cephalosporin(smiles: str):
     """
     Determines if a molecule is a cephalosporin based on its SMILES string.
     
-    This function performs the following steps:
-      1. Parses the SMILES and removes salts/water by retaining the largest fragment.
-      2. Analyzes the rings in the molecule.
-      3. Identifies candidate beta-lactam rings – 4-member rings that have at least one nitrogen and at least one carbonyl group.
-      4. Identifies candidate 6-membered rings – rings of length 6 that contain at least one heteroatom (S or O).
-      5. Checks for a fused system by ensuring that one 4-membered ring and one 6-membered ring share at least 2 atoms.
-      
+    Steps:
+      1. Parse the SMILES and remove salts/solvents by retaining the largest fragment.
+      2. Obtain ring information.
+      3. Identify candidate beta-lactam rings: 4-membered rings that contain at least one nitrogen and a carbonyl group.
+      4. Identify candidate six-membered rings: 6-membered rings that contain at least one heteroatom (S or O).
+      5. For each candidate pair, require that their union has exactly 8 atoms (i.e. they share exactly 2 atoms),
+         which corresponds to the cephem nucleus.
+    
     Args:
         smiles (str): SMILES string of the molecule.
         
@@ -33,31 +38,31 @@ def is_cephalosporin(smiles: str):
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-    
+
     # Remove salts/solvents by retaining only the largest fragment.
     frags = Chem.GetMolFrags(mol, asMols=True, sanitizeFrags=True)
     if not frags:
         return False, "No fragments could be extracted from molecule"
     mol = max(frags, key=lambda m: m.GetNumHeavyAtoms())
-    
-    # Retrieve ring information for the cleaned molecule.
+
+    # Retrieve ring information.
     ring_info = mol.GetRingInfo()
     atom_rings = ring_info.AtomRings()
     if not atom_rings:
         return False, "No ring systems detected in the molecule"
-    
-    # Identify candidate beta-lactam rings: 4-membered rings with at least one nitrogen and a carbonyl group.
+
+    # Identify candidate beta-lactam rings: 4-membered rings with >=1 nitrogen and a carbonyl group.
     beta_lactam_rings = []
     for ring in atom_rings:
         if len(ring) == 4:
             atoms_in_ring = [mol.GetAtomWithIdx(idx) for idx in ring]
             n_nitrogen = sum(1 for atom in atoms_in_ring if atom.GetAtomicNum() == 7)
             has_carbonyl = False
-            # Look for a carbon (atomic number 6) in the ring that is double-bonded to an oxygen.
+            # Check for a carbon atom in the ring having a double bond to an oxygen (carbonyl)
             for atom in atoms_in_ring:
                 if atom.GetAtomicNum() == 6:
                     for bond in atom.GetBonds():
-                        # bond.GetBondTypeAsDouble() returns 2.0 for double bonds.
+                        # bond.GetBondTypeAsDouble() returns 2.0 for a double bond.
                         if bond.GetBondTypeAsDouble() == 2.0:
                             nbr = bond.GetOtherAtom(atom)
                             if nbr.GetAtomicNum() == 8:
@@ -67,31 +72,33 @@ def is_cephalosporin(smiles: str):
                         break
             if n_nitrogen >= 1 and has_carbonyl:
                 beta_lactam_rings.append(set(ring))
-    
+
     if not beta_lactam_rings:
         return False, "No beta-lactam (4-membered cyclic amide) ring detected"
-    
-    # Identify candidate 6-membered rings containing at least one heteroatom.
-    # Typically cephalosporins have a dihydrothiazine (contains S) but some variants have O.
+
+    # Identify candidate 6-membered rings that contain at least one heteroatom (S or O).
     six_membered_rings = []
     for ring in atom_rings:
         if len(ring) == 6:
             atoms_in_ring = [mol.GetAtomWithIdx(idx) for idx in ring]
-            # Check if any atom in ring is heteroatom (S (16) or O (8)) and not carbon.
+            # Check if any atom in ring is sulfur (16) or oxygen (8)
             if any(atom.GetAtomicNum() in (8, 16) for atom in atoms_in_ring):
                 six_membered_rings.append(set(ring))
-    
+
     if not six_membered_rings:
         return False, "No 6-membered heterocycle (dihydrothiazine or related ring) detected"
-    
-    # Check for fused rings: the beta-lactam ring must be fused (share at least 2 atoms) with a 6-membered ring.
+
+    # Check for correctly-fused rings.
+    # In a cephem nucleus, the 4-member ring and the 6-member ring share exactly 2 atoms.
+    # (i.e. the union is 4 + 6 – 2 = 8 atoms)
     for beta_ring in beta_lactam_rings:
         for six_ring in six_membered_rings:
             common_atoms = beta_ring.intersection(six_ring)
-            if len(common_atoms) >= 2:
+            union_atoms = beta_ring.union(six_ring)
+            if len(common_atoms) == 2 and len(union_atoms) == 8:
                 return True, "Molecule has a beta-lactam ring fused with a 6-membered heterocycle (cephem nucleus)"
     
-    return False, "No fused system of a beta-lactam ring and a 6-membered heterocycle was detected"
+    return False, "No fused system with an 8-atom cephem nucleus was detected"
 
 
 # Example usage:
