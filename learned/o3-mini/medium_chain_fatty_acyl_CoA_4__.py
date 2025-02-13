@@ -8,7 +8,7 @@ Definition: "An acyl-CoA oxoanion that results from deprotonation of the phospha
 Heuristic criteria:
   1. Must have a CoA moiety inferred by the presence of an adenine ring (SMARTS: "c1ncnc2ncnc12").
   2. Must have exactly four negatively charged oxygen atoms (formal charge –1) from the phosphate/diphosphate groups.
-  3. Must have a thioester (S–C(=O)[#6]) group; from the carbonyl carbon, the contiguous acyl chain (counting it as well as the “alpha carbon”) must contain between 6 and 12 carbon atoms.
+  3. Must have a thioester group (S-C(=O)[#6]); from the carbonyl carbon, the contiguous acyl chain (including that carbon) must contain between 6 and 12 carbon atoms.
 """
 
 from rdkit import Chem
@@ -25,65 +25,70 @@ def is_medium_chain_fatty_acyl_CoA_4__(smiles: str):
         bool: True if the molecule is classified as a medium-chain fatty acyl-CoA(4-), False otherwise.
         str: A reason describing the outcome.
     """
-    # Parse SMILES into a molecule object
+    # Parse SMILES into a molecule object.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string."
-
+    
     # Criterion 1: Check for a CoA head group via the adenine substructure.
     adenine_pattern = Chem.MolFromSmarts("c1ncnc2ncnc12")
     if not mol.HasSubstructMatch(adenine_pattern):
         return False, "Missing adenine ring (CoA head group not detected)."
-
-    # Criterion 2: Check for 4 deprotonated phosphate oxygens (atoms with formal charge -1 on O).
+    
+    # Criterion 2: Check for exactly 4 deprotonated phosphate oxygens 
+    # (oxygen atoms with formal charge -1).
     neg_oxygen_count = sum(1 for atom in mol.GetAtoms() if atom.GetAtomicNum() == 8 and atom.GetFormalCharge() == -1)
     if neg_oxygen_count != 4:
         return False, f"Expected 4 negatively charged oxygens from phosphate groups, found {neg_oxygen_count}."
-
-    # Criterion 3: Look for the thioester group that defines the acyl chain.
-    # SMARTS pattern: sulfur attached to a carbonyl carbon which is attached to a carbon (the acyl chain)
-    thioester_smarts = "S-C(=O)[#6]"
-    thioester_pattern = Chem.MolFromSmarts(thioester_smarts)
+    
+    # Criterion 3: Identify the thioester fragment signifying the acyl-CoA unit.
+    # SMARTS pattern: S-C(=O)[#6]
+    # Note: This will match four atoms: S, the carbonyl carbon, the oxygen (in the C=O), and the acyl chain's first carbon.
+    thioester_pattern = Chem.MolFromSmarts("S-C(=O)[#6]")
     thioester_matches = mol.GetSubstructMatches(thioester_pattern)
     if not thioester_matches:
         return False, "No thioester (acyl-CoA) fragment found."
+    
+    # Pick the first matching thioester.
+    # Unpack four indices: s_idx, carbonyl C index, oxygen index (ignored), and the first acyl chain carbon index.
+    try:
+        s_idx, coxo_idx, o_idx, acyl_start_idx = thioester_matches[0]
+    except Exception as e:
+        return False, f"Thioester matching error: {str(e)}"
 
-    # We will choose the first matching thioester.
-    # In the SMARTS, match indices: 0 -> S, 1 -> carbonyl C, 2 -> first acyl chain carbon.
-    s_idx, coxo_idx, acyl_start_idx = thioester_matches[0]
-
-    # To count the carbons in the fatty acyl chain we include the carbonyl carbon plus all contiguous carbons
-    # that extend from the acyl_start atom but do not go back into the CoA moiety.
+    # Count the number of contiguous carbon atoms in the acyl chain.
+    # We start with the carbonyl carbon and add carbons reachable from the acyl start atom.
     visited = set()
+
     def dfs(atom_idx):
-        """Depth-first search to count contiguous carbon atoms (excluding bonds back to the carbonyl)."""
+        """Perform depth-first search to count connected carbon atoms in the acyl chain.
+           Do not traverse back to the carbonyl carbon.
+        """
         count = 0
         visited.add(atom_idx)
         atom = mol.GetAtomWithIdx(atom_idx)
-        # Only follow carbon atoms (atomic number 6)
         if atom.GetAtomicNum() != 6:
             return 0
         count += 1
         for nbr in atom.GetNeighbors():
             nbr_idx = nbr.GetIdx()
-            # Ensure we only follow carbons and do not go back to the carbonyl carbon (which is already counted)
+            # Skip atoms that are not carbon or have already been counted.
             if nbr_idx not in visited and nbr.GetAtomicNum() == 6:
                 count += dfs(nbr_idx)
         return count
 
-    # Start the acyl chain count from the acyl_start atom.
-    # Also include the carbonyl carbon (which is part of the fatty acyl chain).
-    acyl_chain_carbon_count = 1  # for the carbonyl carbon
-    visited.add(coxo_idx)  # do not go back to the carbonyl carbon during DFS
+    # Begin count from the carbonyl carbon.
+    acyl_chain_carbon_count = 1  # Count the carbonyl carbon.
+    visited.add(coxo_idx)  # Prevent DFS from including the carbonyl carbon again.
     acyl_chain_carbon_count += dfs(acyl_start_idx)
-
-    # For medium-chain acyl groups, we require between 6 and 12 carbons (inclusive)
+    
+    # Check if the chain falls within the medium-chain length (6-12 carbons inclusive)
     if not (6 <= acyl_chain_carbon_count <= 12):
-        return False, f"Acyl chain contains {acyl_chain_carbon_count} carbons; expected between 6 and 12 for medium-chain."
+        return False, f"Acyl chain has {acyl_chain_carbon_count} carbons; expected between 6 and 12 for medium-chain."
+    
+    return True, f"Detected medium-chain fatty acyl-CoA(4-) with an acyl chain of {acyl_chain_carbon_count} carbons and a valid CoA head group."
 
-    return True, f"Detected medium-chain fatty acyl-CoA(4-) with an acyl chain of {acyl_chain_carbon_count} carbons and CoA head group."
-
-# (Optional) For testing purposes you could uncomment and test one of the examples:
+# (Optional) To test the function with one of the given examples, uncomment the following lines:
 # if __name__ == "__main__":
 #     test_smiles = "[C@@H]1(N2C3=C(C(=NC=N3)N)N=C2)O[C@H](COP(OP(OCC([C@H](C(NCCC(NCCSC(=O)/C=C/C=C\\CCCCC)=O)=O)O)(C)C)(=O)[O-])(=O)[O-])[C@H]([C@H]1O)OP([O-])([O-])=O"
 #     result, reason = is_medium_chain_fatty_acyl_CoA_4__(test_smiles)
