@@ -3,13 +3,12 @@ Classifies: CHEBI:51006 unsaturated fatty acyl-CoA
 """
 """
 Classifies: Unsaturated fatty acyl-CoA
-Definition: A fatty acyl-CoA is formed from the condensation of the thiol 
-group of coenzyme A with the carboxyl group of an unsaturated fatty acid.
-This function checks that (1) the molecule can be parsed, (2) it contains a 
-thioester linkage characteristic of the acyl-CoA bond, (3) it contains a CoA moiety 
-(as evidenced by a specific substructure), and (4) that the “fatty acyl” portion 
-(extracted from the thioester linkage after excluding the CoA fragment) is long 
-enough and contains at least one nonaromatic C=C bond.
+Definition: An unsaturated fatty acyl-CoA is produced from the condensation of the
+thiol group of coenzyme A with the carboxyl group of an unsaturated fatty acid.
+This function checks that (1) the molecule can be parsed; (2) it contains a thioester
+group linking an acyl chain with the CoA moiety; (3) it contains evidence of CoA by
+finding an adenine ring; and (4) from the thioester we extract the fatty acyl chain and
+verify it is long enough (>=3 carbons) and contains at least one nonaromatic C=C bond.
 """
 
 from rdkit import Chem
@@ -17,122 +16,120 @@ from rdkit import Chem
 def is_unsaturated_fatty_acyl_CoA(smiles: str):
     """
     Determines if a molecule is an unsaturated fatty acyl-CoA based on its SMILES string.
-    
-    The approach is:
-      1. Parse the SMILES.
-      2. Verify a thioester group ([C](=O)[S]) exists.
-      3. Verify a CoA moiety exists by matching a characteristic substructure
-         (we use "SCCNC(=O)CCNC(=O)" which is common in many CoA molecules).
-      4. Locate the acyl chain. From a thioester match, take the carbonyl carbon 
-         and then the substituent (neighbor) that is not linked to the sulfur.
-      5. Prevent “leakage” into the CoA part by excluding atoms that belong to the CoA match.
-      6. Do a simple depth-first search (DFS) starting at that acyl atom
-         and “collect” connected aliphatic carbon atoms.
-      7. Count the number of carbons (we require at least 5) and count nonaromatic C=C bonds
-         among bonds whose both ends are in the acyl fragment.
-      
+
+    The procedure is as follows:
+      1. Parse the SMILES into an RDKit molecule. Fail if the SMILES is invalid.
+      2. Look for a thioester group (SMARTS: [C](=O)[S]). This is required for acyl-CoA.
+      3. Check that a CoA moiety is present by finding an adenine substructure
+         (SMARTS: n1cnc2c(n1)nc(n2)) which is present in all coenzyme A derivatives.
+      4. For each thioester match, identify the fatty acyl side. The carbonyl carbon
+         should have two neighbors, one being the double-bonded oxygen and the other
+         being the acyl chain (the one not attached to the sulfur).
+      5. From that acyl-chain “anchor,” perform a depth-first search (DFS) to collect
+         contiguous carbon atoms. To avoid “leakage” into the CoA part we skip any
+         atom that is part of the adenine match.
+      6. Count the number of carbons in the acyl chain and the number of nonaromatic
+         C=C double bonds (only those bonds whose both ends lie in the collected chain).
+      7. If the chain has at least three carbon atoms and at least one nonaromatic C=C bond,
+         declare the molecule to belong to the unsaturated fatty acyl-CoA class.
+
     Returns:
-      bool: True if the molecule is judged to be an unsaturated fatty acyl-CoA, False otherwise.
+      bool: True if the molecule is considered an unsaturated fatty acyl-CoA, otherwise False.
       str : Explanation of the decision.
     """
-    # Parse the SMILES string into an RDKit molecule
+    # Parse SMILES string
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-    
-    # 1. Check for the thioester group: look for [C](=O)[S]
+        
+    # 1. Check for thioester group [C](=O)[S]
     thioester_pattern = Chem.MolFromSmarts("[C](=O)[S]")
     ts_matches = mol.GetSubstructMatches(thioester_pattern)
     if not ts_matches:
-        return False, "Missing thioester group linking the fatty acyl part to CoA"
-    
-    # 2. Check for a CoA moiety.
-    # We use a more specific fragment common in CoA: SCCNC(=O)CCNC(=O)
-    coa_pattern = Chem.MolFromSmarts("SCCNC(=O)CCNC(=O)")
-    if not mol.HasSubstructMatch(coa_pattern):
-        return False, "Missing characteristic CoA moiety"
+        return False, "Missing thioester group linking the acyl chain to CoA"
+        
+    # 2. Check for a CoA motif by looking for the adenine substructure.
+    adenine_pattern = Chem.MolFromSmarts("n1cnc2c(n1)nc(n2)")
+    if not mol.HasSubstructMatch(adenine_pattern):
+        return False, "Missing adenine substructure; not a recognizable CoA derivative"
 
-    # 3. Exclude CoA region from our acyl-chain search.
-    coa_matches = mol.GetSubstructMatches(coa_pattern)
-    coa_atoms = set()
-    for match in coa_matches:
-        coa_atoms.update(match)
-    
-    # 4. For at least one thioester, attempt to extract the fatty acyl chain.
-    # For each thioester match, match is a tuple of three atoms: (carbonyl C, carbonyl O, S)
-    acyl_chain_atoms = None
-    unsat_bonds_count = 0
-    chain_carbon_count = 0
+    adenine_matches = mol.GetSubstructMatches(adenine_pattern)
+    adenine_atoms = set()
+    for match in adenine_matches:
+        adenine_atoms.update(match)
+        
+    # 3. For each thioester group, try to isolate the fatty acyl chain.
+    # We loop over thioester matches and try to extract the acyl chain.
     for match in ts_matches:
+        # match is a tuple of indices: (carbonyl C, carbonyl O, sulfur)
         carbonyl_idx, oxygen_idx, sulfur_idx = match
         carbonyl_atom = mol.GetAtomWithIdx(carbonyl_idx)
-        # Determine the acyl-chain attachment: the carbonyl should have two neighbors,
-        # one being the oxygen (double bond) and one being the acyl chain (which is not the sulfur).
-        neighbors = carbonyl_atom.GetNeighbors()
+        # Identify the acyl-chain attachment: the carbonyl should have two neighbors:
+        # one is the double-bonded oxygen and one is the acyl chain (the one not being S)
         acyl_anchor = None
-        for nb in neighbors:
+        for nb in carbonyl_atom.GetNeighbors():
             if nb.GetIdx() in {oxygen_idx, sulfur_idx}:
                 continue
-            # Found the substituent that belongs to the fatty acyl chain.
+            # This neighbor is taken as the start of the acyl chain.
             acyl_anchor = nb
             break
+        # If no suitable acyl chain found, try the next thioester match.
         if acyl_anchor is None:
-            continue  # Try next thioester match if extraction fails.
-        
-        # 5. Traverse the molecule from the acyl_anchor to collect a contiguous aliphatic chain.
-        # We do a DFS from acyl_anchor and collect carbon atoms, but do not enter CoA region.
+            continue
+
+        # 4. From the acyl_anchor, perform a DFS to collect contiguous carbon atoms.
+        # We only follow atoms that are carbon and we do not allow entering atoms that
+        # are part of the adenine (CoA) substructure.
         visited = set()
         stack = [acyl_anchor.GetIdx()]
         chain_atoms = set()
         while stack:
-            idx = stack.pop()
-            if idx in visited or idx in coa_atoms:
+            curr_idx = stack.pop()
+            if curr_idx in visited:
                 continue
-            visited.add(idx)
-            atom = mol.GetAtomWithIdx(idx)
-            # We demand that the atom is carbon.
-            if atom.GetAtomicNum() == 6:
-                chain_atoms.add(idx)
-                # Allow traversal only through non-aromatic C (or if aromatic, we do not count double bonds later)
-                for nb in atom.GetNeighbors():
-                    # Only continue if neighbor is carbon and not in CoA.
-                    if nb.GetAtomicNum() == 6 and nb.GetIdx() not in visited:
-                        stack.append(nb.GetIdx())
-        # A valid fatty acyl chain tends to have a minimum number of carbons.
-        if len(chain_atoms) < 5:
-            continue  # Chain too short; try next match.
-        
+            # Do not cross into atoms that are clearly part of the CoA (adenine)
+            if curr_idx in adenine_atoms:
+                continue
+            visited.add(curr_idx)
+            atom = mol.GetAtomWithIdx(curr_idx)
+            if atom.GetAtomicNum() != 6:
+                continue  # Only follow carbon atoms
+            chain_atoms.add(curr_idx)
+            # Add neighbors (except going back to the carbonyl atom)
+            for nb in atom.GetNeighbors():
+                if nb.GetIdx() == carbonyl_idx:
+                    continue
+                if nb.GetIdx() not in visited:
+                    stack.append(nb.GetIdx())
+            
+        # 5. Check that the chain is long enough.
+        if len(chain_atoms) < 3:
+            continue  # Too short: try next thioester match.
+            
         # 6. Count nonaromatic C=C bonds within the collected chain.
-        unsat = 0
+        unsat_count = 0
         for bond in mol.GetBonds():
-            # Check if both atoms belong to the chain and not in CoA region.
             a1 = bond.GetBeginAtomIdx()
             a2 = bond.GetEndAtomIdx()
             if a1 in chain_atoms and a2 in chain_atoms:
                 if bond.GetBondType() == Chem.rdchem.BondType.DOUBLE and not bond.GetIsAromatic():
-                    # Make sure both atoms are carbons.
+                    # Both atoms should be carbons.
                     if (mol.GetAtomWithIdx(a1).GetAtomicNum() == 6 and 
                         mol.GetAtomWithIdx(a2).GetAtomicNum() == 6):
-                        unsat += 1
-        
-        # If we found at least one nonaromatic double bond, then we decide this match fulfills our criteria.
-        if unsat >= 1:
-            acyl_chain_atoms = chain_atoms
-            unsat_bonds_count = unsat
-            chain_carbon_count = len(chain_atoms)
-            break
-    
-    if acyl_chain_atoms is None:
-        return False, "Could not isolate a fatty acyl chain with sufficient length and unsaturation"
-    
-    # Passed all criteria
-    reason = (f"Found a thioester linkage to CoA and an acyl chain with {chain_carbon_count} carbons "
-              f"and {unsat_bonds_count} nonaromatic C=C double bond(s), consistent with an unsaturated fatty acyl-CoA")
-    return True, reason
+                        unsat_count += 1
+        # If at least one nonaromatic double bond is found, classify as unsaturated.
+        if unsat_count >= 1:
+            reason = (f"Found a thioester linkage to CoA with an acyl chain of {len(chain_atoms)} carbons "
+                      f"and {unsat_count} nonaromatic C=C double bond(s), consistent with an unsaturated fatty "
+                      "acyl-CoA")
+            return True, reason
 
-# Example usage (if executed as a script):
+    # If no thioester match yielded a qualifying fatty acyl chain:
+    return False, "Could not isolate a fatty acyl chain with sufficient length and unsaturation"
+
+# Example usage (when run directly):
 if __name__ == "__main__":
-    # A known positive example (one of the provided true positives)
+    # Try one of the provided positive examples:
     example_smiles = "S(C(=O)CCCCC[C@@H]1[C@@H](C(C=C1)=O)C/C=C\\CC)CCNC(CCNC(=O)[C@@H](C(COP(OP(OC[C@H]2O[C@@H](N3C4=C(C(=NC=N4)N)N=C3)[C@@H]([C@@H]2OP(O)(O)=O)O)(=O)O)(=O)O)(C)C)O)=O"
-    result, msg = is_unsaturated_fatty_acyl_CoA(example_smiles)
-    print(result, msg)
+    result, explanation = is_unsaturated_fatty_acyl_CoA(example_smiles)
+    print(result, explanation)
