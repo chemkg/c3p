@@ -3,91 +3,70 @@ Classifies: CHEBI:59845 3-hydroxy fatty acid
 """
 """
 Classifies: 3-hydroxy fatty acids
-Definition: A fatty acid with a terminal carboxylic acid group (-C(=O)O)
-and a hydroxyl (-OH) group attached at the beta (3-) carbon (i.e. the carbon two bonds away from the acid carbon).
-This implementation uses an explicit stepwise chain detection starting from the acid group.
+Definition: Any fatty acid with a hydroxy functional group in the beta- (or 3-) position.
+The molecule must contain a terminal carboxylic acid group (i.e. -C(=O)O) and a hydroxyl
+(-OH) attached at the beta-carbon (i.e. two bonds away from the carboxyl carbon).
 """
 from rdkit import Chem
+from rdkit.Chem import rdMolDescriptors
 
 def is_3_hydroxy_fatty_acid(smiles: str):
     """
     Determines if a molecule is a 3-hydroxy fatty acid based on its SMILES string.
-    This implementation first confirms the presence of a terminal carboxylic acid.
-    Then, it finds (assuming a linear fatty acid chain) the alpha carbon (neighbor to acid carbon)
-    and then the beta (3-) carbon (neighbor of alpha not being the acid carbon).
-    Finally, it checks that this beta carbon is substituted with a hydroxyl group (-OH).
+    A 3-hydroxy fatty acid must have a terminal carboxylic acid and a hydroxyl group
+    on the beta (3-) position relative to the acid group.
     
     Args:
         smiles (str): SMILES string of the molecule.
     
     Returns:
-        bool: True if the molecule is a 3-hydroxy fatty acid, False otherwise.
-        str: Explanation for the classification.
+        bool: True if molecule is a 3-hydroxy fatty acid, False otherwise.
+        str: Reason for classification.
     """
-    # Parse the SMILES string
+    # Parse molecule from SMILES
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Add explicit hydrogens to ensure hydroxyl groups are represented correctly.
+    # Add explicit hydrogens to detect -OH properly.
     mol = Chem.AddHs(mol)
     
-    # Define SMARTS for a carboxylic acid group.
-    acid_smarts = "[CX3](=O)[OX2H1]"  # Matches a carboxyl group
+    # Detect carboxylic acid group.
+    # SMARTS: [CX3](=O)[OX2H1] matches a typical carboxylic acid carbon.
+    acid_smarts = "[CX3](=O)[OX2H1]"
     acid_pattern = Chem.MolFromSmarts(acid_smarts)
     acid_matches = mol.GetSubstructMatches(acid_pattern)
     if not acid_matches:
         return False, "No carboxylic acid group found; not a fatty acid"
     
-    # Loop over acid matches; often there should be one terminal acid group.
+    # Try each carboxylic acid found - we expect a fatty acid to have one terminal acid.
     for match in acid_matches:
-        acid_idx = match[0]  # acid carbon (the C of the -C(=O)OH)
-        acid_atom = mol.GetAtomWithIdx(acid_idx)
+        # In the SMARTS, match[0] is the carboxyl carbon.
+        acid_carbon_idx = match[0]
+        acid_carbon = mol.GetAtomWithIdx(acid_carbon_idx)
         
-        # Identify the alpha carbon: the acid carbon should be bonded to one carbon that is not oxygen.
-        alpha_candidates = []
-        for nbr in acid_atom.GetNeighbors():
-            if nbr.GetAtomicNum() == 6:  # carbon
-                alpha_candidates.append(nbr)
-        if len(alpha_candidates) != 1:
-            # Either chain is not linear or ambiguous; move to next acid match if possible.
-            continue
+        # Find the neighbor carbon (alpha carbon) attached to the carboxyl carbon.
+        # Exclude the oxygens (which are part of the acid group).
+        alpha_candidates = [nbr for nbr in acid_carbon.GetNeighbors() if nbr.GetAtomicNum() == 6]
+        if not alpha_candidates:
+            continue  # Try next acid group if available.
+        # Assuming linear fatty acid, take the first alpha candidate.
         alpha_atom = alpha_candidates[0]
         
-        # Identify the beta (3-) carbon: from alpha, there must be one carbon neighbor that is not the acid carbon.
-        beta_candidates = []
-        for nbr in alpha_atom.GetNeighbors():
-            if nbr.GetAtomicNum() != 6:
-                continue
-            if nbr.GetIdx() == acid_idx:  # skip backwards
-                continue
-            beta_candidates.append(nbr)
-        if len(beta_candidates) != 1:
-            # If there is branching or no clear beta, skip this acid center.
+        # Now, the beta (or 3-) carbon shall be a neighbor of the alpha carbon but not the acid carbon.
+        beta_candidates = [nbr for nbr in alpha_atom.GetNeighbors() if nbr.GetIdx() != acid_carbon_idx and nbr.GetAtomicNum() == 6]
+        if not beta_candidates:
             continue
-        beta_atom = beta_candidates[0]
         
-        # Check that the beta carbon carries a hydroxyl group.
-        # We look for an oxygen neighbor bound via a single bond and having at least one explicit hydrogen.
-        hydroxyl_found = False
-        for nbr in beta_atom.GetNeighbors():
-            if nbr.GetAtomicNum() == 8:  # oxygen
-                bond = mol.GetBondBetweenAtoms(beta_atom.GetIdx(), nbr.GetIdx())
-                if bond is None or bond.GetBondType() != Chem.rdchem.BondType.SINGLE:
-                    continue
-                # Check if the oxygen has at least one hydrogen attached.
-                # Note: using GetTotalNumHs() counts explicit and implicit hydrogens.
-                if nbr.GetTotalNumHs() >= 1:
-                    hydroxyl_found = True
-                    break
-        
-        if hydroxyl_found:
-            return True, "Found beta-hydroxy (3-) group attached to the fatty acid chain"
+        # For each candidate beta carbon, check for an attached hydroxyl (-OH) group.
+        for beta_atom in beta_candidates:
+            for nbr in beta_atom.GetNeighbors():
+                # We are looking for an oxygen attached via a single bond that carries at least one hydrogen.
+                if nbr.GetAtomicNum() == 8:
+                    bond = mol.GetBondBetweenAtoms(beta_atom.GetIdx(), nbr.GetIdx())
+                    if bond is not None and bond.GetBondType() == Chem.rdchem.BondType.SINGLE:
+                        # In the RDKit molecule with explicit hydrogens, the -OH oxygen should have H attached.
+                        if nbr.GetTotalNumHs() >= 1:
+                            return True, "Found a hydroxy (-OH) group attached at the beta (3-) position relative to a carboxylic acid group"
     
-    # If none of the acid groups yielded a valid beta-hydroxy, report failure.
     return False, "No beta-hydroxy group found on the fatty acid chain"
-
-# Example testing (uncomment the lines below to run a simple test)
-# test_smiles = "OCCCCCCCCCCCC[C@@H](O)CC(O)=O"  # (3R)-3,15-dihydroxypentadecanoic acid
-# result, reason = is_3_hydroxy_fatty_acid(test_smiles)
-# print(result, reason)
