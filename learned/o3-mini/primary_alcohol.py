@@ -4,86 +4,121 @@ Classifies: CHEBI:15734 primary alcohol
 """
 Classifies: Primary Alcohol
 Definition:
-  A primary alcohol is defined as a compound in which a hydroxy (-OH) group is attached
+  A primary alcohol is defined as a compound in which a hydroxyl (-OH) group is attached
   to a saturated carbon atom (sp3) that has either (a) three hydrogen atoms attached (CH3–OH)
   or (b) two hydrogen atoms and exactly one carbon neighbor (RCH2–OH).
-
-This function attempts to detect at least one primary alcohol moiety in the molecule.
-It does so by (1) converting the molecule to include all explicit hydrogens,
-and (2) iterating over oxygen atoms that appear to be part of a simple –OH group.
-Upon finding one, it returns True plus a short explanation including the index of the carbon.
-If none is found (or the SMILES is invalid) the function returns False with a reason.
+  
+Our improved method first adds explicit hydrogens. Then it scans every oxygen atom to see whether 
+it appears to be an –OH group by checking that it has exactly one heavy-atom neighbor (typically the carbon).
+For every candidate –OH group we then check the environment of its attached carbon:
+  • If the carbon is sp3 and has three hydrogens then it is a methanol moiety.
+  • If the carbon is sp3 and has two hydrogens and exactly one other carbon neighbor then it is an RCH2–OH.
+We also count all -OH groups found. Finally, we classify the molecule as a primary alcohol if at least
+one primary -OH is found and if the “primary” candidate(s) comprise at least 50% of all isolated -OH groups.
+This extra filter is intended to avoid cases where an isolated primary –OH group is merely incidental within
+a molecule that contains many other –OH groups in more complex environments.
+    
+If the molecule does not qualify or the SMILES cannot be parsed the function returns (False, reason).
 """
 
 from rdkit import Chem
 
 def is_primary_alcohol(smiles: str):
     """
-    Determines if a molecule is a primary alcohol based on its SMILES string.
+    Determines if a molecule is a primary alcohol compound based on its SMILES string.
     
-    A primary alcohol must have at least one –OH group attached to a saturated (sp3) carbon 
-    that has either:
-      • three hydrogens attached (making it a CH3–OH), or
-      • two hydrogens attached and exactly one carbon neighbor (making it a RCH2–OH).
+    A primary alcohol (as a compound, not just a functional group) should have at least one –OH group 
+    attached to a saturated (sp3) carbon that is either CH3–OH or RCH2–OH. In addition, for our purposes
+    the found primary –OH(s) should constitute a majority of the isolated –OH groups detected.
     
     Args:
         smiles (str): SMILES string representing the molecule.
         
     Returns:
-        bool: True if at least one primary alcohol group is found, False otherwise.
-        str: Explanation for the classification decision.
+        bool: True if the compound is classified as a primary alcohol, False otherwise.
+        str: Explanation of the classification decision.
     """
-    # Try to parse the molecule
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Add explicit hydrogens so that hydrogen counts are reliable.
+    # Make sure hydrogens are explicit so that neighbor counts are reliable.
     mol = Chem.AddHs(mol)
     
-    # Iterate over atoms to search for possible hydroxyl groups.
+    # Initialize counts and list to record candidate indices.
+    primary_count = 0
+    total_oh = 0
+    candidate_carbon_idx = None  # to record first primary candidate carbon index
+    
+    # Loop over all atoms looking for potential -OH groups.
+    # We require that an -OH group here is indicated by an oxygen that is bonded to at least one hydrogen and one heavy atom.
     for atom in mol.GetAtoms():
-        # We are interested only in oxygen atoms.
         if atom.GetSymbol() != "O":
             continue
-
-        # For a simple hydroxyl (–OH) group the oxygen should have exactly one heavy-atom neighbor.
+        # Check: the oxygen should have at least one hydrogen.
+        # (Here we use the explicit hydrogens which were added.)
+        hs = [nbr for nbr in atom.GetNeighbors() if nbr.GetSymbol() == "H"]
+        if len(hs) < 1:
+            continue
+        # For a simple hydroxyl group, we expect the oxygen to have exactly one heavy-atom neighbor.
         heavy_neighbors = [nbr for nbr in atom.GetNeighbors() if nbr.GetAtomicNum() > 1]
         if len(heavy_neighbors) != 1:
-            continue  # Skip if oxygen is attached to more than one heavy atom.
-        
-        # The one heavy neighbor should be a carbon.
+            continue
+        # Now we have a candidate –OH group.
+        total_oh += 1
         carbon = heavy_neighbors[0]
+        # The attached heavy atom should be carbon.
         if carbon.GetSymbol() != "C":
             continue
-
-        # Ensure the carbon is saturated (sp3).
+        # The carbon must be sp3.
         if carbon.GetHybridization() != Chem.rdchem.HybridizationType.SP3:
             continue
-
-        # Count the number of hydrogen atoms attached to the carbon.
-        num_H = sum(1 for nbr in carbon.GetNeighbors() if nbr.GetSymbol() == "H")
-        # Count the number of carbon neighbors (exclude the oxygen that is attached).
-        num_C_neighbors = sum(1 for nbr in carbon.GetNeighbors() if nbr.GetSymbol() == "C")
         
-        # Case 1: A methanol moiety (CH3–OH) will have three H atoms.
-        if num_H == 3:
-            return True, f"Found primary alcohol group: CH3-OH at carbon atom index {carbon.GetIdx()}."
+        # Count the number of hydrogens attached to the carbon.
+        # (After using Chem.AddHs these counts are explicit.)
+        h_count = sum(1 for nbr in carbon.GetNeighbors() if nbr.GetSymbol() == "H")
+        # Also count how many carbon neighbors (excluding the oxygen we are examining)
+        c_neighbors = [nbr for nbr in carbon.GetNeighbors() if nbr.GetSymbol() == "C"]
         
-        # Case 2: A primary alcohol RCH2–OH should have exactly two hydrogens and one C neighbor.
-        if num_H == 2 and num_C_neighbors == 1:
-            return True, f"Found primary alcohol group: RCH2-OH at carbon atom index {carbon.GetIdx()}."
+        # Case 1: Methanol moiety – CH3–OH (three hydrogens attached).
+        if h_count == 3:
+            primary_count += 1
+            if candidate_carbon_idx is None:
+                candidate_carbon_idx = carbon.GetIdx()
+            continue
+        
+        # Case 2: Primary alcohol RCH2–OH: two hydrogens and exactly one carbon neighbor.
+        if h_count == 2 and len(c_neighbors) == 1:
+            primary_count += 1
+            if candidate_carbon_idx is None:
+                candidate_carbon_idx = carbon.GetIdx()
+            continue
+        # Else, if oxygen is bonded to a carbon that does not meet these criteria,
+        # it might be a secondary or tertiary alcohol – we ignore these as candidates.
     
-    return False, "No primary alcohol group found"
+    # If no -OH groups were detected at all, or none of them qualified as primary:
+    if total_oh == 0:
+        return False, "No hydroxyl (-OH) group found"
+    if primary_count == 0:
+        return False, "No primary alcohol (-CH3-OH or -CH2-OH) group found"
+    
+    # Use a heuristic: require that at least 50% of the isolated -OH groups (with one heavy neighbor)
+    # are of primary type.
+    ratio = primary_count / total_oh
+    if ratio < 0.5:
+        return False, f"Only {ratio*100:.1f}% of hydroxyl groups are primary; not classified as primary alcohol compound"
+    
+    return True, f"Contains primary alcohol group: candidate at carbon atom index {candidate_carbon_idx}. (Primary OH ratio = {ratio*100:.1f}%)"
 
-# For testing purposes (remove or comment out for production use):
+
+# For testing purposes (remove or comment out in production)
 if __name__ == '__main__':
-    # Example SMILES for primary alcohols
     test_smiles = [
-        "Nc1nc(=O)[nH]cc1CO",  # 5-(hydroxymethyl)cytosine (should be True)
-        "CCC(CC)Nc1cc(ccc1N1C(=O)CCC1(CO)CO)C(O)=O",  # Example with –(RCH2–OH)
-        "OC1C=C(Cl)C(Cl)C=C1Cl",  # Secondary structure: likely False
-        "O(C([H])([H])[H])[H]"  # methanol-d1 (should be True)
+        "Nc1nc(=O)[nH]cc1CO",  # 5-(hydroxymethyl)cytosine (expected True)
+        "CCC(CC)Nc1cc(ccc1N1C(=O)CCC1(CO)CO)C(O)=O",  # 1-[4-carboxy-2-(3-pentylamino)phenyl]-5,5-bis(hydroxymethyl)pyrrolidin-2-one (expected True)
+        "[H][C@]12C[C@]3([H])C(=C)C(=O)O[C@@]3([H])[C@@H](O)\\C(C)=C\\CC\\C(C)=C\\CC[C@@]1(CO)O2",  # sinularolide C (expected True)
+        "OC1C=C(Cl)C(Cl)C=C1Cl",  # 2,4,5-trichlorocyclohexa-2,5-dien-1-ol (expected False; –OH attached to sp2 carbon or ambiguous)
+        "O(C([H])([H])[H])[H]",  # methanol-d1 (expected True)
     ]
     for s in test_smiles:
         result, reason = is_primary_alcohol(s)
