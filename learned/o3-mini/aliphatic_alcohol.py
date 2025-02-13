@@ -2,14 +2,18 @@
 Classifies: CHEBI:2571 aliphatic alcohol
 """
 """
-Classifies: Aliphatic Alcohol (an alcohol derived from an aliphatic compound)
-
-An aliphatic alcohol is defined here as one containing an –OH group that is
-attached to a non‐aromatic (sp3) carbon. In addition to using a SMARTS pattern,
-we further require that the sp3 carbon bearing the –OH is not directly bonded
-to any aromatic carbons. This extra check helps avoid false positives for molecules
-that contain an alcohol group in an otherwise complex (e.g. glycosidic or aromatic)
-environment.
+Classifies: Aliphatic Alcohol 
+Definition: “An alcohol derived from an aliphatic compound”
+An aliphatic alcohol here is taken to be one that contains at least one hydroxyl (-OH) group 
+attached to an sp3-hybridized carbon that is embedded in a predominantly aliphatic (saturated) environment.
+We use a two‐step procedure:
+  1. Identify –OH groups attached to sp³ carbons.
+  2. For each candidate, look at the local atomic neighborhood of that carbon (ignoring the –OH oxygen) 
+     and compute the fraction of neighbors that are both sp³ and non‐aromatic.
+     Also, if the candidate carbon is part of a ring that appears to be part of a glycoside/sugar (i.e. has more than one oxygen),
+     we discount that candidate.
+If at least one candidate passes these tests then the molecule is classified as an aliphatic alcohol.
+Otherwise it is not.
 """
 
 from rdkit import Chem
@@ -18,11 +22,10 @@ def is_aliphatic_alcohol(smiles: str):
     """
     Determines if a molecule is an aliphatic alcohol based on its SMILES string.
     
-    An aliphatic alcohol is defined as one that contains at least one hydroxyl (-OH)
-    group attached to a non-aromatic (sp3) carbon. In addition, we require that the
-    sp3 carbon (directly bound to the -OH) is not directly attached to an aromatic carbon,
-    so as to avoid false positives from complex glycosides or molecules that contain
-    aromatic rings.
+    An aliphatic alcohol is defined here as one that has at least one hydroxyl (-OH) group 
+    attached to an sp³-hybridized carbon that is in a predominantly aliphatic (non‐aromatic, saturated)
+    environment. In addition, we discount cases (such as glycosidic rings) where the –OH is part of a cyclic sugar‐like 
+    system.
     
     Args:
         smiles (str): SMILES string of the molecule
@@ -31,64 +34,97 @@ def is_aliphatic_alcohol(smiles: str):
         bool: True if the molecule is classified as an aliphatic alcohol, False otherwise.
         str: Explanation for the classification decision.
     """
-    # Parse the SMILES string into an RDKit molecule
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Define a SMARTS pattern for an alcohol where -OH is attached
-    # to a sp3 aliphatic carbon. Here we use [#6X4;!$([#6](=O))] to indicate a
-    # saturated carbon that is not part of a carbonyl group, followed by [OX2H].
-    alcohol_smarts = "[#6X4;!$([#6](=O))][OX2H]"
-    aliphatic_alcohol_pattern = Chem.MolFromSmarts(alcohol_smarts)
-    
-    # First, find all substructure matches for the alcohol pattern.
-    matches = mol.GetSubstructMatches(aliphatic_alcohol_pattern)
-    if not matches:
-        return False, "No -OH group attached to a sp3 (non-aromatic) carbon found"
+    ri = mol.GetRingInfo()  # ring information which we will use to flag sugar-like rings
 
-    # Now check the neighborhood of each match.
-    # Each match is a tuple of atom indices corresponding to the SMARTS pattern.
-    # Convention: match[0] is the carbon atom, match[1] is the O (with -H).
-    valid_match_found = False
-    for match in matches:
-        carbon_idx, oxygen_idx = match[0], match[1]
-        carbon_atom = mol.GetAtomWithIdx(carbon_idx)
-        # If the carbon is marked as aromatic (should not be since we used #6X4),
-        # then skip this match.
-        if carbon_atom.GetIsAromatic():
+    candidate_found = False
+
+    # Iterate over all atoms looking for oxygen atoms that might be –OH groups.
+    for atom in mol.GetAtoms():
+        # Look for oxygen (atomic number 8)
+        if atom.GetAtomicNum() != 8:
             continue
-        # Check the immediate neighbors of the carbon (except the -OH oxygen)
-        adjacent_aromatic = False
-        for neighbor in carbon_atom.GetNeighbors():
-            # Skip the oxygen that is part of the alcohol group
-            if neighbor.GetIdx() == oxygen_idx:
+        # Check if this oxygen is bonded to at least one hydrogen.
+        # (GetTotalNumHs() counts both implicit and explicit hydrogens.)
+        if atom.GetTotalNumHs() < 1:
+            continue
+        
+        # We further require that it is attached to exactly one heavy neighbor.
+        # (This avoids confusing –OH in esters or carboxyl groups with genuine alcohol groups.)
+        neighbors = atom.GetNeighbors()
+        if len(neighbors) != 1:
+            continue
+            
+        neighbor = neighbors[0]
+        # We want the –OH to hang off a carbon atom.
+        if neighbor.GetAtomicNum() != 6:
+            continue
+        
+        # The candidate carbon must be sp3 (this avoids benzylic or vinylic alcohols)
+        if neighbor.GetHybridization() != Chem.rdchem.HybridizationType.SP3:
+            continue
+
+        # At this point we have a candidate alcohol group.
+        # Rather than immediately accepting it, we check its local environment.
+        # We look at the neighbors of the alcohol-bearing carbon excluding the –OH oxygen.
+        nbrs = [a for a in neighbor.GetNeighbors() if a.GetIdx() != atom.GetIdx()]
+        if len(nbrs) == 0:
+            # Unusual case, but if the carbon has no other neighbor then let it pass.
+            candidate_found = True
+            break
+
+        # Calculate the fraction of neighbors that are both sp3-hybridized and non-aromatic.
+        total = 0
+        count_aliphatic = 0
+        for nb in nbrs:
+            # Consider only heavy atoms.
+            if nb.GetAtomicNum() == 1:
                 continue
-            if neighbor.GetIsAromatic():
-                adjacent_aromatic = True
-                break
-        if adjacent_aromatic:
+            total += 1
+            if (nb.GetHybridization() == Chem.rdchem.HybridizationType.SP3) and (not nb.GetIsAromatic()):
+                count_aliphatic += 1
+        # If the fraction is too low, then the alcohol-bearing carbon is in a mixed or non-aliphatic environment.
+        if total > 0 and (count_aliphatic / total) < 0.5:
             continue
-        # If we get here then this alcohol group is truly attached to an aliphatic environment.
-        valid_match_found = True
-        break
-    
-    if not valid_match_found:
-        return False, ("Found an alcohol group attached to a sp3 carbon, "
-                       "but the carbon is directly bonded to an aromatic system")
-    
-    # If at least one match passes, we classify the molecule as an aliphatic alcohol.
-    return True, "Molecule contains an aliphatic alcohol group: -OH is attached to a non-aromatic sp3 carbon"
 
-# Example usage: (These can be commented out when used as a module)
+        # Next, if the candidate carbon is part of a ring, check whether the ring looks sugar-like,
+        # e.g. if the ring has more than one oxygen then we discount it.
+        in_ring = False
+        for ring in ri.AtomRings():
+            if neighbor.GetIdx() in ring:
+                # Count oxygens in this ring
+                oxy_count = sum(1 for idx in ring if mol.GetAtomWithIdx(idx).GetAtomicNum() == 8)
+                # For a simple aliphatic ring, we expect few oxygens.
+                # If more than one oxygen is present, the ring likely belongs to a glycoside or similar.
+                if oxy_count > 1:
+                    in_ring = True
+                    break
+        if in_ring:
+            continue
+
+        # If we get here, we have a valid candidate.
+        candidate_found = True
+        break
+
+    if candidate_found:
+        return True, "Molecule contains an aliphatic alcohol group: -OH is attached to an sp3 carbon in an aliphatic environment."
+    else:
+        return False, "No aliphatic alcohol group found based on local environment heuristics."
+
+# Example usage (you can comment out or remove these when using as a module)
 if __name__ == '__main__':
-    example_smiles = [
-        "OC(C(C)C)CC/C=C/C=C/C([C@@H](O)C)(C)C",  # Graphostromol G (valid)
-        "CCCCCCCCCCCCC(O)CCCC",                  # octadecan-5-ol (valid)
-        "CO",                                    # methanol (valid)
-        "C[C@@H](C1=CC=CC=C1)NC(=O)[C@@H]2[C@H](...)",  # false positive example (has aromatic ring)
-        "c1ccccc1O"                             # phenol (invalid: -OH on aromatic carbon)
+    # A few simple examples including one known false-negative test case:
+    examples = [
+        "OC(C(C)C)CC/C=C/C=C/C([C@@H](O)C)(C)C",  # Graphostromol G (expected True)
+        "CCCCCCCCCCCCC(O)CCCC",                  # nonadecan-5-ol (expected True)
+        "CO",                                    # methanol (expected True)
+        "O[C@H](C1=CC=C(CO)C=C1)CCCCC",           # 1-[4-(Hydroxymethyl)phenyl]hexan-1-ol (expected True, even though -OH carbon is attached to aromatic ring on one side)
+        "c1ccccc1O"                             # Phenol (expected False – OH on aromatic carbon)
     ]
-    for smi in example_smiles:
-        result, reason = is_aliphatic_alcohol(smi)
-        print(f"SMILES: {smi}\n  Classified as aliphatic alcohol? {result}\n  Reason: {reason}\n")
+    
+    for smi in examples:
+        res, reason = is_aliphatic_alcohol(smi)
+        print(f"SMILES: {smi}\n  Classified as aliphatic alcohol? {res}\n  Reason: {reason}\n")
