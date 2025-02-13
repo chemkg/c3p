@@ -9,82 +9,101 @@ with a carboxyl group at position 1 and a hydroxyl at position n (omega).
 """
 
 from rdkit import Chem
-from rdkit.Chem import rdMolDescriptors
 
 def is_omega_hydroxy_fatty_acid(smiles: str):
     """
     Determines if a molecule is an omega-hydroxy fatty acid based on its SMILES string.
-    The molecule must contain a carboxylic acid group (-C(=O)O) and a terminal (omega) hydroxyl group 
-    on a saturated carbon connected to only one other carbon.
-
+    The criteria:
+      - It has a carboxylic acid group (-C(=O)O).
+      - It has at least one terminal (end-of-chain) –OH group that is not part of the carboxyl group.
+    
+    The approach is:
+      1. Parse the SMILES and add explicit hydrogens.
+      2. Find carboxylic acid groups using SMARTS (which detects -C(=O)[O;H]).
+         Record the acid carbon(s).
+      3. Find carbon atoms that are terminal (only one connected carbon neighbor).
+      4. Exclude the terminal carbon that is part of the acid group.
+      5. Check if the remaining terminal carbon(s) have a directly attached hydroxyl group (-OH)
+         (a single-bonded oxygen with at least one hydrogen) that is not already assigned to the acid.
+    
     Args:
         smiles (str): SMILES string of the molecule.
-
     Returns:
-        bool: True if molecule is an omega-hydroxy fatty acid, False otherwise.
+        bool: True if molecule meets the criteria, False otherwise.
         str: Explanation for the classification decision.
     """
     # Parse the SMILES string into an RDKit molecule.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-        
-    # Add explicit hydrogens so that functional groups (e.g. -OH) are represented.
+
+    # Add explicit hydrogens to the molecule so that -OH hydrogens are represented.
     mol = Chem.AddHs(mol)
 
-    # Define a SMARTS pattern to detect the carboxylic acid group.
-    # This pattern matches a carbonyl (C=O) attached to an -OH.
+    # Identify the carboxylic acid group.
+    # The SMARTS “C(=O)[O;H]” will match the carboxyl carbon and its hydroxyl oxygen.
     acid_smarts = "C(=O)[O;H]"
     acid_pattern = Chem.MolFromSmarts(acid_smarts)
     acid_matches = mol.GetSubstructMatches(acid_pattern)
     if not acid_matches:
         return False, "Missing carboxylic acid group (-C(=O)O)"
     
-    # Retrieve indices of oxygen atoms that are part of the carboxylic acid.
-    acid_oh_idxs = set()
+    # Record all acid carbon indices (the first atom of the match is the carboxyl carbon).
+    acid_carbon_idxs = set(match[0] for match in acid_matches)
+    # Also record the oxygen atoms involved in the acid group.
+    acid_oxygen_idxs = set()
     for match in acid_matches:
-        # In our SMARTS "C(=O)[O;H]", we expect the match to return a tuple where one of the atoms is the -OH oxygen.
-        # We add any oxygen (atomic number 8) in the match that has at least one hydrogen.
+        # The pattern is expected to yield (carbon, oxygen) or (carbon, carbonyl_oxygen, hydroxyl oxygen) depending on the pattern.
         for idx in match:
             atom = mol.GetAtomWithIdx(idx)
             if atom.GetAtomicNum() == 8 and atom.GetTotalNumHs() >= 1:
-                acid_oh_idxs.add(idx)
+                acid_oxygen_idxs.add(idx)
 
-    # Look for candidate terminal hydroxyl (-OH) groups that are not part of the carboxylic acid.
-    terminal_oh_found = False
+    # Now, identify all carbon atoms (atomic number 6) that are terminal.
+    # A terminal carbon (in a linear fatty acid chain) should be connected to exactly one other carbon.
+    terminal_carbons = []
     for atom in mol.GetAtoms():
-        if atom.GetAtomicNum() != 8:
-            continue  # Only consider oxygen atoms.
-        # Skip if this oxygen is part of the carboxylic acid group.
-        if atom.GetIdx() in acid_oh_idxs:
+        if atom.GetAtomicNum() != 6:
             continue
-        # Ensure the oxygen has at least one hydrogen (i.e. acts as an -OH).
-        if atom.GetTotalNumHs() < 1:
-            continue
-        # Examine neighbors, typically the hydroxyl oxygen is bound to one carbon.
-        for neighbor in atom.GetNeighbors():
-            if neighbor.GetAtomicNum() != 6:
-                continue  # We require the -OH to be attached to a carbon
-            # Verify that the bond is single (as is expected for an alcohol)
-            bond = mol.GetBondBetweenAtoms(atom.GetIdx(), neighbor.GetIdx())
-            if bond.GetBondType() != Chem.BondType.SINGLE:
-                continue
+        # Count the number of neighboring carbon atoms.
+        carbon_neighbors = [nbr for nbr in atom.GetNeighbors() if nbr.GetAtomicNum() == 6]
+        if len(carbon_neighbors) == 1:
+            terminal_carbons.append(atom.GetIdx())
+    
+    # Remove the acid carbon from the terminal candidates.
+    candidate_terminal_idxs = [idx for idx in terminal_carbons if idx not in acid_carbon_idxs]
+    
+    if not candidate_terminal_idxs:
+        return False, "No terminal carbon (other than the carboxyl carbon) found in the chain"
 
-            # Check if this neighbor carbon is terminal in the chain.
-            # Count the number of carbon atoms attached to this carbon.
-            carbon_neighbors = [nb for nb in neighbor.GetNeighbors() if nb.GetAtomicNum() == 6]
-            if len(carbon_neighbors) == 1:
-                terminal_oh_found = True
-                break
-        if terminal_oh_found:
+    # For each candidate terminal carbon, check if it has an attached hydroxyl (-OH) that is not part of the acid group.
+    omega_hydroxyl_found = False
+    for c_idx in candidate_terminal_idxs:
+        carbon = mol.GetAtomWithIdx(c_idx)
+        for nbr in carbon.GetNeighbors():
+            # We look for oxygen neighbors.
+            if nbr.GetAtomicNum() != 8:
+                continue
+            # Skip if this oxygen is part of the acid group.
+            if nbr.GetIdx() in acid_oxygen_idxs:
+                continue
+            # Check the bond type is single.
+            bond = mol.GetBondBetweenAtoms(carbon.GetIdx(), nbr.GetIdx())
+            if bond is None or bond.GetBondType() != Chem.BondType.SINGLE:
+                continue
+            # Make sure oxygen looks like an alcohol (has at least one hydrogen).
+            if nbr.GetTotalNumHs() < 1:
+                continue
+            omega_hydroxyl_found = True
+            break
+        if omega_hydroxyl_found:
             break
 
-    if not terminal_oh_found:
-        return False, "No terminal hydroxyl (-OH) group found that is distinct from the carboxyl group"
+    if not omega_hydroxyl_found:
+        return False, "No terminal hydroxyl (-OH) group found on the opposite end of the chain from the carboxyl group"
 
-    # Optionally, additional checks like chain length or unbranched structure could be added here.
-    return True, ("Found both a carboxylic acid (-C(=O)O) group and a terminal hydroxyl (-OH) group "
-                  "on a carbon with only one carbon neighbor, consistent with an omega-hydroxy fatty acid.")
+    return True, ("Found a carboxylic acid (-C(=O)O) group and a terminal hydroxyl (-OH) group on a terminal carbon "
+                  "distinct from the acid carbon, consistent with an omega-hydroxy fatty acid.")
 
 # Example usage (uncomment for testing):
 # if __name__ == "__main__":
