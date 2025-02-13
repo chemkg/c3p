@@ -1,15 +1,18 @@
 """
 Classifies: CHEBI:26607 saturated fatty acid
 """
-#!/usr/bin/env python
 """
 Classifies: Saturated fatty acid
 
-A saturated fatty acid is defined as a fatty acid containing exactly one carboxylic acid group,
-an open-chain aliphatic moiety with no carbon–carbon multiple bonds (the only allowed C=O is in the acid group)
-and only C, H, and O atoms. We further disallow additional carbonyl (keto) groups in a long-chain (>=7 C)
-and also reject cases where an -OH group is present directly on the alpha carbon.
-Known to produce adverse biological effects when ingested to excess.
+A saturated fatty acid is defined here as a molecule that:
+  - Contains only C, H, and O atoms.
+  - Contains exactly one carboxylic acid group defined as [CX3](=O)[OX2H].
+  - Has no carbon–carbon multiple bonds.
+  - Contains no additional carbonyl groups (C=O bonds between C and O) outside the acid group if the molecule has 7 or more carbons.
+  - Does not have an -OH substituent on the alpha carbon (the carbon directly bonded to the acid carbon).
+  - May have a single additional hydroxyl group at the end of the chain (the ω‐position). Any extra oxygen-containing functionality (e.g. non‐terminal –OH, keto, methoxy) is disallowed.
+  
+Note: Unlike the previous attempt, we do not reject molecules solely on the basis of ring structures.
 """
 
 from rdkit import Chem
@@ -19,35 +22,30 @@ def is_saturated_fatty_acid(smiles: str):
     Determines if a molecule is a saturated fatty acid based on its SMILES string.
     The molecule must:
       - Contain only C, H, and O atoms.
-      - Have exactly one carboxylic acid group (defined as [CX3](=O)[OX2H]).
-      - Contain no rings.
+      - Have exactly one carboxylic acid group (SMARTS: [CX3](=O)[OX2H]).
       - Have no carbon–carbon double or triple bonds.
-      - In molecules with seven or more carbons, not display additional carbonyl (C=O) groups 
-        beyond that in the carboxylic acid.
+      - In molecules with 7 or more carbons, have no additional carbonyl groups (C=O) beyond that in the acid.
       - Not have an -OH substituent on the alpha carbon (the carbon directly bonded to the acid carbon).
+      - Optionally have one extra (terminal) hydroxyl group at the opposite omega (ω) end.
       
     Args:
         smiles (str): SMILES string of the molecule
         
     Returns:
         bool: True if the molecule is classified as a saturated fatty acid, False otherwise.
-        str: Reason for the classification decision.
+        str: Explanation/reason for the decision.
     """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Check allowed atoms: only C (6), H (1), O (8)
+    # (1) Allowed atoms: only H (1), C (6), and O (8)
     allowed_atomic_nums = {1, 6, 8}
     for atom in mol.GetAtoms():
         if atom.GetAtomicNum() not in allowed_atomic_nums:
             return False, "Contains atoms other than C, H, and O"
     
-    # Check that the molecule contains no rings.
-    if mol.GetRingInfo().NumRings() > 0:
-        return False, "Contains ring structures"
-    
-    # Define the carboxylic acid SMARTS pattern and ensure exactly one match.
+    # (2) Identify the carboxylic acid group.
     acid_smarts = "[CX3](=O)[OX2H]"
     acid_pattern = Chem.MolFromSmarts(acid_smarts)
     acid_matches = mol.GetSubstructMatches(acid_pattern)
@@ -56,14 +54,13 @@ def is_saturated_fatty_acid(smiles: str):
     if len(acid_matches) != 1:
         return False, "More than one carboxylic acid group found"
     
-    # Save the indices of the acid group atoms.
-    # The SMARTS is defined so that: acid_match[0][0] = acid carbon, acid_match[0][1] = carbonyl oxygen, acid_match[0][2] = hydroxyl oxygen.
+    # Record acid group atom indices.
     acid_match = acid_matches[0]
-    acid_carbon_idx = acid_match[0]
-    acid_carbon = mol.GetAtomWithIdx(acid_carbon_idx)
-    acid_carbony_ox_idx = acid_match[1]  # allowed carbonyl oxygen for the acid group
-
-    # Check for carbon-carbon multiple bonds (double or triple) anywhere in the molecule.
+    acid_carbon_idx = acid_match[0]       # the carboxyl carbon
+    acid_carbonyl_oxygen_idx = acid_match[1]  # the allowed carbonyl oxygen
+    acid_oh_oxygen_idx = acid_match[2]     # the hydroxyl oxygen of the COOH
+    
+    # (3) Check for any carbon-to-carbon multiple bonds.
     for bond in mol.GetBonds():
         if bond.GetBondType() in [Chem.rdchem.BondType.DOUBLE, Chem.rdchem.BondType.TRIPLE]:
             a1 = bond.GetBeginAtom()
@@ -71,53 +68,79 @@ def is_saturated_fatty_acid(smiles: str):
             if a1.GetAtomicNum() == 6 and a2.GetAtomicNum() == 6:
                 return False, "Contains carbon-to-carbon multiple bonds"
     
-    # Count total carbons in the molecule.
+    # (4) Count carbons in the molecule.
     total_carbons = sum(1 for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6)
     
-    # Check for additional carbonyl groups (C=O) not part of the acid group.
-    # We allow extra C=O only in molecules with fewer than 7 carbons.
+    # (5) Check for additional carbonyl groups (C=O bonds between C and O, not part of the acid group).
+    # For molecules with 7 or more carbons, any extra C=O (double bonds: C=O) will lead to rejection.
     if total_carbons >= 7:
         for bond in mol.GetBonds():
             if bond.GetBondType() == Chem.rdchem.BondType.DOUBLE:
                 a1 = bond.GetBeginAtom()
                 a2 = bond.GetEndAtom()
-                # look for a bond between a carbon and an oxygen
-                ats = {a1.GetAtomicNum(), a2.GetAtomicNum()}
-                if 6 in ats and 8 in ats:
-                    # Check if this bond is the allowed acid carbonyl.
-                    # Allowed if one end is the acid carbon and the other is the designated carbonyl oxygen.
+                # We look for a C=O bond:
+                if (a1.GetAtomicNum(), a2.GetAtomicNum()) in [(6,8), (8,6)]:
                     idxs = {bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()}
-                    if acid_carbon_idx in idxs and acid_carbony_ox_idx in idxs:
-                        continue  # allowed acid carbonyl
+                    # Allow if this is the acid carbonyl
+                    if {acid_carbon_idx, acid_carbonyl_oxygen_idx} == idxs:
+                        continue
                     else:
                         return False, "Contains additional carbonyl group(s) beyond the carboxylic acid"
     
-    # Check that the acid group is terminal. Reject if the atom alpha to the acid carbon has an -OH substituent.
-    # Identify the neighbor(s) of the acid carbon excluding the acid carbonyl oxygen.
+    # (6) Check that the acid group is terminal in the sense that there is no -OH on the alpha carbon.
+    acid_carbon = mol.GetAtomWithIdx(acid_carbon_idx)
     for neighbor in acid_carbon.GetNeighbors():
-        if neighbor.GetIdx() == acid_carbony_ox_idx:
-            continue  # skip the acid carbonyl oxygen
-        # Check if this neighbor (the alpha carbon) bears a hydroxyl substituent.
+        # Skip the neighbor that is the carbonyl oxygen.
+        if neighbor.GetIdx() == acid_carbonyl_oxygen_idx:
+            continue
+        # For the remaining neighbor (alpha carbon), check if it bears an -OH group.
         for subnbr in neighbor.GetNeighbors():
-            # Looking for an oxygen attached via a single bond and with at least one hydrogen.
             if subnbr.GetAtomicNum() == 8:
                 bond = mol.GetBondBetweenAtoms(neighbor.GetIdx(), subnbr.GetIdx())
                 if bond and bond.GetBondType() == Chem.rdchem.BondType.SINGLE:
-                    # Check if the O has any attached hydrogens.
+                    # If the oxygen has at least one explicit hydrogen, treat it as an -OH.
                     if subnbr.GetTotalNumHs() > 0:
                         return False, "Contains an alpha-hydroxyl group adjacent to the carboxylic acid"
     
-    return True, ("Molecule has a single carboxylic acid group, only C/H/O atoms, no rings, "
-                  "no carbon–carbon unsaturation, and no disallowed additional carbonyl or alpha‐OH groups")
+    # (7) Check for any extra oxygen functionality (outside the acid group).
+    # Allowed extra oxygen: one terminal hydroxyl group (at the ω-end), defined as an -OH on a carbon that is terminal (has exactly one neighboring carbon).
+    # Gather oxygen indices that are not part of the acid group.
+    acid_atom_idxs = {acid_carbon_idx, acid_carbonyl_oxygen_idx, acid_oh_oxygen_idx}
+    extra_oxygen_idxs = [atom.GetIdx() for atom in mol.GetAtoms() 
+                           if atom.GetAtomicNum() == 8 and atom.GetIdx() not in acid_atom_idxs]
+    
+    allowed_terminal_oh_count = 0
+    for oidx in extra_oxygen_idxs:
+        oxy = mol.GetAtomWithIdx(oidx)
+        # We expect these oxygens to be in a hydroxyl group (i.e. bonded by a single bond to a carbon and having at least one H)
+        if oxy.GetDegree() != 1 or oxy.GetTotalNumHs() < 1:
+            return False, "Contains extra oxygen functionality that is not a terminal hydroxyl group"
+        # Get the carbon to which this oxygen is attached.
+        nbr = oxy.GetNeighbors()[0]
+        if nbr.GetAtomicNum() != 6:
+            return False, "Extra oxygen is not attached to a carbon"
+        # Check that the carbon is terminal (only one carbon neighbor among heavy atoms).
+        carbon_neighbors = [a for a in nbr.GetNeighbors() if a.GetAtomicNum() == 6]
+        if len(carbon_neighbors) != 1:
+            return False, "Contains an extra hydroxyl group on a non-terminal carbon"
+        allowed_terminal_oh_count += 1
+        if allowed_terminal_oh_count > 1:
+            return False, "More than one terminal hydroxyl group found"
+    
+    # Passed all checks.
+    return True, ("Molecule has exactly one carboxylic acid group, only C/H/O atoms, no carbon–carbon multiple bonds, "
+                  "no disallowed additional carbonyl or alpha‐OH groups, and at most one terminal extra hydroxyl group")
 
-# Example usage:
+# Example usage (you may add more SMILES strings to test):
 if __name__ == '__main__':
     test_smiles = [
-        "OCCCCCCCCCCCCCCCCCCCC(O)=O",  # 20-hydroxyicosanoic acid; should be True
-        "CC[C@@H](O)C(O)=O",           # (R)-2-hydroxybutyric acid; should be False (alpha-OH)
-        "CC(=O)CCC(O)=O",              # 4-oxopentanoic acid; small keto acid, allowed
-        "O=C(CCCCCCCCC(O)=O)CCCC",      # 10-keto myristic acid; should be False (extra carbonyl in long chain)
+        "OCCCCCCCCCCCCCCCCCCCC(O)=O",      # 20-hydroxyicosanoic acid (should be True)
+        "CC(C)C(C)C(O)=O",                 # 2,3-dimethylbutyric acid (should be True)
+        "CC(=O)CCC(O)=O",                  # 4-oxopentanoic acid (allowed for a short chain)
+        "CCCCCCCCCCCCCCCC(O)=O",           # tridecanoic acid (should be True)
+        "C[C@@H](O)CCCCCCCCC[C@@H](O)CC(O)=O",  # Example that should be rejected (extra –OH on non-terminal carbons)
+        "CCCCCCCC[C@H]1CCC[C@@H]1CCCCCCC(O)=O",  # lactobacillic acid variant with ring (should be True now)
     ]
     for sm in test_smiles:
         result, reason = is_saturated_fatty_acid(sm)
-        print(f"SMILES: {sm} -> {result}, Reason: {reason}")
+        print(f"SMILES: {sm}\n -> {result}, Reason: {reason}\n")
