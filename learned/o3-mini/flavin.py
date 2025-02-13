@@ -2,108 +2,86 @@
 Classifies: CHEBI:30527 flavin
 """
 """
-Classifies: A derivative of the dimethylisoalloxazine (7,8-dimethylbenzo[g]pteridine-2,4(3H,10H)-dione)
-skeleton with a substituent attached on the 10 position (i.e. a flavin derivative).
-This approach uses a two‐step strategy:
-  1. A lenient SMARTS is used to find an isoalloxazine core.
-  2. For the matched core the candidate N atom (mapped as N10) is verified to be substituted:
-       - It must have zero total hydrogens (i.e. the substituent has replaced the expected [nH] proton).
-       - At least one neighbor (outside the core match) must be carbon‐based.
-Note: This is a heuristic method and may not guarantee 100% accuracy.
+Classifies: A derivative of the dimethylisoalloxazine skeleton (7,8-dimethylbenzo[g]pteridine-2,4(3H,10H)-dione)
+with a substituent on the 10 position (i.e. a flavin).
+Note: This SMARTS-based approach is an approximation.
 """
-
 from rdkit import Chem
+from rdkit.Chem import rdMolDescriptors
 
 def is_flavin(smiles: str):
     """
-    Determines if a molecule is a flavin derivative based on its SMILES string.
-    A flavin derivative is defined as a derivative of the dimethylisoalloxazine 
-    (7,8-dimethylbenzo[g]pteridine-2,4(3H,10H)-dione) skeleton with a carbon substituent 
-    attached at the 10 position (replacing the hydrogen normally found on that nitrogen).
+    Determines if a molecule is a flavin (a derivative of the dimethylisoalloxazine skeleton
+    with a substituent on the 10 position) based on its SMILES string.
+
+    The method works by:
+      1. Parsing the SMILES.
+      2. Checking for the presence of an isoalloxazine core that bears the 7,8-dimethyl pattern.
+         The SMARTS used is:
+           [n:10]1c2cc(C)c(C)cc2nc2c1nc(=O)[nH]c2=O
+         Here the atom tagged [n:10] is taken as the N at position 10.
+      3. For any match the degree (number of bonds) of the atom corresponding to N10 is compared
+         to the degree in the bare core (query). In the query the N10 has only the two bonds 
+         needed for the ring closure. In a true flavin there is an extra substituent attached to N10.
     
-    Strategy:
-      1. Parse the SMILES string.
-      2. Look for the isoalloxazine core using a lenient SMARTS pattern.
-         The SMARTS pattern is designed to allow the atom at position 10 to be drawn as either 
-         aromatic or non-aromatic. (We use "[#7:10]" to indicate any nitrogen atom at that position.)
-      3. For any match, check that the candidate N (mapped as atom 10) has no hydrogen attached
-         and that at least one of its neighbors outside the matched core is carbon-based.
-         
     Args:
-       smiles (str): SMILES string of the molecule.
-       
+        smiles (str): SMILES string for the molecule.
+
     Returns:
-       bool: True if the molecule is classified as a flavin derivative, False otherwise.
-       str: A reason describing the decision.
+        bool: True if the molecule matches the flavin criteria, False otherwise.
+        str: A reason describing the classification decision.
     """
-    # Parse the SMILES string
+    # Parse the SMILES into a molecule
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string."
     
-    # Define a lenient SMARTS pattern for the isoalloxazine core.
-    # We allow the N at the 10 position to appear as any nitrogen (aromatic or not)
-    # and we tag it with [#7:10].
-    # The pattern below loosely captures the fused ring system with two carbonyl groups.
-    core_smarts = "n1c2cc(cc2)nc2c1nc(=O)[#7:10]c2=O"
+    # Define SMARTS for the dimethylisoalloxazine core.
+    # This query requires that the core contains two methyl groups on the benzene ring 
+    # (i.e. the 7,8-dimethyl pattern). We label the nitrogen at the 10 position using [n:10].
+    core_smarts = "[n:10]1c2cc(C)c(C)cc2nc2c1nc(=O)[nH]c2=O"
     core_query = Chem.MolFromSmarts(core_smarts)
     if core_query is None:
-        return False, "Error in the SMARTS pattern for the isoalloxazine core."
+        return False, "Error in the SMARTS pattern for the flavin core."
     
-    # Find all substructure matches in the molecule.
+    # Check if the molecule contains the isoalloxazine core.
+    # Note: GetSubstructMatches returns a tuple of tuples, each with the atom indices in mol that match the query.
     matches = mol.GetSubstructMatches(core_query)
     if not matches:
-        return False, "Isoalloxazine core not found."
+        return False, "Isoalloxazine core with 7,8-dimethyl pattern not found."
     
-    # Identify the query atom index corresponding to the tagged N at position 10.
-    # (We expect the SMARTS to assign mapping number 10 to that atom.)
+    # Identify which atom in the query has the mapping number of 10.
     n10_query_idx = None
     for atom in core_query.GetAtoms():
         if atom.HasProp("molAtomMapNumber") and atom.GetProp("molAtomMapNumber") == "10":
             n10_query_idx = atom.GetIdx()
             break
     if n10_query_idx is None:
-        return False, "SMARTS pattern missing the expected mapping for N10."
+        return False, "The query pattern does not contain an atom mapped with number 10."
     
-    # Now evaluate each match.
+    # Get the degree (number of bonds) in the bare isoalloxazine core for the N10 atom.
+    core_n10_degree = core_query.GetAtomWithIdx(n10_query_idx).GetDegree()
+    # In our query the tagged N10 is only connected to 2 atoms (the ring bonds).
+    
+    # Now, check the actual substitution at the corresponding N10 in the molecule.
+    # We will loop over all matches (if the core occurs more than once, one may qualify as flavin).
     for match in matches:
-        # Get the corresponding atom from the molecule for the N10 query atom.
+        # match is a tuple giving the indices in mol corresponding to the query atoms.
         n10_mol_idx = match[n10_query_idx]
         n10_atom = mol.GetAtomWithIdx(n10_mol_idx)
-        
-        # For a flavin derivative, the N10 should have no hydrogens (i.e. it is substituted).
-        if n10_atom.GetTotalNumHs() > 0:
-            return False, ("Isoalloxazine core found but N10 still has a hydrogen; "
-                           "expected substituent replacing that hydrogen for a flavin derivative.")
-        
-        # Get the set of atom indices that are part of the matched isoalloxazine core.
-        core_atom_indices = set(match)
-        
-        # Check that at least one neighbor of N10 that is outside the core is carbon based.
-        found_carbon_substituent = False
-        for neighbor in n10_atom.GetNeighbors():
-            if neighbor.GetIdx() not in core_atom_indices and neighbor.GetAtomicNum() == 6:
-                found_carbon_substituent = True
-                break
-        if not found_carbon_substituent:
-            return False, "Substituent at N10 is not carbon-based as expected for a flavin derivative."
-        
-        # If we have come this far, we have a valid match.
-        return True, "Molecule contains an isoalloxazine core with a proper substituent at N10."
+        # Compare the number of neighbors. If the actual degree is greater than in the query,
+        # it indicates that N10 carries an extra substituent.
+        if n10_atom.GetDegree() > core_n10_degree:
+            return True, "Molecule contains the expected dimethylisoalloxazine core with a substituent on N10."
     
-    return False, "No valid flavin substructure match found."
+    return False, "Isoalloxazine core found but no substituent attached at the 10 position."
 
-# For testing purposes:
-if __name__ == "__main__":
-    # Example SMILES strings from the provided list.
-    test_smiles = {
-        "8-formyl-8-demethylriboflavin 5'-phosphate": "C(N1C=2C(=NC3=C1C=C(C(=C3)C)C(=O)[H])C(NC(N2)=O)=O)[C@H](O)[C@H](O)[C@H](O)COP(O)(=O)O",
-        "Riboflavol": "OC(CN1C2=C(N=C3C1=NC(=O)N(O)C3=O)C=C(C(=C2)C)C)C(O)C(O)CO",
-        "riboflavin cyclic 4',5'-phosphate": "Cc1cc2nc3c(nc(=O)[nH]c3=O)n(C[C@H](O)[C@H](O)[C@H]3COP(O)(=O)O3)c2cc1C",
-        "prenyl-FMN": "C=12N=C(NC(C1[N+]=3C=4C(N2C[C@@H]([C@@H]([C@@H](COP(O)(O)=O)O)O)O)=CC(=C(C4C(C)(CC3)C)C)C)=O)[O-]",
-        "FADH(.)": "Cc1cc2[N]c3c([nH]c(=O)[nH]c3=O)N(C[C@H](O)[C@H](O)[C@H](O)COP(O)(=O)OP(O)(=O)OC[C@H]3O[C@H]([C@H](O)[C@@H]3O)n3cnc4c(N)ncnc34)c2cc1C"
-    }
-    
-    for name, smi in test_smiles.items():
-        flag, reason = is_flavin(smi)
-        print(f"{name}: {flag} – {reason}")
+# Example usage (uncomment for testing):
+# smiles_list = [
+#     "Cc1cc2nc3c(nc(=O)[nH]c3=O)n(C)c2cc1C",  # lumiflavin
+#     "[H]C(=O)n1c2cc(C)c(C)cc2nc2c1nc(=O)[nH]c2=O",  # 7,8-dimethylisoalloxazine-10-carbaldehyde
+#     "CC1=CC2=C(C=C1C)N(C3=NC(=O)NC(=O)C3=N2)C[C@H](O)[C@H](O)[C@H](O)CO"  # riboflavin derivative
+# ]
+# for sm in smiles_list:
+#     result, reason = is_flavin(sm)
+#     print(sm, "->", result, "-", reason)
