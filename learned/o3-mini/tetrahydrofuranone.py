@@ -3,45 +3,43 @@ Classifies: CHEBI:47016 tetrahydrofuranone
 """
 """
 Classifies: tetrahydrofuranone
-Definition: Any oxolane (five-membered ring comprising one oxygen and four carbons)
-with an oxo- substituent (i.e. a carbonyl group) attached on one of the ring carbons.
-We further require that the tetrahydrofuran ring be “isolated” (not fused to another 5-membered ring),
-in an effort to avoid false positives from polycyclic or fused structures.
+Definition: Any oxolane (i.e. a 5-membered saturated ring containing one oxygen and four carbons)
+with an oxo- substituent (a carbonyl group) attached on one of the ring carbons.
+The oxo substituent may be attached directly (via a C=O) or through an acyl group.
+We now ensure that the candidate oxolane ring is fully saturated (non‐aromatic, single bonds only)
+to avoid false positives from aromatic or fused rings.
 """
 
 from rdkit import Chem
+from rdkit.Chem import rdchem
 
 def is_tetrahydrofuranone(smiles: str):
     """
     Determines if a molecule is a tetrahydrofuranone based on its SMILES string.
     
-    A tetrahydrofuranone is defined here as any molecule that contains an oxolane
-    ring (a 5-membered ring with exactly one oxygen and four carbons, not fused to another such ring)
-    and such that at least one of the ring’s carbon atoms bears an oxo (-C=O) substituent.
-    
-    The oxo substituent is detected either directly (an exocyclic oxygen double-bonded to the ring carbon)
-    or through an acyl group attached to the ring carbon.
-    
     Args:
         smiles (str): SMILES string of the molecule.
     
     Returns:
-        bool: True if the molecule is classified as a tetrahydrofuranone, False otherwise.
-        str: Reason for the classification.
+        (bool, str): A tuple where the boolean is True if the molecule is classified as a tetrahydrofuranone,
+                     and the string provides the reason for the classification.
     """
+    # Parse the SMILES string.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    ri = mol.GetRingInfo()
-    rings = ri.AtomRings()
+    # Get ring information.
+    ring_info = mol.GetRingInfo()
+    rings = ring_info.AtomRings()
     
-    # Iterate over candidate rings
+    # Iterate over candidate rings.
     for ring in rings:
+        # Only consider 5-membered rings.
         if len(ring) != 5:
-            continue  # Only consider 5-membered rings
-        
-        # Count atoms in the ring: we want exactly one oxygen and four carbons.
+            continue
+
+        # Count the number of oxygen and carbon atoms in the candidate ring.
         oxygen_count = 0
         carbon_count = 0
         for idx in ring:
@@ -52,51 +50,67 @@ def is_tetrahydrofuranone(smiles: str):
                 carbon_count += 1
         if oxygen_count != 1 or carbon_count != 4:
             continue
-        
-        # Check that the candidate 5-membered ring is isolated (not fused with another 5-membered ring)
-        # Here, if any atom belongs to more than one 5-membered ring then we skip this candidate.
-        is_fused = False
-        for idx in ring:
-            count_in_5 = sum(1 for r in rings if len(r)==5 and idx in r)
-            if count_in_5 > 1:
-                is_fused = True
-                break
-        if is_fused:
-            continue
-        
-        # Now search for an oxo substituent on one of the ring carbons.
-        # We check two possibilities:
-        # 1. The ring carbon directly has an exocyclic oxygen attached via a double bond.
-        # 2. The ring carbon is attached to an exocyclic carbon that itself carries a carbonyl group.
+
+        # Ensure the ring is saturated: 
+        # a) none of its atoms is aromatic,
+        # b) all bonds between atoms in the ring are single bonds.
+        saturated = True
         for idx in ring:
             atom = mol.GetAtomWithIdx(idx)
-            # Only check carbon atoms
+            if atom.GetIsAromatic():
+                saturated = False
+                break
+        if not saturated:
+            continue
+
+        # Check every bond between adjacent atoms in the ring.
+        ring_bonds_saturated = True
+        n = len(ring)
+        for i in range(n):
+            a1 = ring[i]
+            a2 = ring[(i+1) % n]  # wrap-around for cyclicity
+            bond = mol.GetBondBetweenAtoms(a1, a2)
+            if bond is None or bond.GetBondType() != rdchem.BondType.SINGLE:
+                ring_bonds_saturated = False
+                break
+        if not ring_bonds_saturated:
+            continue
+
+        # Now, look for an oxo substituent on one of the ring carbons.
+        # We check two possibilities:
+        #  1. A ring carbon directly bears an exocyclic oxygen attached by a double bond (a carbonyl).
+        #  2. A ring carbon is attached to a carbon (acyl group) that carries a double bonded oxygen.
+        for idx in ring:
+            atom = mol.GetAtomWithIdx(idx)
+            # Only consider carbon atoms in the ring.
             if atom.GetAtomicNum() != 6:
                 continue
+            # Inspect neighbors that are not part of the ring.
             for nbr in atom.GetNeighbors():
-                # Consider only substituents not within the ring.
                 if nbr.GetIdx() in ring:
                     continue
                 bond = mol.GetBondBetweenAtoms(atom.GetIdx(), nbr.GetIdx())
                 if bond is None:
                     continue
-                # Possibility #1: Direct exocyclic oxygen (C=O) attached
-                if nbr.GetAtomicNum() == 8 and bond.GetBondTypeAsDouble() >= 2.0:
-                    return True, "Found a tetrahydrofuran ring with a carbonyl substituent on a ring carbon"
-                # Possibility #2: Exocyclic acyl substituent. The neighbor is a carbon that bears a carbonyl group.
+                # Possibility #1: Direct exocyclic carbonyl group.
+                if nbr.GetAtomicNum() == 8 and bond.GetBondType() == rdchem.BondType.DOUBLE:
+                    return True, "Found a tetrahydrofuran ring with a direct carbonyl substituent on a ring carbon"
+                # Possibility #2: Acyl substituent attached via a carbon.
                 if nbr.GetAtomicNum() == 6:
                     for sub_nbr in nbr.GetNeighbors():
-                        # Avoid backtracking to the ring carbon we came from.
                         if sub_nbr.GetIdx() == atom.GetIdx():
                             continue
                         sub_bond = mol.GetBondBetweenAtoms(nbr.GetIdx(), sub_nbr.GetIdx())
-                        if sub_bond and sub_bond.GetBondTypeAsDouble() >= 2.0 and sub_nbr.GetAtomicNum() == 8:
+                        if sub_bond is None:
+                            continue
+                        if sub_nbr.GetAtomicNum() == 8 and sub_bond.GetBondType() == rdchem.BondType.DOUBLE:
                             return True, "Found a tetrahydrofuran ring with an acyl substituent on a ring carbon"
+    # If no candidate ring passed all checks, classification fails.
     return False, "No tetrahydrofuran ring with an oxo substituent found"
 
 # Example usage (you may add additional tests here):
 if __name__ == "__main__":
-    # Example: N-isovaleryl-L-homoserine lactone         
+    # Test example: N-isovaleryl-L-homoserine lactone
     test_smiles = "CC(C)CC(=O)N[C@H]1CCOC1=O"
     result, reason = is_tetrahydrofuranone(test_smiles)
     print(f"SMILES: {test_smiles}")
