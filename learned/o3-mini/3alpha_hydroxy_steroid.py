@@ -2,51 +2,53 @@
 Classifies: CHEBI:36835 3alpha-hydroxy steroid
 """
 """
-Classifies: 3alpha-hydroxy steroid
-Definition: A 3-hydroxy steroid in which the 3-hydroxy substituent is in the alpha-position.
-This improved version first identifies a fused ring system that is (a) large (at least 3 rings),
-(b) contains at least one 5-membered ring and mostly 5- or 6-membered rings, and (c) is almost
-exclusively composed of carbon centers – as expected for a cyclopentanoperhydrophenanthrene steroid nucleus.
-Then it checks that at least one alpha-OH (indicated by the [C@@H](O) SMARTS) is attached to one
-of those fused ring atoms.
+Classifies: 3α-hydroxy steroid
+Definition: A 3–hydroxy steroid in which the 3–hydroxy substituent is in the α–position.
+This improved version first identifies a fused ring system that is:
+  (a) large (at least three rings),
+  (b) consisting solely of 5– or 6–membered rings, and
+  (c) composed entirely of carbon atoms (as expected for a classical steroid nucleus).
+Then it checks that at least one alpha–OH (indicated by the [C@@H](O) SMARTS) is attached
+to one of the atoms belonging to that nucleus.
 """
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
 def is_3alpha_hydroxy_steroid(smiles: str):
     """
-    Determines if a molecule is a 3alpha-hydroxy steroid based on its SMILES string.
-    Improved heuristics:
-      1. Identify a fused ring system from ring information. The steroid nucleus is known to be a
-         single fused set of rings (typically four rings) that is largely all-carbon. Here we extract
-         the largest connected set (by ring fusion, where two rings are deemed fused if they share at least 2 atoms).
-      2. Require that the fused component contains at least three rings and at least one five-membered ring.
-      3. Check that most atoms in the fused ring system are carbons (since steroid backbones are carboskeletal).
-      4. Look for at least one [C@@H](O) substructure (the alpha hydroxyl proxy) whose carbon atom is part
-         of the fused ring nucleus.
+    Checks whether the molecule defined by the SMILES string is a 3α-hydroxy steroid.
+    Heuristics:
+      1. The molecule must contain rings. We get all rings (atom indices) in the molecule.
+      2. We build a connectivity graph among rings, connecting two rings if they share two or more atoms.
+      3. We select the largest connected ring set (the fused system) and require:
+           - At least three rings in the set.
+           - Every ring in the set is either 5– or 6–membered.
+           - Every atom in the fused system is a carbon (atomic number 6).
+      4. We search for a [C@@H](O) substructure which serves as a proxy for an alpha–hydroxyl group,
+         and at least one match must reside on an atom that is part of the fused nucleus.
     
     Args:
         smiles (str): SMILES string of the molecule.
-    
+        
     Returns:
-        bool: True if molecule is classified as a 3alpha-hydroxy steroid, else False.
-        str: Reason for the classification decision.
+        bool: True if the molecule qualifies as a 3α-hydroxy steroid, else False.
+        str: Explanation for the decision.
     """
-    # Parse the SMILES and assign stereochemistry
+    # Parse SMILES and assign stereochemistry.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
+
     Chem.AssignStereochemistry(mol, cleanIt=True, force=True)
-    
-    # Get ring information from the molecule.
+
+    # Get ring information.
     ring_info = mol.GetRingInfo()
     atom_rings = ring_info.AtomRings()
     if not atom_rings:
         return False, "No rings found, not a steroid"
     
-    # Build a graph of rings: each ring is a node; add an edge between rings sharing >= 2 atoms.
+    # Build a graph of rings: nodes = ring indices; connect two rings if they share >=2 atoms.
     n_rings = len(atom_rings)
-    # Create an adjacency list for ring indices
     adj = {i: set() for i in range(n_rings)}
     for i in range(n_rings):
         for j in range(i+1, n_rings):
@@ -54,58 +56,51 @@ def is_3alpha_hydroxy_steroid(smiles: str):
                 adj[i].add(j)
                 adj[j].add(i)
     
-    # Find connected components (fused ring sets) using DFS.
+    # Identify connected components in the ring graph using DFS.
     seen = set()
     fused_components = []
     for i in range(n_rings):
         if i in seen:
             continue
         stack = [i]
-        component = set()
+        comp = set()
         while stack:
             node = stack.pop()
-            if node in component:
+            if node in comp:
                 continue
-            component.add(node)
+            comp.add(node)
             for neighbor in adj[node]:
-                if neighbor not in component:
+                if neighbor not in comp:
                     stack.append(neighbor)
-        seen.update(component)
-        fused_components.append(component)
+        seen.update(comp)
+        fused_components.append(comp)
     
-    # Choose the largest fused set (by number of rings)
+    if not fused_components:
+        return False, "No fused ring systems found, not a steroid nucleus"
+    
+    # Choose the largest fused ring system (by number of rings).
     largest_component = max(fused_components, key=lambda comp: len(comp))
-    # Build a set of all atom indices in this fused ring system
+    if len(largest_component) < 3:
+        return False, "Fused ring system too small to be a steroid nucleus"
+    
+    # Check that every ring in the largest fused set is 5– or 6–membered.
+    for i in largest_component:
+        ring_size = len(atom_rings[i])
+        if ring_size not in (5,6):
+            return False, "Fused ring system contains rings not typical for a steroid nucleus (only 5- or 6-membered allowed)"
+    
+    # Build the set of all atoms that are in the fused ring system.
     fused_atoms = set()
     for idx in largest_component:
         fused_atoms.update(atom_rings[idx])
     
-    # Check that the fused system has at least 3 rings.
-    if len(largest_component) < 3:
-        return False, "Fused ring system too small to be a steroid nucleus"
-    
-    # For steroid nucleus, we expect mostly rings that are 5- or 6-membered.
-    num_5membered = sum(1 for i in largest_component if len(atom_rings[i]) == 5)
-    num_6membered = sum(1 for i in largest_component if len(atom_rings[i]) == 6)
-    if num_5membered < 1:
-        return False, "Fused ring system missing a five-membered ring typical of a steroid nucleus"
-    # Optionally: require that all rings in the component have 5 or 6 atoms
-    for i in largest_component:
-        if len(atom_rings[i]) not in (5, 6):
-            return False, "Fused ring system contains rings not typical for a steroid nucleus (only 5- or 6-membered allowed)"
-    
-    # Check that the fused nucleus is mostly carbon (at least 90% of atoms should be carbon).
-    nucleus_atom_count = len(fused_atoms)
-    carbon_count = 0
+    # Ensure that *every* atom in the fused nucleus is carbon.
     for atom_idx in fused_atoms:
         atom = mol.GetAtomWithIdx(atom_idx)
-        if atom.GetAtomicNum() == 6:
-            carbon_count += 1
-    if nucleus_atom_count == 0 or (carbon_count / nucleus_atom_count) < 0.9:
-        return False, "Fused ring nucleus is not predominantly carbon as expected for a steroid"
+        if atom.GetAtomicNum() != 6:
+            return False, "Fused ring nucleus contains heteroatoms; expected all–carbon steroid nucleus"
     
-    # Now, look for an alpha hydroxyl group.
-    # We use the SMARTS "[C@@H](O)" as a proxy for an alpha-OH.
+    # Now look for an alpha hydroxyl group using the SMARTS pattern.
     alpha_oh_smarts = "[C@@H](O)"
     alpha_oh_pattern = Chem.MolFromSmarts(alpha_oh_smarts)
     if alpha_oh_pattern is None:
@@ -115,21 +110,17 @@ def is_3alpha_hydroxy_steroid(smiles: str):
     if not matches:
         return False, "No [C@@H](O) substructure found (alpha hydroxyl group not detected)"
     
-    # Check that at least one [C@@H](O) match occurs on an atom that is inside the fused nucleus.
-    alpha_on_nucleus = False
+    # Confirm that at least one [C@@H](O) match has its carbon on the fused nucleus.
     for match in matches:
         # match[0] is the carbon bearing the OH.
         if match[0] in fused_atoms:
-            alpha_on_nucleus = True
-            break
-    if not alpha_on_nucleus:
-        return False, "Alpha hydroxyl group does not reside on the fused steroid nucleus"
+            return True, "Molecule has a fused (5,6)-ring nucleus composed entirely of carbons and a 3α-hydroxy substituent attached to it"
     
-    return True, "Molecule has a fused (5,6)-ring nucleus with predominantly carbon atoms and a 3α-hydroxy substituent"
+    return False, "Alpha hydroxyl group does not reside on the fused steroid nucleus"
 
 # Testing block:
 if __name__ == "__main__":
-    # Example: 5b-Cholestane-3a,7a,12a,23-tetrol (true positive)
+    # Test with a known example: 5β-Cholestane-3α,7α,12α,23-tetrol
     test_smiles = "C1C[C@H](C[C@]2(C[C@H]([C@@]3([C@](C[C@@H]([C@]4([C@]3(CC[C@@]4([C@@](CC(CC(C)C)O)(C)[H])[H])[H])C)O)([C@@]12C)[H])[H])O)[H])O"
     result, reason = is_3alpha_hydroxy_steroid(test_smiles)
     print("Result:", result)
