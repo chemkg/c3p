@@ -1,7 +1,6 @@
 """
 Classifies: CHEBI:83139 long-chain fatty acyl-CoA(4-)
 """
-#!/usr/bin/env python
 """
 Classifies: Long-chain fatty acyl-CoA(4-)
 Definition:
@@ -9,11 +8,11 @@ Definition:
   of any long-chain fatty acyl-CoA; major species at pH 7.3.
 
 This classifier checks for:
-  - A CoA moiety (using an adenine/inosine-like SMARTS pattern)
-  - A thioester bond connecting the acyl chain with CoA. (SMARTS: [CX3](=O)[SX1])
-  - A “long-chain” fatty acyl portion; after breaking the thioester bond we count carbons,
-    requiring at least 12.
-  - At least 4 deprotonated (negatively charged) oxygens in the overall molecule.
+  - A CoA moiety (via an adenine-like substructure, SMARTS: n1cnc2c(N)ncnc12).
+  - A thioester bond connecting the fatty acyl chain to the CoA. 
+    Note: In our molecules the bond may appear as either [CX3](=O)[SX1] or its reverse [SX1]C(=O).
+  - After "cleaving" the thioester bond, the fatty acyl chain must have at least 12 carbon atoms.
+  - The overall molecule must contain at least 4 deprotonated oxygens (O atoms with a -1 formal charge).
 """
 
 from rdkit import Chem
@@ -23,77 +22,89 @@ def is_long_chain_fatty_acyl_CoA_4__(smiles: str):
     """
     Determines if a given molecule (SMILES string) is a long-chain fatty acyl-CoA(4-).
 
-    The criteria are:
-      1. The molecule must be parsable.
-      2. It must contain a CoA moiety; here we look for an adenine-like substructure.
-      3. It must contain a thioester bond connecting a fatty acyl chain and CoA,
-         using the pattern [CX3](=O)[SX1]. Note that this pattern returns three atoms:
-         the carbonyl carbon, the carbonyl oxygen, and the sulfur.
-      4. The fatty acyl portion (obtained by cleaving the thioester bond) must have at least 12 carbons.
-      5. The molecule must contain at least 4 negatively charged oxygens (deprotonated phosphate groups).
-
+    Criteria:
+      1. SMILES must be valid.
+      2. Contains a CoA moiety identified by an adenine-like fragment (SMARTS: n1cnc2c(N)ncnc12).
+      3. Contains a thioester bond connecting the acyl chain and CoA. 
+         We search for either "[CX3](=O)[SX1]" or its reverse "[SX1]C(=O)".
+      4. On breaking the thioester bond, the fatty acyl fragment must have at least 12 carbons.
+      5. The molecule must have at least 4 deprotonated (formally -1 charged) oxygen atoms.
+      
     Args:
         smiles (str): SMILES string of the molecule.
-
+        
     Returns:
-        bool: True if it fits as long-chain fatty acyl-CoA(4-), False otherwise.
-        str: A reason for the classification.
+        bool: True if the molecule fits the long-chain fatty acyl-CoA(4-) criteria, False otherwise.
+        str: Reason for the classification decision.
     """
-    # Parse the molecule from SMILES
+    # Parse the SMILES
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-
+    
     # 1. Check for a CoA moiety via an adenine-like fragment.
     coa_pattern = Chem.MolFromSmarts("n1cnc2c(N)ncnc12")
     if not mol.GetSubstructMatches(coa_pattern):
         return False, "CoA moiety (adenine substructure) not found"
-
-    # 2. Check for a thioester bond – use [CX3](=O)[SX1].
-    thioester_pattern = Chem.MolFromSmarts("[CX3](=O)[SX1]")
-    thioester_matches = mol.GetSubstructMatches(thioester_pattern)
-    if not thioester_matches:
-        return False, "No thioester bond ([CX3](=O)[SX1]) found"
-
-    # The match returns three atoms: 
-    # index 0: thioester carbon (attached to acyl chain),
-    # index 1: the carbonyl oxygen,
-    # index 2: the sulfur atom.
-    first_match = thioester_matches[0]
-    acyl_carbon_idx = first_match[0]
-    sulfur_idx = first_match[2]
-
-    # 3. Identify the fatty acyl (long-chain) fragment by breaking the thioester bond.
+    
+    # 2. Check for thioester bond. 
+    # First try pattern where the carbonyl precedes sulfur:
+    thioester_pattern1 = Chem.MolFromSmarts("[CX3](=O)[SX1]")
+    matches = mol.GetSubstructMatches(thioester_pattern1)
+    pattern_used = None
+    if matches:
+        # Pattern returns a 3-tuple: (carbonyl C, carbonyl O, sulfur)
+        pattern_used = "pattern1"
+        first_match = matches[0]
+        # For pattern1, the acyl chain is attached to the carbonyl carbon.
+        acyl_carbon_idx = first_match[0]
+        sulfur_idx = first_match[2]
+    else:
+        # Try reverse pattern: sulfur comes first then carbonyl.
+        thioester_pattern2 = Chem.MolFromSmarts("[SX1]C(=O)")
+        matches = mol.GetSubstructMatches(thioester_pattern2)
+        if matches:
+            pattern_used = "pattern2"
+            first_match = matches[0]
+            # For pattern2, match returns a 2-tuple: (sulfur, carbonyl carbon).
+            acyl_carbon_idx = first_match[1]
+            sulfur_idx = first_match[0]
+        else:
+            return False, "No thioester bond (neither [CX3](=O)[SX1] nor [SX1]C(=O)) found"
+    
+    # 3. Identify the thioester bond by finding the bond between the acyl carbon and the sulfur atom.
     bond = mol.GetBondBetweenAtoms(acyl_carbon_idx, sulfur_idx)
     if bond is None:
         return False, "Thioester bond not correctly identified"
-    
     bond_idx = bond.GetIdx()
-    # Fragment the molecule by cutting the thioester bond.
+    
+    # 4. Fragment the molecule by "cutting" the thioester bond.
     frags_mol = Chem.FragmentOnBonds(mol, [bond_idx])
     frags = Chem.GetMolFrags(frags_mol, asMols=True, sanitizeFrags=True)
+    if len(frags) < 2:
+        return False, "Could not split molecule into fragments"
     
-    # Decide which fragment is the fatty acyl chain.
-    # We choose the fragment that either has a "C(=O)" moiety or is the largest fragment.
-    acyl_fragment = None
+    # 5. Decide which fragment is the fatty acyl (long-chain) portion.
+    # We assume that the CoA moiety is the one that contains the adenine-like substructure.
+    fatty_fragment = None
     for frag in frags:
-        frag_smiles = Chem.MolToSmiles(frag)
-        if "C(=O)" in frag_smiles or frag_smiles.startswith("C(=O)"):
-            acyl_fragment = frag
+        if not frag.GetSubstructMatches(coa_pattern):
+            fatty_fragment = frag
             break
-    if acyl_fragment is None:
-        acyl_fragment = max(frags, key=lambda x: x.GetNumAtoms())
-
-    # Count carbon atoms in the acyl fragment.
-    carbon_count = sum(1 for atom in acyl_fragment.GetAtoms() if atom.GetAtomicNum() == 6)
+    if fatty_fragment is None:
+        # if we cannot discriminate (e.g. both fragments contain adenine or none do), choose the larger fragment
+        fatty_fragment = max(frags, key=lambda x: x.GetNumAtoms())
+    
+    # Count carbons (atomic number 6) in the fatty acyl fragment.
+    carbon_count = sum(1 for atom in fatty_fragment.GetAtoms() if atom.GetAtomicNum() == 6)
     if carbon_count < 12:
         return False, f"Fatty acyl chain too short ({carbon_count} carbons found; need at least 12)"
-
-    # 4. Check for the expected deprotonation of phosphate/diphosphate groups.
+    
+    # 6. Check for the deprotonated phosphate groups: at least 4 oxygen atoms with a -1 formal charge overall.
     neg_o_count = sum(1 for atom in mol.GetAtoms() if atom.GetAtomicNum() == 8 and atom.GetFormalCharge() == -1)
     if neg_o_count < 4:
         return False, f"Not enough deprotonated oxygens (found {neg_o_count}; need at least 4 for CoA(4-))"
-
+    
     return True, "Matches long-chain fatty acyl-CoA(4-) criteria"
 
 # Example usage:
