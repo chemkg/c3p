@@ -2,20 +2,20 @@
 Classifies: CHEBI:26493 quinic acid
 """
 """
-Classifies: Quinic acid – a cyclitol carboxylic acid.
-A quinic acid derivative has a cyclohexane ring (non‐aromatic, all C) that displays
-an exocyclic carboxyl (–C(=O)O–) and several oxygen substituents (which in the parent are free –OH).
-Note that many quinates exist where the –OH groups are esterified.
-This is just one heuristic classifier.
+Classifies: Quinic acid – a cyclitol carboxylic acid derivative.
+A quinic acid derivative has a saturated cyclohexane ring (all carbons,
+with only single bonds) that displays exactly one exocyclic carboxyl (–C(=O)O–)
+and several oxygen substituents (typically four, whether free hydroxyls or esterified).
+This is a heuristic classifier.
 """
 from rdkit import Chem
 
 def is_quinic_acid(smiles: str):
     """
-    Determines if a molecule is a quinic acid (cyclitol carboxylic acid) derivative based on its SMILES string.
-    The algorithm looks for a six‐membered non‐aromatic (cyclohexane) ring made solely of carbon atoms,
-    in which at least one ring carbon is substituted with a carboxyl group –C(=O)O– and the ring exhibits
-    several oxygen substituents (as free hydroxyls or ester groups).
+    Determines if a molecule is a quinic acid (cyclitol carboxylic acid derivative)
+    based on its SMILES string. The algorithm looks for a saturated six-membered carbon
+    ring (cyclohexane) that has exactly one exocyclic carboxyl group (-C(=O)O-) and at least
+    four oxygen substituents attached via single bonds.
 
     Args:
         smiles (str): SMILES string of the molecule
@@ -29,16 +29,17 @@ def is_quinic_acid(smiles: str):
     if mol is None:
         return False, "Invalid SMILES string"
 
-    # Helper function: Check if an atom (assumed to be carbon) is a carboxyl (acid/ester) carbon.
     def is_carboxyl_group(carbon):
-        # Carboxyl (or its ester derivative) has a carbon bound to two oxygens:
-        # one by a double bond and one by a single bond.
+        """
+        Checks if the given carbon atom is part of a carboxyl (or ester carboxyl) group.
+        A proper carboxyl carbon should be sp2 (often it will make one double bond to oxygen
+        and one single bond to oxygen) regardless of additional substituents.
+        """
         if carbon.GetAtomicNum() != 6:
             return False
-        # We require exactly two oxygen neighbors (aside from the connection to the ring)
         oxy_double = 0
         oxy_single = 0
-        # Loop over all neighbors of the carbon candidate.
+        # Loop over neighbors to check bonded oxygen count and bond types.
         for nbr in carbon.GetNeighbors():
             if nbr.GetAtomicNum() == 8:
                 bond = mol.GetBondBetweenAtoms(carbon.GetIdx(), nbr.GetIdx())
@@ -48,8 +49,7 @@ def is_quinic_acid(smiles: str):
                     oxy_double += 1
                 elif bond.GetBondType() == Chem.BondType.SINGLE:
                     oxy_single += 1
-        # A proper carboxyl (or ester carboxyl) carbon should have at least one double-bonded oxygen
-        # and one single-bonded oxygen.
+        # Heuristic: require at least one double- and one single-bonded oxygen.
         if oxy_double >= 1 and oxy_single >= 1:
             return True
         return False
@@ -57,40 +57,55 @@ def is_quinic_acid(smiles: str):
     ring_info = mol.GetRingInfo()
     atom_rings = ring_info.AtomRings()
 
-    # Examine each ring for the desired substructure: cyclohexane
+    # Examine each ring for the desired cyclohexane substructure.
     for ring in atom_rings:
         if len(ring) != 6:
-            continue  # Only consider 6-membered rings
-        # Check that all atoms in this ring are carbons (i.e. cyclohexane)
+            continue  # Only consider six-membered rings.
+        # Ensure all atoms in the ring are carbons.
         if not all(mol.GetAtomWithIdx(idx).GetAtomicNum() == 6 for idx in ring):
             continue
+        # Ensure the ring bonds are all single (i.e. fully saturated, non-aromatic)
+        ring_is_saturated = True
+        n_ring = len(ring)
+        for i in range(n_ring):
+            a_idx = ring[i]
+            b_idx = ring[(i+1) % n_ring]  # Next atom, wrap around.
+            bond = mol.GetBondBetweenAtoms(a_idx, b_idx)
+            if bond is None:
+                ring_is_saturated = False
+                break
+            # Also check that the bond is not aromatic
+            if bond.GetIsAromatic() or bond.GetBondType() != Chem.BondType.SINGLE:
+                ring_is_saturated = False
+                break
+        if not ring_is_saturated:
+            continue
 
-        carboxyl_found = False
-        oxygen_substituent_count = 0
-        # For each atom in the ring, look at neighbors not in the ring
+        # Now count exocyclic substituents:
+        carboxyl_count = 0
+        oxy_substituent_count = 0
+        # Look over each atom of the ring and its external neighbors.
         for idx in ring:
             atom = mol.GetAtomWithIdx(idx)
             for nbr in atom.GetNeighbors():
+                # Only consider substituents not in the ring.
                 if nbr.GetIdx() in ring:
-                    continue  # ignore atoms in the ring
+                    continue
                 bond = mol.GetBondBetweenAtoms(atom.GetIdx(), nbr.GetIdx())
-                # If the neighbor is an oxygen and the bond is a single bond,
-                # we count it as a hydroxyl (or an oxygen substituent)
                 if nbr.GetAtomicNum() == 8 and bond.GetBondType() == Chem.BondType.SINGLE:
-                    oxygen_substituent_count += 1
-                # If the neighbor is a carbon, check if it is a carboxyl group.
+                    # Count as an oxygen substituent (e.g. as in an –OH or part of an ester linkage)
+                    oxy_substituent_count += 1
                 elif nbr.GetAtomicNum() == 6:
-                    # Check if this carbon acts as a carboxyl group
+                    # Check if the neighbor carbon qualifies as a carboxyl group.
                     if is_carboxyl_group(nbr):
-                        carboxyl_found = True
-        # Heuristic: in quinic acid the cyclitol ring has one carboxyl group and typically 3 or more oxygen substituents.
-        if carboxyl_found and oxygen_substituent_count >= 3:
-            return True, ("Contains a cyclohexane ring with a carboxyl substituent and "
-                          f"{oxygen_substituent_count} oxygen substituents, consistent with a cyclitol carboxylic acid.")
+                        carboxyl_count += 1
+        # Heuristic: for quinic acid, require exactly one carboxyl and at least four oxygen substituents.
+        if carboxyl_count == 1 and oxy_substituent_count >= 4:
+            return True, (f"Contains a saturated cyclohexane ring with {carboxyl_count} carboxyl group "
+                          f"and {oxy_substituent_count} oxygen substituents, consistent with a cyclitol carboxylic acid derivative.")
+    return False, "No qualifying saturated cyclohexane ring with one carboxyl group and at least four oxygen substituents found"
 
-    return False, "No qualifying cyclohexane ring with the required carboxyl and oxygen substituents found"
-
-# Testing (optional): Uncomment below lines to test on one example
+# (Optional testing code)
 # smiles_examples = [
 #     "O[C@H]1C[C@@](O)(C[C@H](O)[C@H]1O)C(O)=O",  # (+)-quinic acid
 #     "COc1cc(ccc1O)\\C=C\\C(=O)O[C@H]1[C@H](O)C[C@@](O)(C[C@H]1O)C(O)=O",  # 4-O-feruloyl-D-quinic acid
