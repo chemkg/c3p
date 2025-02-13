@@ -5,6 +5,13 @@ Classifies: CHEBI:61912 branched-chain fatty acyl-CoA
 Classifies: branched-chain fatty acyl-CoA
 Definition: A fatty acyl-CoA that results from the formal condensation of the thiol group 
 of coenzyme A with the carboxy group of any branched-chain fatty acid.
+The improved algorithm:
+  1. Checks for presence of a CoA moiety (via an adenine-derived substructure).
+  2. Checks for a thioester bond linking the fatty acyl chain to CoA.
+  3. Starting from the carbonyl’s fatty acyl neighbor (i.e. not the S partner),
+     it traverses only carbon atoms (excluding the carbonyl) to collect the acyl chain.
+  4. Requires that the chain is long enough and that at least one carbon shows branching 
+     (i.e. it has more than two carbon neighbors within the chain).
 """
 
 from rdkit import Chem
@@ -13,12 +20,16 @@ from rdkit.Chem import rdMolDescriptors
 def is_branched_chain_fatty_acyl_CoA(smiles: str):
     """
     Determines if a molecule is a branched-chain fatty acyl-CoA based on its SMILES string.
-    The method uses the following heuristics:
-      1. It must contain a CoA portion (detected by an adenine substructure).
-      2. It must contain a thioester group (C(=O)S) linking the acyl moiety to CoA.
-      3. The fatty acyl chain (the part attached to the carbonyl carbon not going to the S)
-         is traversed (limiting to carbon atoms) and checked for branching (any carbon
-         with more than two connections within the chain indicates branching).
+    
+    The improved algorithm:
+      1. Parses the SMILES.
+      2. Requires an adenine substructure from CoA.
+      3. Requires a thioester bond [CX3](=O)[SX2] linking the fatty acyl chain.
+      4. From each thioester, identifies the fatty acyl branch (obtained from the carbonyl atom's neighbor
+         that is not the sulfur) and performs a DFS (restricted to carbon atoms and not going back to the carbonyl)
+         to capture the fatty acyl chain.
+      5. Checks that the chain is long (at least 3 atoms) and that at least one carbon in the chain has more than 
+         2 neighbors (within the chain) indicating branching.
     
     Args:
         smiles (str): SMILES string of the molecule.
@@ -28,92 +39,94 @@ def is_branched_chain_fatty_acyl_CoA(smiles: str):
         str: Reason for the classification.
     """
     
-    # Step 1. Parse the SMILES
+    # Step 1. Parse SMILES
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
     # Step 2. Check for the presence of a CoA moiety.
-    # Here we look for an adenine substructure commonly found in CoA.
+    # Searching for the adenine substructure found in Coenzyme A.
     coa_pattern = Chem.MolFromSmarts("n1cnc2c(N)ncnc12")
     if not mol.HasSubstructMatch(coa_pattern):
         return False, "Coenzyme A moiety not found"
     
-    # Step 3. Check for the thioester group linking fatty acyl and CoA.
-    # This SMARTS matches a carbonyl carbon attached to a sulfur: C(=O)S.
+    # Step 3. Check for the thioester linkage (carbonyl carbon linked to sulfur).
     thioester_pattern = Chem.MolFromSmarts("[CX3](=O)[SX2]")
     thioester_matches = mol.GetSubstructMatches(thioester_pattern)
     if not thioester_matches:
         return False, "Thioester bond not found"
-    
-    # We loop through each thioester match to see if any gives a branched-chain acyl part.
+
+    # Process each thioester match until one yields a branched fatty acyl chain.
     for match in thioester_matches:
-        # In the pattern match, match[0] is the carbonyl C and match[1] is the S.
+        # match: first atom is the carbonyl C, second is the S connected to CoA.
         carbonyl_idx = match[0]
         sulfur_idx = match[1]
         carbonyl_atom = mol.GetAtomWithIdx(carbonyl_idx)
         
-        # Identify the neighbor of the carbonyl carbon that is not the thioester S 
-        # nor the oxygen from the carbonyl (which is implicit/double-bonded).
+        # Step 4. Identify the fatty acyl neighbor: a neighbor of the carbonyl that is not the sulfur
         fatty_acyl_neighbor = None
         for nbr in carbonyl_atom.GetNeighbors():
             if nbr.GetIdx() == sulfur_idx:
-                continue  # skip the sulfur leading to the CoA portion
-            # Skip oxygen (likely the double-bonded oxygen in the carbonyl)
+                continue  # Skip the S that goes to CoA.
+            # Skip the double-bonded oxygen of the carbonyl.
             if nbr.GetAtomicNum() == 8:
                 continue
-            # Assume that this neighbor (usually carbon) is the beginning of the fatty acyl chain.
+            # We assume the fatty acyl chain begins at this neighbor.
             fatty_acyl_neighbor = nbr
             break
+        
         if fatty_acyl_neighbor is None:
-            continue  # try the next thioester match
+            continue  # Try next thioester match if fatty acyl side is not found.
         
-        # Step 4. Traverse the acyl chain (starting from the carbonyl carbon) restricting to carbon atoms.
-        # We exclude atoms from the CoA portion (the sulfur branch) and any heteroatoms.
-        acyl_atoms = set()
-        stack = [carbonyl_atom]
+        # Step 5. Build the fatty acyl chain by traversing only carbon atoms.
+        # We start from the fatty acyl neighbor and do not step back to the carbonyl.
+        acyl_chain = set()
+        stack = [fatty_acyl_neighbor.GetIdx()]
         while stack:
-            a = stack.pop()
-            # Only follow carbon atoms (atomic num 6) to build the fatty acyl chain.
-            if a.GetIdx() in acyl_atoms:
+            current_idx = stack.pop()
+            if current_idx in acyl_chain:
                 continue
-            if a.GetAtomicNum() != 6:
+            atom = mol.GetAtomWithIdx(current_idx)
+            # Only consider carbon atoms (atomic number 6).
+            if atom.GetAtomicNum() != 6:
                 continue
-            acyl_atoms.add(a.GetIdx())
-            for nbr in a.GetNeighbors():
-                # Avoid leaving the acyl chain by not following bonds to non-carbons.
-                if nbr.GetAtomicNum() == 6 and nbr.GetIdx() not in acyl_atoms:
-                    # Also (if desired) one might check bond type for further restrictions.
-                    stack.append(nbr)
+            acyl_chain.add(current_idx)
+            for nbr in atom.GetNeighbors():
+                # Do not go back to the carbonyl atom.
+                if nbr.GetIdx() == carbonyl_idx:
+                    continue
+                # Continue only if neighbor is carbon.
+                if nbr.GetAtomicNum() == 6 and nbr.GetIdx() not in acyl_chain:
+                    stack.append(nbr.GetIdx())
         
-        # Require a minimum chain length (for a fatty acyl chain)
-        if len(acyl_atoms) < 3:
-            continue  # try next match
+        # Require a minimum chain length (e.g., at least 3 carbons) to qualify as a fatty acyl chain.
+        if len(acyl_chain) < 3:
+            continue  # Try next match
         
-        # Step 5. Determine if the acyl chain is branched.
-        # In a linear alkane chain, internal carbons (not at the ends) have exactly 2 carbon neighbors,
-        # while terminal carbons have 1. If any carbon in the acyl chain has >2 neighbors (within the chain),
-        # then this chain is branched.
+        # Step 6. Check for branching within the acyl chain.
+        # In a linear chain, internal carbons have exactly 2 carbon neighbors (within the chain) and terminal have 1.
         branch_found = False
-        for idx in acyl_atoms:
+        for idx in acyl_chain:
             atom = mol.GetAtomWithIdx(idx)
-            # Count neighbors that are part of the acyl chain.
-            n_acyl_neighbors = sum(1 for nbr in atom.GetNeighbors() if nbr.GetIdx() in acyl_atoms)
-            if n_acyl_neighbors > 2:
+            # Count only neighbors that are in the acyl_chain.
+            n_chain_neighbors = sum(1 for nbr in atom.GetNeighbors() if nbr.GetIdx() in acyl_chain)
+            if n_chain_neighbors > 2:
                 branch_found = True
                 break
         
-        if not branch_found:
-            # Even if a thioester is present, if no branching is found then this is a linear fatty acyl.
-            return False, "Acyl chain appears linear; no branch detected"
-        else:
+        if branch_found:
             return True, "Branched-chain fatty acyl-CoA detected"
+        else:
+            # If no branch is found in this acyl chain, it is most likely linear.
+            return False, "Acyl chain appears linear; no branch detected"
     
+    # If none of the thioester groups yield a valid fatty acyl chain.
     return False, "No fatty acyl chain meeting criteria found"
-    
+
+
 # Example usage:
 if __name__ == "__main__":
-    # You can test with one of the sample SMILES strings.
+    # Test with one of the provided SMILES strings.
     sample_smiles = "CC(C)CCCCCCCCCCCCCC(=O)SCCNC(=O)CCNC(=O)[C@H](O)C(C)(C)COP(O)(=O)OP(O)(=O)OC[C@H]1O[C@H]([C@H](O)[C@@H]1OP(O)(O)=O)n1cnc2c(N)ncnc12"
     result, reason = is_branched_chain_fatty_acyl_CoA(sample_smiles)
     print(result, reason)
