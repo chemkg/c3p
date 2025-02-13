@@ -12,35 +12,65 @@ from rdkit import Chem
 def is_1_2_4_triazines(smiles: str):
     """
     Determines if a molecule contains a 1,2,4-triazine skeleton.
-    A valid 1,2,4-triazine is a six-membered aromatic ring with exactly three nitrogen atoms 
-    (at positions 1, 2, and 4) and three carbon atoms. One key feature is that two of the nitrogens 
-    are adjacent (positions 1 and 2).
+    A valid 1,2,4-triazine is defined here as a six-membered aromatic ring that contains
+    exactly three nitrogen atoms and three carbon atoms. In addition, there must exist a rotation 
+    (or its reverse) of the ring order where the pattern is: [N, N, C, N, C, C],
+    corresponding to nitrogen atoms at positions 1, 2, and 4 (with positions 1 and 2 adjacent).
 
     Args:
         smiles (str): SMILES string of the molecule
 
     Returns:
-        bool: True if the molecule contains a 1,2,4-triazine skeleton, False otherwise
-        str: A reason for the classification
+        bool: True if the molecule contains a 1,2,4-triazine skeleton, False otherwise.
+        str: Reason for classification.
     """
-
-    # Parse the SMILES string
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
+    
+    # Get ring information
+    ring_info = mol.GetRingInfo().AtomRings()
+    if not ring_info:
+        return False, "No rings detected in molecule"
 
-    # Define a SMARTS pattern for a 1,2,4-triazine:
-    # The pattern represents a six-membered aromatic ring with atoms in cyclic order:
-    # N (position 1), N (position 2), C (position 3), N (position 4), C (position 5), C (position 6)
-    # Using lower-case letters to denote aromatic atoms.
-    # This pattern requires an adjacent pair of N's (positions 1 and 2),
-    # which is a distinguishing feature of the 1,2,4-triazine over 1,3,5-triazine.
-    triazine_pattern = Chem.MolFromSmarts("n1ncncc1")
-    if triazine_pattern is None:
-        return False, "Failed to compile SMARTS pattern"
+    # Define the target pattern for a 1,2,4-triazine ring.
+    # When laid out linearly (with cyclic rotation) we want: N, N, C, N, C, C.
+    target_forward = ["N", "N", "C", "N", "C", "C"]
+    target_reverse = list(reversed(target_forward))
+    
+    # Iterate over all rings
+    for ring in ring_info:
+        if len(ring) != 6:
+            continue  # we need a 6-membered ring
 
-    # Check if the molecule contains the 1,2,4-triazine substructure
-    if mol.HasSubstructMatch(triazine_pattern):
-        return True, "Contains a 1,2,4-triazine skeleton"
-    else:
-        return False, "No 1,2,4-triazine skeleton found"
+        # Get the atoms in the ring in the given order (as provided by RDKit)
+        ring_atoms = [mol.GetAtomWithIdx(idx) for idx in ring]
+        
+        # Check that all atoms in the ring are aromatic.
+        if not all(atom.GetIsAromatic() for atom in ring_atoms):
+            continue
+
+        # Check that the ring has only C and N atoms.
+        symbols = [atom.GetSymbol() for atom in ring_atoms]
+        if any(sym not in ["C", "N"] for sym in symbols):
+            continue
+
+        # Count the number of nitrogen atoms in the ring.
+        if symbols.count("N") != 3 or symbols.count("C") != 3:
+            continue
+
+        # Try all rotations (and the reverse order) to see if the pattern matches.
+        n = len(symbols)
+        matched = False
+        for i in range(n):
+            # rotation of the symbols list:
+            rotation = symbols[i:] + symbols[:i]
+            if rotation == target_forward or rotation == target_reverse:
+                matched = True
+                break
+
+        if matched:
+            return True, "Contains a 1,2,4-triazine skeleton"
+    
+    # If no ring passed the tests that qualify the 1,2,4-triazine skeleton:
+    return False, "No 1,2,4-triazine skeleton found"
