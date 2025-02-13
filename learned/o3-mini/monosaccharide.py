@@ -5,12 +5,12 @@ Classifies: CHEBI:35381 monosaccharide
 Classifies: Monosaccharide
 A monosaccharide here is defined as a single (non–glycosidically connected) polyhydroxy aldehyde or ketone 
 (with potential to exist as a cyclic hemiacetal), with three or more carbons.
-This implementation uses a two–pronged heuristic:
-  1. A cyclic sugar test: looks for a furanose (5–membered) or pyranose (6–membered) ring that contains exactly one ring oxygen 
-     and a sufficiently high number of hydroxyl (–OH) substituents on the ring carbons.
-  2. An open–chain sugar test: if no candidate ring is found then the molecule must be small (3–8 carbons and MW < 250),
-     have an explicit carbonyl group and a high density of –OH groups. In addition, if an aldehyde is present we require one more –OH than
-     if a ketone is presumed, and we check that most of the oxygens are indeed in hydroxyls.
+This implementation uses two prongs:
+  1. A cyclic sugar test: looks for a 5–membered (furanose) or 6–membered (pyranose) ring that contains exactly one
+     ring oxygen and a sufficient number of hydroxyl substituents, plus an overall elemental composition “sugar–like”
+     (roughly one oxygen per carbon).
+  2. An open–chain sugar test: if no ring is found, the molecule must be small (3–8 carbons, MW <300 Da),
+     must show at least one carbonyl group and a high “–OH density” (with slightly relaxed requirements if a carboxyl is present).
 If one of these tests passes the molecule is classified as a monosaccharide.
 """
 
@@ -20,135 +20,143 @@ from rdkit.Chem import rdMolDescriptors
 def is_monosaccharide(smiles: str):
     """
     Determines if a molecule is a monosaccharide based on its SMILES string.
-    Applies a cyclic sugar test (looking for a furanose/pyranose ring having one ring oxygen and enough –OH substitutions)
-    and (if that fails) an open–chain sugar test (small molecule with an explicit carbonyl and many hydroxyls).
+    Applies both a cyclic sugar test and (if that fails) an open–chain sugar test.
     
     Args:
         smiles (str): SMILES string of the molecule
     
     Returns:
         bool: True if classified as a monosaccharide, else False.
-        str: Explanation of the decision.
+        str: Explanation for the decision.
     """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Ensure molecule is a single connected unit.
+    # First, check if the molecule is a single, connected unit.
     fragments = Chem.GetMolFrags(mol, asMols=True)
     if len(fragments) > 1:
-        return False, "Multiple fragments detected – likely a glycosidic conjugate"
-    
-    # --- 1. Cyclic sugar test ---
-    # Look for candidate rings that are 5– or 6–membered (furanose or pyranose)
-    candidate_rings = []
+        return False, "Molecule contains multiple fragments – likely a glycosidic conjugate."
+
+    # Global composition: count carbons and oxygens.
+    carbons = [atom for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6]
+    oxygens = [atom for atom in mol.GetAtoms() if atom.GetAtomicNum() == 8]
+    if len(carbons) == 0:
+        return False, "No carbon atoms found."
+    co_ratio = len(oxygens) / len(carbons)
+    # For a typical free monosaccharide the ratio is ~1.0 (eg glucose: C6O6). 
+    # We require at least 0.9; if too low then extra non‐sugar (or aromatic) carbons are present.
+    if co_ratio < 0.9:
+        return False, f"Overall O/C ratio is too low ({co_ratio:.2f}); not sugar–like."
+
+    # ----- 1. Cyclic sugar (hemiacetal) test -----
     ring_info = mol.GetRingInfo()
+    candidate_rings = []
     for ring in ring_info.AtomRings():
+        # Only examine 5–membered (furanose) or 6–membered (pyranose) rings.
         if len(ring) not in (5, 6):
-            continue  # not the expected size
-        
-        # Count atoms in the ring: we require exactly one oxygen and the rest carbons.
-        oxygen_in_ring = 0
-        ring_carbon_idxs = []
-        for idx in ring:
-            atom = mol.GetAtomWithIdx(idx)
-            if atom.GetAtomicNum() == 8:
-                oxygen_in_ring += 1
-            elif atom.GetAtomicNum() == 6:
-                ring_carbon_idxs.append(idx)
-        if oxygen_in_ring != 1:
             continue
+        oxygen_in_ring = 0
+        ring_carbons = []
+        for idx in ring:
+            a = mol.GetAtomWithIdx(idx)
+            if a.GetAtomicNum() == 8:
+                oxygen_in_ring += 1
+            elif a.GetAtomicNum() == 6:
+                ring_carbons.append(idx)
+        if oxygen_in_ring != 1:
+            continue  # Reject if not exactly one ring oxygen.
         
-        # Now count –OH substitutions on ring carbons.
-        OH_on_ring = 0
-        for idx in ring_carbon_idxs:
+        # Count --OH substituents on ring carbons.
+        OH_count = 0
+        for idx in ring_carbons:
             atom = mol.GetAtomWithIdx(idx)
-            # Look for an oxygen neighbor (outside the ring) that has at least one hydrogen.
+            # Check neighbors not in the ring.
             for nb in atom.GetNeighbors():
-                if nb.GetAtomicNum() == 8 and nb.GetIdx() not in ring:
-                    # Using the molecule with explicit hydrogens to be sure:
-                    if nb.GetTotalNumHs() >= 1:
-                        OH_on_ring += 1
-                        break  # count one –OH per ring carbon
-        # For furanoses (5–membered ring) we expect at least 2 ring carbons hydroxylated;
-        # for pyranoses (6–membered) at least 3.
-        if (len(ring) == 5 and OH_on_ring >= 2) or (len(ring) == 6 and OH_on_ring >= 3):
-            candidate_rings.append(ring)
+                if nb.GetIdx() in ring:
+                    continue
+                # Using explicit hydrogens (temporarily we add them)
+                # A hydroxyl oxygen is an oxygen with at least one hydrogen.
+                if nb.GetAtomicNum() == 8 and nb.GetTotalNumHs() >= 1:
+                    OH_count += 1
+                    break  # Count at most one –OH per ring carbon.
+        # For a furanose we require at least 2; for pyranose at least 3.
+        if (len(ring) == 5 and OH_count >= 2) or (len(ring) == 6 and OH_count >= 3):
+            candidate_rings.append((ring, OH_count))
     
-    if len(candidate_rings) == 1:
-        ring_size = len(candidate_rings[0])
-        OH_on_ring = 0
-        for idx in candidate_rings[0]:
-            atom = mol.GetAtomWithIdx(idx)
-            if atom.GetAtomicNum() == 6:
-                for nb in atom.GetNeighbors():
-                    if nb.GetAtomicNum() == 8 and nb.GetIdx() not in candidate_rings[0] and nb.GetTotalNumHs() >= 1:
-                        OH_on_ring += 1
-                        break
-        ring_type = "furanose-like" if ring_size == 5 else "pyranose-like"
-        reason = (f"Contains a {ring_type} ring (size {ring_size}) with {OH_on_ring} hydroxyl substituents on ring carbons.")
-        # If extra sugar rings are found, we assume a glycosidic (multi–sugar) structure.
+    if len(candidate_rings) > 0:
+        # If more than one candidate ring is found, we assume a glycosidic (multi sugar) structure.
         if len(candidate_rings) > 1:
-            return False, "Multiple candidate sugar rings detected – likely an oligosaccharide/glycoside"
+            return False, "Multiple candidate sugar rings detected – likely an oligosaccharide or glycoside."
+        ring, oh = candidate_rings[0]
+        ring_size = len(ring)
+        ring_type = "furanose-like" if ring_size == 5 else "pyranose-like"
+
+        # Additional check: a free monosaccharide (or a single sugar unit) should have a composition close to typical sugars.
+        # Many simple sugars (and uronic acids or amino sugars) have relatively few extra heavy atoms. 
+        # We check that the total molecular weight is not excessively high.
+        mw = rdMolDescriptors.CalcExactMolWt(mol)
+        # Typical monosaccharides fall roughly in the 80–300 Da range.
+        if not (80 <= mw <= 300):
+            return False, f"Identified a {ring_type} ring with {oh} hydroxyl(s) but the overall MW ({mw:.1f} Da) is out of range for a free monosaccharide."
+        # Also the overall O/C ratio has already been checked.
+        reason = (f"Contains a {ring_type} ring (size {ring_size}) with {oh} hydroxyl substituents on ring carbons "
+                  f"and overall MW {mw:.1f} Da (O/C ratio ~{co_ratio:.2f}).")
         return True, reason
-    
-    # --- 2. Open-chain sugar test (when no appropriate cyclic sugar is found) ---
-    # Count carbons; a monosaccharide should have at least 3.
-    carbon_count = sum(1 for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6)
+
+    # ----- 2. Open–chain sugar test -----
+    # Count carbons: free (open–chain) sugars normally have between 3 and 8 carbons.
+    carbon_count = len(carbons)
     if carbon_count < 3:
-        return False, f"Too few carbons ({carbon_count} found, need at least 3)"
-    
-    # For better –OH detection, add explicit hydrogens.
-    mol_with_H = Chem.AddHs(mol)
-    OH_pattern = Chem.MolFromSmarts("[OX2H]")
-    hydroxyl_matches = mol_with_H.GetSubstructMatches(OH_pattern)
-    hydroxyl_count = len(hydroxyl_matches)
-    oxygen_count = sum(1 for atom in mol.GetAtoms() if atom.GetAtomicNum() == 8)
-    
-    # Look for an explicit carbonyl group.
-    carbonyl_pattern = Chem.MolFromSmarts("[CX3](=O)")
-    has_carbonyl = mol.HasSubstructMatch(carbonyl_pattern)
-    
-    # Use a molecular weight cutoff to help exclude larger conjugates.
-    mw = rdMolDescriptors.CalcExactMolWt(mol)
-    
-    # Open–chain monosaccharides are usually small.
-    if mw > 250:
-        return False, f"Molecular weight too high for an open–chain monosaccharide ({mw:.1f} Da)"
-    
-    # Likewise, free sugars typically have no more than 8 carbons.
+        return False, f"Too few carbons ({carbon_count}); need at least 3 for a monosaccharide."
     if carbon_count > 8:
-        return False, f"Too many carbons for an open–chain monosaccharide ({carbon_count} found)"
+        return False, f"Too many carbons ({carbon_count}); open–chain monosaccharides normally have 3–8 carbons."
     
+    # Add explicit hydrogens to better count hydroxyls.
+    mol_H = Chem.AddHs(mol)
+    # Define a SMARTS for hydroxyl group (-OH).
+    OH_smarts = Chem.MolFromSmarts("[OX2H]")
+    hydroxyl_matches = mol_H.GetSubstructMatches(OH_smarts)
+    hydroxyl_count = len(hydroxyl_matches)
+    
+    # Check for a carbonyl group (either aldehyde [H]C(=O) or ketone [#6]C(=O)).
+    carbonyl_smarts = Chem.MolFromSmarts("[CX3](=O)")
+    has_carbonyl = mol.HasSubstructMatch(carbonyl_smarts)
     if not has_carbonyl:
-        return False, "No explicit carbonyl detected – cannot assign as open–chain monosaccharide"
+        return False, "No explicit carbonyl detected – cannot classify as an open–chain monosaccharide."
     
-    # Heuristic on –OH density: many free sugars have nearly one –OH per carbon.
-    # Also, if an aldehyde is present (smarts: [H]C(=O)) require slightly more –OH than if a ketone is implied.
-    aldehyde_pattern = Chem.MolFromSmarts("[H]C(=O)")
-    is_aldehyde = mol.HasSubstructMatch(aldehyde_pattern)
-    req_OH = carbon_count - 1 if is_aldehyde else carbon_count - 2
-    if hydroxyl_count < req_OH:
-        return False, (f"Not enough hydroxyl groups for an open–chain monosaccharide: "
-                       f"{hydroxyl_count} found but require at least {req_OH} (for {carbon_count} carbons)")
+    # Use a slightly relaxed molecular weight cutoff for open–chain sugars.
+    mw = rdMolDescriptors.CalcExactMolWt(mol)
+    if mw > 300:
+        return False, f"Molecular weight too high for an open–chain monosaccharide ({mw:.1f} Da)."
     
-    # Also check that most oxygens are in –OH groups. (Typical ratios for sugars are high.)
-    if oxygen_count > 0 and (hydroxyl_count / oxygen_count) < 0.7:
-        return False, ("Low proportion of hydroxyl groups relative to total oxygen count; "
-                       "this open–chain molecule is not sugar–like")
+    # Heuristically, many free sugars have almost one hydroxyl per carbon.
+    # In an aldose we expect roughly (carbon_count - 1) hydroxyls.
+    # (If a carboxyl group is present, one –OH is replaced so we require one less.)
+    # We also allow a sugar that is deoxy (losing one –OH) so relax further if necessary.
+    # For our purposes, require at least: carbon_count - 2.
+    required_oh = carbon_count - 2
+    if hydroxyl_count < required_oh:
+        return False, f"Only {hydroxyl_count} hydroxyl groups detected but require at least {required_oh} for an open–chain monosaccharide with {carbon_count} carbons."
     
     reason = (f"Molecule is an open–chain monosaccharide with {carbon_count} carbons, "
-              f"{hydroxyl_count} hydroxyl groups, and molecular weight {mw:.1f} Da, "
-              f"with an explicit carbonyl group detected.")
+              f"{hydroxyl_count} hydroxyl groups, MW {mw:.1f} Da, and a carbonyl group present (O/C ratio ~{co_ratio:.2f}).")
     return True, reason
 
-# Example usage (you can uncomment the following lines to test):
-# examples = [
-#    "O1[C@@]([C@H](O)[C@@H](O)[C@@H]1O)([C@H](O)CO)[H]",  # beta-D-glucofuranose (cyclic)
-#    "[H]C(=O)[C@H](O)[C@@H](O)[C@@H](O)CO",              # aldehydo-L-arabinose (open–chain)
-#    "OCC(=O)[C@@H](O)[C@H](O)[C@H](O)C([O-])=O",        # keto-D-fructuronate (false positive in previous attempt)
-#    "CC1=C(C=C)\\C(NC1=O)=C/c1[nH]c(Cc2[nH]c(\\C=C3NC(=O)C(C=C)=C\\3C)c(C)c2CCC(O)=O)c(CCC(=O)O[C@@H]2O[C@@H]([C@@H](O)[C@H](O)[C@H]2O)C(O)=O)c1C",  # mono(glucosyluronic acid)bilirubin (cyclic)
-# ]
-# for smi in examples:
-#     result, msg = is_monosaccharide(smi)
-#     print(f"SMILES: {smi}\nResult: {result}\nReason: {msg}\n")
+# Uncomment the code below to run some tests:
+if __name__ == "__main__":
+    test_examples = [
+        # True positives:
+        ("O1[C@@]([C@H](O)[C@@H](O)[C@@H]1O)([C@H](O)CO)[H]", "beta-D-glucofuranose"),
+        ("[H]C(=O)[C@H](O)[C@@H](O)[C@@H](O)CO", "aldehydo-L-arabinose"),
+        ("[H][C@]1(O[C@@H](O)[C@H](O)[C@H]1O)[C@H](O)CO", "beta-D-galactofuranose"),
+        ("OC[C@@H]1O[C@@H](O)[C@@H](O)[C@H](O)[C@@H]1O", "alpha-L-galactose"),
+        ("OC[C@H]1O[C@@](O)(CO)[C@@H](O)[C@@H](O)[C@@H]1O", "alpha-D-manno-heptulopyranose"),
+        ("O1[C@H]([C@@H](O)[C@@H](O)[C@@H](O)[C@H]1O)C", "6-deoxy-beta-L-talopyranose"),
+        ("OC[C@@H]1OC(O)[C@@H](O)[C@H]1O", "L-ribofuranose"),
+        # Open–chain examples:
+        ("OCC(=O)[C@@H](O)[C@H](O)[C@H](O)C([O-])=O", "5-dehydro-D-gluconic acid"),
+    ]
+    for smi, name in test_examples:
+        result, msg = is_monosaccharide(smi)
+        print(f"Name: {name}\nSMILES: {smi}\nResult: {result}\nReason: {msg}\n{'-'*60}")
