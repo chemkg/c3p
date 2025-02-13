@@ -5,17 +5,13 @@ Classifies: CHEBI:37739 glycerophospholipid
 """
 Classifies: Glycerophospholipid
 Definition: Any glycerolipid having a phosphate group ester-linked to a terminal carbon of the glycerol backbone.
-
 The strategy:
   1. Parse the SMILES into an RDKit molecule.
-  2. Check for the presence of a glycerol backbone. Here we assume a simple glycerol pattern: three connected carbons in which the central is –CHOH– and the terminal ones are CH2.
-  3. Look for a phosphoester function where a terminal CH2 (of glycerol) is linked via an oxygen to a phosphate group.
-  
-We use SMARTS patterns for the phosphoester linkage:
-  Pattern A: "[CH2]O[P](=O)(O)O"  (phosphate with all –OH groups)
-  Pattern B: "[CH2]O[P](=O)(O)[O-]" (anionic version, which is common in biological lipids)
-  
-If we find both a glycerol backbone and at least one phosphoester connection from one of the terminal carbons of that backbone, we classify the molecule as a glycerophospholipid.
+  2. Locate a glycerol backbone. We now use a more flexible SMARTS pattern "[CH2]-[C](O)-[CH2]"
+     which ignores explicit chirality and hydrogen counts of the central carbon.
+  3. Look for a phosphoester linkage directly (using SMARTS patterns)
+     or (if that fails) inspect the terminal carbons of the glycerol backbone for an oxygen
+     which is bound to a phosphorus that carries a double-bonded oxygen.
 """
 
 from rdkit import Chem
@@ -23,87 +19,64 @@ from rdkit import Chem
 def is_glycerophospholipid(smiles: str):
     """
     Determine if a molecule is a glycerophospholipid.
-    It must have a glycerol backbone (a CH2-CHOH-CH2 fragment)
-    and a phosphate group ester-linked to one of its terminal CH2 groups.
-
+    It must have a glycerol backbone (a CH2-C(O)-CH2 fragment)
+    and a phosphate group ester-linked to one of its terminal CH2 carbons.
+    
     Args:
-        smiles (str): SMILES string of the molecule
-
+        smiles (str): SMILES string of the molecule.
+    
     Returns:
-        bool: True if the molecule is classified as a glycerophospholipid, False otherwise
-        str: Reason for classification
+        bool: True if the molecule is classified as a glycerophospholipid, False otherwise.
+        str: Reason for the classification decision.
     """
-    # Parse the SMILES string.
+    # Parse the SMILES string into a molecule.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Define a SMARTS pattern for a glycerol backbone:
-    # This pattern looks for three connected carbons: CH2-CHOH-CH2.
-    # Note: In real molecules stereochemistry may be present but we use a simple pattern here.
-    glycerol_pattern = Chem.MolFromSmarts("[CH2]-[CHOH]-[CH2]")
+    # Use a more flexible SMARTS for a glycerol backbone.
+    # This pattern looks for: [CH2]-[C](O)-[CH2] and does not enforce chirality info.
+    glycerol_pattern = Chem.MolFromSmarts("[CH2]-[C](O)-[CH2]")
     glycerol_matches = mol.GetSubstructMatches(glycerol_pattern)
     if not glycerol_matches:
-        return False, "No glycerol backbone (CH2-CHOH-CH2) found"
+        return False, "No glycerol backbone ([CH2]-[C](O)-[CH2]) found"
     
     # Define SMARTS patterns for a phosphoester linkage at a terminal CH2.
-    # Terminal phosphate ester can be represented in a couple forms.
+    # We account for both neutral and anionic forms.
     phosphoester1 = Chem.MolFromSmarts("[CH2]O[P](=O)(O)O")
     phosphoester2 = Chem.MolFromSmarts("[CH2]O[P](=O)(O)[O-]")
     
-    phosphoester_found = False
-    # First try a direct search for the phosphoester pattern.
     if mol.HasSubstructMatch(phosphoester1) or mol.HasSubstructMatch(phosphoester2):
-        phosphoester_found = True
+        return True, "Molecule contains a glycerol backbone and a phosphate group ester-linked to a terminal carbon."
+    
+    # If a direct SMARTS did not match, try to inspect the glycerol backbone matches.
+    for match in glycerol_matches:
+        # match is a tuple of atom indices corresponding to the [CH2], [C](O), [CH2] in the backbone.
+        # We will check the terminal positions (first and last carbon).
+        for pos in (0, 2):
+            atom = mol.GetAtomWithIdx(match[pos])
+            # Check neighbors of the terminal carbon.
+            for nbr in atom.GetNeighbors():
+                # We expect an oxygen (atomic number 8) that is not part of the three-carbon backbone.
+                if nbr.GetAtomicNum() != 8 or nbr.GetIdx() in match:
+                    continue
+                # Now check if this oxygen is bound to a phosphorus atom.
+                for second_nbr in nbr.GetNeighbors():
+                    if second_nbr.GetAtomicNum() == 15:  # phosphorus
+                        # Verify that phosphorus has at least one double-bonded oxygen.
+                        for bond in second_nbr.GetBonds():
+                            # bond.GetBondTypeAsDouble() returns 2.0 for a double bond.
+                            other_atom = bond.GetOtherAtom(second_nbr)
+                            if other_atom.GetAtomicNum() == 8 and bond.GetBondTypeAsDouble() == 2.0:
+                                return True, "Molecule contains a glycerol backbone with a phosphate group ester-linked to a terminal carbon."
+    return False, "No phosphate group ester-linked to a terminal carbon of the glycerol backbone detected"
 
-    if not phosphoester_found:
-        # If direct phosphoester not found, try to check manually:
-        # Iterate all glycerol matches and check if one of the terminal carbons (first or third) 
-        # has an oxygen neighbor that is bound to phosphorus with a double-bonded oxygen.
-        for match in glycerol_matches:
-            # match is a tuple (idx0, idx1, idx2) corresponding to CH2, CHOH, CH2.
-            for pos in (0, 2):  # terminal positions in the glycerol backbone
-                atom = mol.GetAtomWithIdx(match[pos])
-                # Check neighbors that are oxygen and not part of the backbone match:
-                for nbr in atom.GetNeighbors():
-                    if nbr.GetAtomicNum() != 8:
-                        continue
-                    # Confirm this oxygen is not the one in the glycerol central chain:
-                    if nbr.GetIdx() in match:
-                        continue
-                    # Now check if this oxygen is bound to a phosphorus atom.
-                    for second_nbr in nbr.GetNeighbors():
-                        if second_nbr.GetAtomicNum() == 15:  # phosphorus
-                            # Check if phosphorus has a double-bond O (P=O).
-                            has_double_bonded_O = False
-                            for bond in second_nbr.GetBonds():
-                                # Look for double bond and oxygen neighbors.
-                                if bond.GetBondTypeAsDouble() == 2.0 and bond.GetOtherAtom(second_nbr).GetAtomicNum() == 8:
-                                    has_double_bonded_O = True
-                                    break
-                            if has_double_bonded_O:
-                                phosphoester_found = True
-                                break
-                    if phosphoester_found:
-                        break
-                if phosphoester_found:
-                    break
-            if phosphoester_found:
-                break
-
-    if not phosphoester_found:
-        return False, "No phosphate group ester-linked to a terminal carbon of the glycerol backbone detected"
-
-    # If we get here, we assume the essential substructures are present.
-    return True, "Molecule contains a glycerol backbone with a phosphate group ester-linked to a terminal carbon."
-
-# Below are a few examples to test the classifier if run as a script.
+# Example usage for testing if run as script.
 if __name__ == "__main__":
-    # Example SMILES strings taken from the provided examples.
     test_smiles = [
-        "P(OC[C@H](O/C=C\\CCCCCCCCCCCCCCCC)COC(=O)CCCCCCC/C=C\\CCCCCC)(OCCN)(O)=O",
-        "C([C@](CO/C=C\\CCCCCCCCCCCCCCCC)([H])OC(CCC/C=C\\C/C=C\\C/C=C\\C/C=C\\C/C=C\\CC)=O)OP([O-])(=O)OCC[N+](C)(C)C",
-        "[C@](COC(=O)CCCCCCC/C=C\\CCCC)(OC(=O)CCCCCCCCCCCCCCC)([H])COP(O)(O)=O"
+        "P(OC[C@H](O/C=C\\CCCCCCCCCCCCCCCC)COC(=O)CCCCCCC/C=C\\CCCCCC)(OCCN)(O)=O",  # PE(16:1(9Z)/P-18:0)
+        "C([C@](CO/C=C\\CCCCCCCCCCCCCCCC)([H])OC(CCC/C=C\\C/C=C\\C/C=C\\C/C=C\\C/C=C\\CC)=O)OP([O-])(=O)OCC[N+](C)(C)C",  # PC(P-18:0/20:5(...))
+        "CCCCCCCCCCCCCCCC(=O)O[C@H](COC(=O)CCCCCCC\\C=C/C\\C=C/CCCCC)COP([O-])(=O)OCC[N+](C)(C)C"  # another example
     ]
     for smi in test_smiles:
         result, reason = is_glycerophospholipid(smi)
