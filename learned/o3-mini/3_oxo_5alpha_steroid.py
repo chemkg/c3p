@@ -5,13 +5,10 @@ Classifies: CHEBI:13601 3-oxo-5alpha-steroid
 Classifies: CHEBI: 3-oxo-5alpha-steroid
 Definition: A 3-oxo steroid that has alpha configuration at position 5.
 Heuristic (improved):
-  (1) Confirm a ketone group (C=O) on a ring.
-  (2) Look for a steroid nucleus defined as a fused system of 4 rings—
-      exactly one five-membered ring and three six-membered rings—
-      whose union comprises 17 carbon atoms.
-  (3) Require that at least one chiral centre is explicitly specified
-      in the atoms forming the nucleus (a crude surrogate for the 5α designation).
-Note: This approach is heuristic and may still mis‐classify borderline cases.
+  (1) The molecule must contain at least one ketone group (C=O) on a ring.
+  (2) The molecule must contain a steroid nucleus: a fused system of 4 rings (exactly one five-membered ring and three six-membered rings) composed solely of carbon atoms and whose union has exactly 17 carbons.
+  (3) At least one atom in the nucleus must be marked with a chiral tag.
+Note: This heuristic approach tries to limit combinatorial searches by first filtering candidate rings and then working only on connected ring systems.
 """
 
 from rdkit import Chem
@@ -20,12 +17,11 @@ from itertools import combinations
 def is_3_oxo_5alpha_steroid(smiles: str):
     """
     Determines if a molecule is a 3-oxo-5alpha-steroid based on its SMILES string.
-    Heuristic:
-      - Must have a ketone group in a ring.
-      - Must contain a fused steroid nucleus. Here we require a set of 4 rings
-        (1 five-membered and 3 six-membered) that are connected (fused; sharing at least 2 atoms)
-        whose union gives 17 carbon atoms.
-      - At least one chiral center must be annotated in the nucleus.
+    Heuristics:
+      - The molecule must have a ketone group (C=O) on a ring.
+      - The molecule must contain a fused steroid nucleus: a set of 4 rings, exactly one five-membered
+        and three six-membered rings. All atoms of these rings should be carbons and their union comprises exactly 17 carbons.
+      - At least one atom in the nucleus must have explicit chiral annotation.
     
     Args:
         smiles (str): SMILES string of the molecule.
@@ -34,93 +30,137 @@ def is_3_oxo_5alpha_steroid(smiles: str):
         bool: True if the molecule is classified as a 3-oxo-5alpha-steroid, else False.
         str: Explanation for the classification.
     """
-    # Parse SMILES into an RDKit molecule.
+    
+    # Parse the SMILES string into an RDKit molecule.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string."
     
-    # Step 1: Look for the ketone group.
-    # We use SMARTS to detect a C(=O) where the carbon is in a ring.
+    # Step 1: Look for a ketone group in a ring using SMARTS.
+    # This SMARTS checks for a carbon in a ring double-bonded to oxygen.
     ketone_pattern = Chem.MolFromSmarts("[#6;R](=O)")
-    if not mol.HasSubstructMatch(ketone_pattern):
+    ketone_matches = mol.GetSubstructMatches(ketone_pattern)
+    if not ketone_matches:
         return False, "No ring ketone found (3-oxo requirement not met)."
     
-    # Step 2: Identify candidate rings from the molecule.
+    # Step 2: Obtain all rings in the molecule.
     ring_info = mol.GetRingInfo()
-    all_rings = ring_info.AtomRings()  # Each is a tuple of atom indices.
-    # Consider only rings of size 5 or 6 (typical sizes in steroid nucleus).
-    candidate_rings = [ring for ring in all_rings if len(ring) in (5,6)]
-    if len(candidate_rings) < 4:
-        return False, f"Only {len(candidate_rings)} rings of size 5 or 6 found (steroid nucleus not detected)."
+    all_rings = ring_info.AtomRings()  # Each ring is a tuple of atom indices.
     
-    # Helper: Check whether a given set of rings (each a tuple of atom indices) forms a connected fused system.
-    def rings_connected(rings_subset):
-        # Build a graph where each ring is a node.
-        n = len(rings_subset)
-        adjacency = {i: set() for i in range(n)}
-        for i in range(n):
-            for j in range(i+1, n):
-                # Define fusion as sharing at least 2 atoms.
-                if len(set(rings_subset[i]).intersection(rings_subset[j])) >= 2:
-                    adjacency[i].add(j)
-                    adjacency[j].add(i)
-        # Do a DFS over this ring-graph.
-        visited = set()
-        def dfs(i):
-            visited.add(i)
-            for j in adjacency[i]:
-                if j not in visited:
-                    dfs(j)
-        dfs(0)
-        return len(visited) == n
-
-    # Step 3: Search for a set of 4 rings that looks like a steroid nucleus.
+    # Filter candidate rings: only rings of size 5 or 6 and composed entirely of carbons.
+    candidate_rings = []
+    for ring in all_rings:
+        if len(ring) not in (5, 6):
+            continue
+        if all(mol.GetAtomWithIdx(i).GetAtomicNum() == 6 for i in ring):
+            candidate_rings.append(ring)
+    
+    if len(candidate_rings) < 4:
+        return False, f"Only {len(candidate_rings)} candidate rings (size 5 or 6 with carbon atoms only) found."
+    
+    # Step 3: Build a connectivity graph on candidate rings.
+    # Two rings are "fused" if they share at least 2 atoms.
+    n_rings = len(candidate_rings)
+    ring_adj = {i: set() for i in range(n_rings)}
+    for i in range(n_rings):
+        for j in range(i+1, n_rings):
+            if len(set(candidate_rings[i]).intersection(candidate_rings[j])) >= 2:
+                ring_adj[i].add(j)
+                ring_adj[j].add(i)
+    
+    # Find connected components (fused systems) of rings.
+    components = []
+    visited = set()
+    for i in range(n_rings):
+        if i in visited:
+            continue
+        stack = [i]
+        comp = set()
+        while stack:
+            node = stack.pop()
+            if node in comp:
+                continue
+            comp.add(node)
+            for neighbor in ring_adj[node]:
+                if neighbor not in comp:
+                    stack.append(neighbor)
+        visited |= comp
+        components.append(comp)
+    
+    # Step 4: In each component, look for a subset of 4 rings that matches the steroid nucleus.
     nucleus_found = False
     nucleus_atoms = set()
-    for subset in combinations(candidate_rings, 4):
-        # Check that the 4 rings are fused (each ring connects with at least one other,
-        # and overall they form a connected component).
-        if not rings_connected(subset):
+    for comp in components:
+        # Only consider components that have at least 4 rings.
+        if len(comp) < 4:
             continue
-        
-        # Check ring sizes: we expect one five-membered and three six-membered rings.
-        ring_sizes = [len(r) for r in subset]
-        if ring_sizes.count(5) != 1 or ring_sizes.count(6) != 3:
-            continue
-        
-        # Get the union of atoms in these rings.
-        union_atoms = set()
-        for ring in subset:
-            union_atoms.update(ring)
-        
-        # Count how many of these atoms are carbons.
-        carbon_count = sum(1 for idx in union_atoms if mol.GetAtomWithIdx(idx).GetAtomicNum() == 6)
-        if carbon_count == 17:
+        comp_rings = [candidate_rings[i] for i in comp]
+        # To reduce combinations, if many rings exist in the component then check all 4-ring combinations within it.
+        for subset in combinations(comp_rings, 4):
+            # Check connectivity within this subset
+            # (We require that the subset itself forms a connected graph via the earlier fusion criterion.)
+            # We rebuild a small graph for just this subset.
+            sub_adj = {k: set() for k in range(4)}
+            for a in range(4):
+                for b in range(a+1, 4):
+                    if len(set(subset[a]).intersection(subset[b])) >= 2:
+                        sub_adj[a].add(b)
+                        sub_adj[b].add(a)
+            connected = False
+            visited_subset = set()
+            def dfs(n):
+                visited_subset.add(n)
+                for m in sub_adj[n]:
+                    if m not in visited_subset:
+                        dfs(m)
+            dfs(0)
+            if len(visited_subset) != 4:
+                continue
+            
+            # Check ring sizes: exactly one ring of size 5 and three rings of size 6.
+            sizes = [len(ring) for ring in subset]
+            if sizes.count(5) != 1 or sizes.count(6) != 3:
+                continue
+            
+            # Determine the union of atoms in these 4 rings.
+            union_atoms = set()
+            for ring in subset:
+                union_atoms.update(ring)
+            # Count carbons in the nucleus (should be exactly 17).
+            carbon_count = sum(1 for idx in union_atoms if mol.GetAtomWithIdx(idx).GetAtomicNum() == 6)
+            if carbon_count != 17:
+                continue
+            
+            # Check that at least one ketone group is located within this nucleus.
+            ketone_in_nucleus = False
+            for match in ketone_matches:
+                if set(match).issubset(union_atoms):
+                    ketone_in_nucleus = True
+                    break
+            if not ketone_in_nucleus:
+                continue
+            
+            # Check for explicit chiral tags in at least one atom in the nucleus.
+            chiral_found = False
+            for idx in union_atoms:
+                atom = mol.GetAtomWithIdx(idx)
+                if atom.GetChiralTag() != Chem.rdchem.ChiralType.CHI_UNSPECIFIED:
+                    chiral_found = True
+                    break
+            if not chiral_found:
+                continue
+            
+            # We have found a suitable steroid nucleus.
             nucleus_found = True
             nucleus_atoms = union_atoms
             break
-    if not nucleus_found:
-        return False, "Steroid nucleus not detected: no fused set of 4 rings (1 five-membered and 3 six-membered) with 17 carbons found."
-    
-    # Step 4: Confirm that the ketone group is located within the steroid nucleus.
-    ketone_matches = mol.GetSubstructMatches(ketone_pattern)
-    if not any(set(match).issubset(nucleus_atoms) for match in ketone_matches):
-        return False, "Ketone group not found within the steroid nucleus."
-    
-    # Step 5: Check for explicit chiral information in the nucleus.
-    # We require that at least one atom in the nucleus is assigned a chiral tag.
-    chiral_in_nucleus = False
-    for idx in nucleus_atoms:
-        atom = mol.GetAtomWithIdx(idx)
-        if atom.GetChiralTag() != Chem.rdchem.ChiralType.CHI_UNSPECIFIED:
-            chiral_in_nucleus = True
+        if nucleus_found:
             break
-    if not chiral_in_nucleus:
-        return False, "No chiral centers detected within the nucleus (5α configuration not confirmed)."
-    
-    # Passed all tests.
-    return True, "Molecule has a steroid nucleus (4 fused rings: one 5-membered and three 6-membered rings with 17 carbons), a ketone on the nucleus, and explicit chiral annotation (consistent with a 3-oxo-5α-steroid)."
 
+    if not nucleus_found:
+        return False, "Steroid nucleus not detected: no fused set of 4 rings (1 five-membered and 3 six-membered rings with 17 carbons) having a ketone and chiral center found."
+    
+    return True, "Molecule has a steroid nucleus (4 fused rings: one 5-membered and three 6-membered rings with 17 carbons), a ketone on the nucleus, and explicit chiral annotation (consistent with a 3-oxo-5α-steroid)."
 
 # Example usage (for testing; remove or comment out in production):
 if __name__ == "__main__":
