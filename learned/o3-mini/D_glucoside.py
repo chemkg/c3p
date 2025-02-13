@@ -3,78 +3,60 @@ Classifies: CHEBI:35436 D-glucoside
 """
 #!/usr/bin/env python3
 """
-Classifies: D-glucoside 
-Definition: A D-glucoside is any glucoside in which the glycoside group is derived from D-glucose.
-This program attempts to detect a D-glucoside unit by first matching a relaxed SMARTS pattern
-representing the connectivity of a glucopyranosyl moiety – namely a six‐membered ring containing one oxygen
-(with an exocyclic CH2OH substituent) – and then verifying that the extracted fragment has the formula C6H11O5.
-This fragment formula corresponds to a glucosyl unit (derived from D-glucose) after formation of a glycosidic bond.
+Classifies: D-glucoside (any glucoside in which the glycoside group is derived from D-glucose)
 """
 
 from rdkit import Chem
-from rdkit.Chem.rdMolDescriptors import CalcMolFormula
 
 def is_D_glucoside(smiles: str):
     """
     Determines if a molecule is a D-glucoside based on its SMILES string.
     
-    The detection is done in two steps:
-      1. A relaxed SMARTS is used to find a pyranose‐like ring with connectivity expected
-         for a glucosyl residue (one ring oxygen and a CH2OH group attached at the ring).
-      2. For each match, the substructure is extracted and its formula is computed.
-         For a glucoside derived from D-glucose, the glycosyl (or glucosyl) unit should have the formula C6H11O5.
-         
+    A D-glucoside is defined here as a molecule containing a glycosidic linkage derived from D-glucose.
+    In many representations the sugar unit appears as a glucopyranose ring (six-membered ring with 5 carbons
+    and 1 oxygen) substituted at the anomeric carbon via an O-glycosidic bond. Common depictions for the sugar
+    moiety are (for example) one of the two patterns below (one for the alpha-anomer and one for the beta-anomer).
+
     Args:
-        smiles (str): SMILES string of the molecule.
-    
+        smiles (str): SMILES string of the molecule
+
     Returns:
-        bool: True if a D-glucoside moiety is found, False otherwise.
-        str: A message describing the outcome.
+        bool: True if the molecule is classified as a D-glucoside, False otherwise.
+        str: Reason for the classification.
     """
-    # Parse the SMILES string into an RDKit molecule object.
+    # Parse the SMILES string into an RDKit molecule object
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Define a relaxed SMARTS pattern to capture a glucosyl unit.
-    # The pattern looks for:
-    #   - An oxygen (the glycosidic oxygen) connected to
-    #   - A ring (labelled with "1") with the pattern: C1 O C(O) C(O) C(O) C1 CO
+    # Define two SMARTS patterns for an O-glycosidically linked D-glucopyranosyl unit.
+    # These patterns try to capture a common depiction of the sugar unit.
     #
-    # This roughly represents a glucopyranosyl moiety after glycosidic bond formation.
-    # (The stereochemistry markers are omitted so as to capture more examples.)
-    relaxed_smarts = "O[C]1OC(O)C(O)C(O)C1CO"
-    pattern = Chem.MolFromSmarts(relaxed_smarts)
-    if pattern is None:
-        return False, "Failed to compile SMARTS pattern"
+    # The sugar ring is a six-membered ring with one ring oxygen and five carbons.
+    # In a glucoside the anomeric hydroxyl of glucose is replaced by an oxygen-linked substituent.
+    # The patterns below start with an extra O (the bridging, glycosidic oxygen) attached to a chiral carbon
+    # in a ring that has a CH2OH substituent (denoted by CO) at one position.
+    #
+    # Note: Because of variability in depictions, these SMARTS may miss some true positives or include some false ones.
+    alpha_pattern = Chem.MolFromSmarts("O[C@@H]1O[C@H](CO)[C@@H](O)[C@H](O)[C@H]1O")
+    beta_pattern  = Chem.MolFromSmarts("O[C@H]1O[C@@H](CO)[C@H](O)[C@@H](O)[C@H]1O")
     
-    # Look for substructure matches. We set useChirality=False to avoid missing matches
-    # that do not have explicit chirality flags.
-    matches = mol.GetSubstructMatches(pattern, useChirality=False)
-    if not matches:
-        return False, "No sugar moiety matching the expected glucosyl connectivity found"
+    # Search for either pattern in the molecule.
+    if mol.HasSubstructMatch(alpha_pattern):
+        return True, "Found an alpha-D-glucopyranosyl moiety (D-glucoside)"
+    if mol.HasSubstructMatch(beta_pattern):
+        return True, "Found a beta-D-glucopyranosyl moiety (D-glucoside)"
     
-    # For each matching fragment, extract it and check its calculated molecular formula.
-    # A D-glucoside (after glycosidic bond formation) should have the formula C6H11O5.
-    for match in matches:
-        # Create a sub-molecule from the atoms in the match.
-        submol = Chem.PathToSubmol(mol, list(match))
-        formula = CalcMolFormula(submol)
-        # Uncomment the following line to see details during debugging:
-        # print(f"DEBUG: Found fragment formula: {formula}")
-        if formula == "C6H11O5":
-            return True, "Found a D-glucoside moiety (glucopyranosyl fragment with formula C6H11O5)"
-    return False, "Found sugar-like fragment(s) but none matching the D-glucoside formula C6H11O5"
+    return False, "No D-glucoside (D-glucopyranosyl) moiety found in the molecule"
 
-# For testing purposes (run only when invoked as the main program)
+# For testing purposes:
 if __name__ == '__main__':
-    # Here are some example SMILES (some from the user’s examples).
+    # Example SMILES strings (taken from the provided examples):
     test_smiles = [
-        # Expected to be a D-glucoside
+        # beta-D-glucosyl-(1<->1')-N-[(17Z)-hexacosenoyl]sphinganine
         "CCCCCCCCCCCCCCCC[C@@H](O)[C@H](CO[C@@H]1O[C@H](CO)[C@@H](O)[C@H](O)[C@H]1O)NC(=O)CCCCCCCCCCCCCCC\\C=C/CCCCCCCC",
+        # apigenin 7-O-beta-D-glucoside
         "C1=2C(C(C=C(O1)C=3C=CC(O)=CC3)=O)=C(C=C(C2)O[C@H]4[C@@H]([C@H]([C@@H]([C@H](O4)CO)O)O)O)O",
-        # Expected not to be a D-glucoside
-        "ClC1=C(OC2OC(O)C(O)C(C2C(=O)O)O)C=CC(=C1)C3NC(=O)[C@H](N(C(=O)[C@@H](NC(=O)[C@@H](C)CC(=C[C@@H]([C@H](OC([C@H]3OC)=O)C)C)C)C)C)CC4=C(Cl)NC5=C4C=CC=C5"
     ]
     
     for s in test_smiles:
