@@ -3,16 +3,20 @@ Classifies: CHEBI:59644 oxo fatty acid
 """
 """
 Classifies: Oxo Fatty Acid
-Definition: Any fatty acid containing at least one aldehydic or ketonic group in addition to the carboxylic acid group.
+Definition: Any fatty acid containing at least one aldehydic or ketonic group in addition to 
+            the carboxylic acid group. Also, the molecule should show a long (predominantly acyclic)
+            carbon chain typical of fatty acids.
 """
 
 from rdkit import Chem
+from rdkit.Chem import rdMolDescriptors
 
 def is_oxo_fatty_acid(smiles: str):
     """
     Determines if a molecule is an oxo fatty acid based on its SMILES string.
-    An oxo fatty acid is defined as a fatty acid (i.e. with a carboxylic acid group)
-    containing at least one additional aldehyde or ketone group (i.e. an oxo group) that is not part of the acid.
+    An oxo fatty acid is defined as a fatty acid (i.e. possessing a carboxylic acid group,
+    and predominantly acyclic long carbon chain) that also contains at least one additional 
+    aldehyde or ketone group (i.e. an oxo group) that is not part of the acid group.
     
     Args:
         smiles (str): SMILES string of the molecule
@@ -26,49 +30,66 @@ def is_oxo_fatty_acid(smiles: str):
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Define SMARTS pattern for carboxylic acid group.
-    # This pattern looks for a carbon atom double-bonded to oxygen and single-bonded to an -OH group.
+    # -------------------------------
+    # Check for carboxylic acid group.
+    # The SMARTS pattern looks for a carbon with a double-bonded oxygen and a single-bonded hydroxyl.
     acid_pattern = Chem.MolFromSmarts("[CX3](=O)[OX2H1]")
     acid_matches = mol.GetSubstructMatches(acid_pattern)
     if not acid_matches:
         return False, "No carboxylic acid group detected; not a fatty acid"
     
-    # Note: We'll use the carboxyl carbon index (the first atom in the match) to help exclude it later.
-    acid_carbons = {match[0] for match in acid_matches}
+    # Get the set of carboxyl carbon atom indices (the first atom in the pattern).
+    acid_carbon_indices = {match[0] for match in acid_matches}
     
-    # Define SMARTS patterns for ketone and aldehyde groups.
-    # For ketone: a carbonyl with carbon atoms on both sides.
+    # -------------------------------
+    # Identify additional oxo groups outside the carboxylic acid.
+    # SMARTS for ketone: a carbonyl (C=O) with carbons on both sides.
     ketone_pattern = Chem.MolFromSmarts("[#6][CX3](=O)[#6]")
-    # For aldehyde: a carbonyl where the carbon has a hydrogen; note that formyl (H-C(=O)) in an acid (i.e. formic acid)
-    # is still a fatty acid so we need to ensure that the acid carbon is not counted twice.
+    # SMARTS for aldehyde: a carbonyl (C=O) where the carbon bears a hydrogen.
     aldehyde_pattern = Chem.MolFromSmarts("[#6][CX3H](=O)")
     
     ketone_matches = mol.GetSubstructMatches(ketone_pattern)
     aldehyde_matches = mol.GetSubstructMatches(aldehyde_pattern)
     
-    # Combine matches from ketone and aldehyde patterns.
-    # We'll use sets of the carbon index (first atom in the SMARTS match) so that we can ensure they are not the acid carbon.
-    additional_oxo_carbons = set()
+    additional_oxo_found = False
+    # In both patterns, the carbonyl carbon appears as the second atom (index 1) in the SMARTS.
     for match in ketone_matches:
-        # match[0] is the carbon in the carbonyl group.
-        if match[0] not in acid_carbons:
-            additional_oxo_carbons.add(match[0])
-            
-    for match in aldehyde_matches:
-        if match[0] not in acid_carbons:
-            additional_oxo_carbons.add(match[0])
+        if match[1] not in acid_carbon_indices:
+            additional_oxo_found = True
+            break
+    if not additional_oxo_found:
+        for match in aldehyde_matches:
+            if match[1] not in acid_carbon_indices:
+                additional_oxo_found = True
+                break
+    if not additional_oxo_found:
+        return False, "No additional oxo group (aldehyde or ketone) detected outside of the acid"
     
-    if not additional_oxo_carbons:
-        return False, "No additional oxo group (aldehyde or ketone) detected outside of the carboxylic acid group"
+    # -------------------------------
+    # Check if the molecule appears "fatty" by verifying the aliphatic (acyclic) carbon chain.
+    # We require that the molecule has a decent number of carbon atoms and that the majority (>=70%) 
+    # of these carbons are not in a ring (i.e. the molecule is largely acyclic as expected in fatty acids).
+    total_carbons = 0
+    acyclic_carbons = 0
+    for atom in mol.GetAtoms():
+        if atom.GetAtomicNum() == 6:
+            total_carbons += 1
+            if not atom.IsInRing():
+                acyclic_carbons += 1
+    if total_carbons < 8:
+        return False, "Too few carbon atoms to be considered a fatty acid"
     
-    # If needed, one may also check that the molecule appears fatty (e.g., has a long hydrocarbon chain)
-    # For now we assume the presence of a carboxylic acid is sufficient to designate it as a fatty acid.
+    if acyclic_carbons / total_carbons < 0.7:
+        return False, "Significant ring content detected; not a typical acyclic fatty acid chain"
     
-    return True, "Contains a carboxylic acid group and an additional oxo group (aldehyde or ketone) outside the acid"
+    # Optionally, one could add more checks (e.g., minimum molecular weight or requirement
+    # for a long contiguous alkyl chain) to further reduce ambiguous cases.
+    
+    return True, "Contains a carboxylic acid group, an additional oxo group outside that acid, and a predominantly acyclic carbon chain typical of a fatty acid"
 
 # Example usage:
 if __name__ == "__main__":
-    # Example: (6E,8Z)-5-oxooctadecadienoic acid
+    # Using one example: (6E,8Z)-5-oxooctadecadienoic acid
     test_smiles = "O=C(CCCC(O)=O)/C=C/C=C\\CCCCCCCCC"
     result, reason = is_oxo_fatty_acid(test_smiles)
     print("Test molecule classification:", result)
