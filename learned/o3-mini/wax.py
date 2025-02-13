@@ -3,31 +3,36 @@ Classifies: CHEBI:73702 wax
 """
 """
 Classifies: Wax
-Definition: A chemical substance that is an organic compound or mixture of compounds that is composed of long-chain molecules and is malleable at ambient temperatures.
-This simple classifier uses a set of heuristics:
-    - The molecule must be valid.
-    - The molecule must have a high enough molecular weight (>300 Da) and a sufficient number of carbons.
-    - The molecule must feature at least one long uninterrupted carbon chain (>= 12 carbons in a row).
-Many waxes (for example, fatty acid esters) fulfill these criteria.
+Definition: A wax is an organic compound or mixture of compounds composed of long‐chain molecules and is malleable at ambient temperatures.
+This classifier uses the following heuristics:
+  - The molecule must parse correctly.
+  - The molecular weight must be above 300 Da.
+  - The molecule must have at least 15 carbon atoms.
+  - The molecule must be mostly aliphatic — if more than 30% of its carbon atoms are aromatic, we reject it.
+  - The molecule must contain at least one uninterrupted carbon chain of 12 or more carbons.
+  
+These heuristics help avoid costly computations on highly cyclic (eg, aromatic) systems that are unlikely to be waxes.
 """
 
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
+from functools import lru_cache
 
 def longest_carbon_chain_length(mol):
     """
     Calculate the longest continuous chain of carbon atoms (atomic number 6).
-    Uses a depth-first search (DFS) on the subgraph consisting only of carbons.
+    Uses a DFS on the subgraph containing only carbon atoms.
+    Memoization is applied to avoid redundant calculations.
     
     Returns:
         int: The number of carbon atoms in the longest chain.
     """
-    # Build a mapping: atom index -> atom object if carbon
+    # Get indices of carbon atoms
     carbon_indices = [atom.GetIdx() for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6]
     if not carbon_indices:
         return 0
 
-    # Create an adjacency list for carbon atoms only
+    # Build an adjacency list for carbon atoms only
     carbon_neighbors = {idx: [] for idx in carbon_indices}
     for idx in carbon_indices:
         atom = mol.GetAtomWithIdx(idx)
@@ -35,71 +40,77 @@ def longest_carbon_chain_length(mol):
             if neighbor.GetAtomicNum() == 6:
                 carbon_neighbors[idx].append(neighbor.GetIdx())
 
-    # Depth-first search (DFS) routine to find the longest simple path
+    # Use memoization in DFS to avoid repeated work.
+    @lru_cache(maxsize=None)
     def dfs(current, visited):
         max_length = 1  # current atom counts as 1
         for neighbor in carbon_neighbors[current]:
             if neighbor not in visited:
-                # Visit neighbor and update path length
-                new_length = 1 + dfs(neighbor, visited | {neighbor})
+                new_visited = visited + (neighbor,)  # using tuple to be hashable
+                new_length = 1 + dfs(neighbor, new_visited)
                 if new_length > max_length:
                     max_length = new_length
         return max_length
 
-    longest_chain = 0
+    longest = 0
+    # Try every carbon atom as starting point
     for start in carbon_indices:
-        chain_len = dfs(start, {start})
-        if chain_len > longest_chain:
-            longest_chain = chain_len
-    return longest_chain
+        chain_length = dfs(start, (start,))
+        if chain_length > longest:
+            longest = chain_length
+    return longest
 
 def is_wax(smiles: str):
     """
     Classifies a molecule as a wax based on its SMILES string.
     
     Heuristics used:
-      - The molecule must be parsed successfully.
-      - Its molecular weight should be high enough (>300 Da).
-      - It must contain a sufficient number of carbon atoms (>=15) to be considered "long-chain".
-      - It must have at least one uninterrupted carbon chain of at least 12 carbon atoms.
-      
-    These heuristics were chosen based on the definition of waxes and examples of long-chain fatty acid esters.
+      - Successful parsing.
+      - Molecular weight > 300 Da.
+      - At least 15 carbon atoms.
+      - Majority aliphatic: less than 30% aromatic carbon atoms.
+      - Contains at least one uninterrupted carbon chain of 12 carbons or more.
     
     Args:
-        smiles (str): SMILES string of the molecule
+        smiles (str): SMILES string of the molecule.
     
     Returns:
-        bool: True if the molecule is classified as a wax, False otherwise.
-        str: A reason explaining the result.
+        bool: True if classified as a wax, False otherwise.
+        str: Explanation for the classification.
     """
-    # Parse the SMILES string.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string."
     
-    # Calculate molecular weight.
+    # Check molecular weight
     mol_wt = rdMolDescriptors.CalcExactMolWt(mol)
     if mol_wt < 300:
         return False, f"Molecular weight too low for a wax ({mol_wt:.1f} Da)."
     
-    # Count the total number of carbon atoms.
-    c_atoms = [atom for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6]
-    if len(c_atoms) < 15:
-        return False, f"Not enough carbon atoms ({len(c_atoms)}), expected at least 15 for a wax."
-
-    # Determine the longest uninterrupted carbon chain.
+    # Count carbon atoms and aromatic carbon atoms
+    carbon_atoms = [atom for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6]
+    num_carbons = len(carbon_atoms)
+    if num_carbons < 15:
+        return False, f"Insufficient carbon count ({num_carbons}). Must have at least 15 carbons for a wax."
+    
+    aromatic_carbons = [atom for atom in carbon_atoms if atom.GetIsAromatic()]
+    frac_aromatic = len(aromatic_carbons) / num_carbons
+    if frac_aromatic >= 0.3:
+        return False, f"Too many aromatic carbons ({len(aromatic_carbons)} out of {num_carbons}) - likely not a wax."
+    
+    # Determine the length of the longest uninterrupted carbon chain
     longest_chain = longest_carbon_chain_length(mol)
     if longest_chain < 12:
         return False, f"Longest continuous carbon chain is only {longest_chain} atoms (requires at least 12)."
-        
-    # If all heuristics pass, we classify molecule as a wax.
-    return True, f"Valid wax: Molecular weight {mol_wt:.1f} Da, {len(c_atoms)} carbons, longest chain {longest_chain}."
+    
+    return True, f"Valid wax: Molecular weight {mol_wt:.1f} Da, {num_carbons} carbons (aromatic fraction {frac_aromatic:.2f}), longest chain of {longest_chain} carbons."
 
-# Example usage (uncomment to test):
-# smiles_examples = [
+# Example usage (uncomment the lines below to test):
+# wax_examples = [
 #     "O(CCCCCCCC/C=C\\C/C=C\\CCCCC)C(=O)CCCCCCC/C=C\\C/C=C\\CCCCC",  # Linoleyl linoleate
-#     "CCCCCCCCCCCCCCCCCCOC(=O)CCCCCCC/C=C\\CCCCCCCC",  # stearyl oleate (example variation)
+#     "CCCCCCCCCCCCCCCCCCOC(=O)CCCCCCC/C=C\\CCCCCCCC",  # stearyl oleate (variation example)
 # ]
-# for s in smiles_examples:
+# for s in wax_examples:
 #     result, reason = is_wax(s)
-#     print(s, result, reason)
+#     print(s)
+#     print(result, reason)
