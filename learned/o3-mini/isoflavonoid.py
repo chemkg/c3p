@@ -4,28 +4,33 @@ Classifies: CHEBI:50753 isoflavonoid
 """
 Classifies: isoflavonoid
 Definition: Any 1-benzopyran with an aryl substituent at position 3.
-A 1-benzopyran is defined here as a bicyclic system comprising a pyran ring 
-(6-membered: 5 carbons and 1 oxygen) fused to a benzene ring (6 aromatic carbons)
-via exactly 2 atoms. In typical isoflavonoid numbering the oxygen is at position 1,
-the fused atom that is bonded to that oxygen is position 2 and the other fused atom 
-(which is not bonded directly to the oxygen) is position 3. An isoflavonoid further 
-requires that the position 3 atom carries one—and only one—extra substituent that is 
-an aryl group (that is, a benzene ring, as defined by 6 aromatic carbons).
-Note: This heuristic does not cover every edge case.
+The algorithm first obtains the ring information and looks for two fused rings that meet the following:
+  – One ring is a benzene ring (6 atoms, all carbons, aromatic).
+  – The other is a “pyran” ring (6 atoms, exactly one oxygen and five carbons).
+The two rings must share exactly two atoms (i.e. be fused).
+Then the algorithm looks at the “free” (non‐fused) atoms of the pyran ring and, for each free atom that is a carbon,
+checks if it has a neighbor (via a single bond) that is aromatic and is itself part of a benzene ring (i.e. an aryl substituent).
+If so, it classifies the molecule as an isoflavonoid.
+Note: This heuristic may not capture every isoflavonoid but improves on previous false positives/negatives.
 """
 
 from rdkit import Chem
 
 def is_isoflavonoid(smiles: str):
     """
-    Determines if a molecule is an isoflavonoid according to our definition.
-    
+    Determines if a molecule is an isoflavonoid based on its SMILES string.
+    An isoflavonoid (for our purpose) is defined as a molecule containing a 1-benzopyran core --
+    that is, a fused bicyclic system consisting of a benzene ring (6-membered aromatic,
+    all carbons) fused (sharing exactly 2 atoms) with a pyran ring (6-membered containing 1 oxygen and 5 carbons)
+        with an aryl substituent (an extra aromatic ring, typically a benzene ring) attached at a free (non-fused)
+        position on the pyran (i.e. likely at position 3).
+        
     Args:
         smiles (str): SMILES string of the molecule.
         
     Returns:
-        bool: True if classified as isoflavonoid, False otherwise.
-        str: Explanation of the decision.
+        bool: True if the molecule is classified as an isoflavonoid, False otherwise.
+        str: Explanation of the classification decision.
     """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
@@ -35,8 +40,9 @@ def is_isoflavonoid(smiles: str):
     if not ring_info:
         return False, "No rings found in molecule"
     
-    # Helper: check if a ring is benzene-like: exactly 6 atoms, all aromatic carbons.
+    # Helper functions for ring properties
     def is_benzene(ring):
+        # A benzene ring: 6 atoms, all carbons that are aromatic.
         if len(ring) != 6:
             return False
         for idx in ring:
@@ -45,116 +51,70 @@ def is_isoflavonoid(smiles: str):
                 return False
         return True
 
-    # Helper: check if a ring is pyran-like:
-    # exactly 6 atoms, five carbons and one oxygen.
     def is_pyran(ring):
+        # A pyran ring (for this purpose): 6 atoms with exactly 1 oxygen and 5 carbons.
         if len(ring) != 6:
             return False
-        o_count = 0
-        c_count = 0
+        oxygen_count = 0
+        carbon_count = 0
         for idx in ring:
             atom = mol.GetAtomWithIdx(idx)
             if atom.GetAtomicNum() == 8:
-                o_count += 1
+                oxygen_count += 1
             elif atom.GetAtomicNum() == 6:
-                c_count += 1
+                carbon_count += 1
             else:
                 return False
-        return (o_count == 1 and c_count == 5)
+        return (oxygen_count == 1 and carbon_count == 5)
     
-    # Helper: check if an atom (by index) belongs to an aromatic benzene ring.
-    def atom_in_benzene(idx):
-        for ring in ring_info:
-            if len(ring) == 6 and idx in ring and is_benzene(ring):
-                return True
-        return False
-
-    # We now iterate over each pair of rings in the molecule.
-    # We look for a fused pair (sharing exactly 2 atoms) where one ring is benzene
-    # and the other is pyran.
+    # Look for two fused rings (sharing exactly 2 atoms) that meet our benzene and pyran criteria.
     for i in range(len(ring_info)):
         for j in range(i+1, len(ring_info)):
-            ring1 = set(ring_info[i])
-            ring2 = set(ring_info[j])
-            shared = ring1.intersection(ring2)
+            ring1 = ring_info[i]
+            ring2 = ring_info[j]
+            shared = set(ring1).intersection(set(ring2))
             if len(shared) != 2:
-                continue  # not fused by exactly two atoms
-            # Identify which ring is benzene and which is pyran.
-            benzene_ring = None
-            pyran_ring = None
-            if is_benzene(ring_info[i]) and is_pyran(ring_info[j]):
-                benzene_ring = set(ring_info[i])
-                pyran_ring = set(ring_info[j])
-            elif is_benzene(ring_info[j]) and is_pyran(ring_info[i]):
-                benzene_ring = set(ring_info[j])
-                pyran_ring = set(ring_info[i])
+                continue  # Skip if not fused by exactly 2 atoms.
+            candidate = None
+            if is_benzene(ring1) and is_pyran(ring2):
+                benzene_ring = set(ring1)
+                pyran_ring = set(ring2)
+                candidate = True
+            elif is_benzene(ring2) and is_pyran(ring1):
+                benzene_ring = set(ring2)
+                pyran_ring = set(ring1)
+                candidate = True
             else:
                 continue
-            
-            # For our fused system, we expect the pyran ring to contain exactly one oxygen.
-            o_atoms = [idx for idx in pyran_ring if mol.GetAtomWithIdx(idx).GetAtomicNum() == 8]
-            if len(o_atoms) != 1:
-                continue
-            o_idx = o_atoms[0]
-            
-            # Our two fused atoms come from the intersection.
-            if len(shared) != 2:
-                continue
-            shared_list = list(shared)
-            # Among the two fused atoms, the one directly bonded to the oxygen in the pyran ring
-            # is considered to be position 2; the other will be candidate for position 3.
-            pos2 = None
-            pos3 = None
-            for idx in shared_list:
-                atom = mol.GetAtomWithIdx(idx)
-                # Check if oxygen (o_idx) is a neighbor in the pyran ring.
-                nbrs = [nbr.GetIdx() for nbr in atom.GetNeighbors()]
-                if o_idx in nbrs:
-                    pos2 = idx
-                else:
-                    pos3 = idx
-            if pos3 is None:
-                # Could not differentiate the two fused atoms.
-                continue
+            if candidate:
+                # Identify the free (non-fused) atoms of the pyran ring.
+                free_atoms = [idx for idx in pyran_ring if idx not in shared]
+                # Look for at least one free pyran atom (expected at position 3) that has an aryl substituent
+                # (a neighbor outside the pyran that is aromatic and belongs to a benzene ring).
+                for idx in free_atoms:
+                    atom = mol.GetAtomWithIdx(idx)
+                    # Consider only carbon atoms in the pyran (the key substitution should be on a carbon).
+                    if atom.GetAtomicNum() != 6:
+                        continue
+                    for nbr in atom.GetNeighbors():
+                        if nbr.GetIdx() in pyran_ring:
+                            continue  # Skip neighbors belonging to the pyran system.
+                        # Check bond type if needed, here we only consider any connection.
+                        if not nbr.GetIsAromatic():
+                            continue
+                        # Now verify that this neighbor is part of a benzene ring.
+                        for ring in ring_info:
+                            if nbr.GetIdx() in ring and len(ring) == 6 and all(mol.GetAtomWithIdx(a).GetAtomicNum()==6 and mol.GetAtomWithIdx(a).GetIsAromatic() for a in ring):
+                                return True, ("Found benzopyran core (benzene fused with a 6-membered ring containing one oxygen) "
+                                               "with an aryl substituent attached at a free pyran carbon (likely position 3).")
+    return False, "No benzopyran core with an aryl substituent at position 3 was detected"
 
-            # Now check that the candidate position 3 atom carries one substituent 
-            # (i.e. a neighbor that lies outside the pyran core) that is an aryl group.
-            candidate_atom = mol.GetAtomWithIdx(pos3)
-            substituent_count = 0
-            for nbr in candidate_atom.GetNeighbors():
-                nbr_idx = nbr.GetIdx()
-                # Skip neighbors that are part of the pyran ring (the core).
-                if nbr_idx in pyran_ring:
-                    continue
-                # We require that the bond is a single bond.
-                bond = mol.GetBondBetweenAtoms(candidate_atom.GetIdx(), nbr_idx)
-                if bond is None or bond.GetBondTypeAsDouble() != 1.0:
-                    continue
-                # Now, check that the neighbor is aromatic and belongs to a benzene ring.
-                if not nbr.GetIsAromatic():
-                    continue
-                if atom_in_benzene(nbr_idx):
-                    substituent_count += 1
-            
-            if substituent_count == 1:
-                return True, ("Found benzopyran core (pyran fused to a benzene ring) with an extra aryl substituent "
-                              "on the fused atom that is not bonded to the pyran oxygen (position 3).")
-            elif substituent_count > 1:
-                return False, (f"Multiple ({substituent_count}) aryl substituents found on the candidate position 3; "
-                               "expected exactly one.")
-    # If no valid fused benzopyran core with proper substitution was found:
-    return False, "No valid benzopyran core with a 3-aryl substituent was detected"
-
-
-# Example usage (for testing the function):
+# Example usage (you can test with your compound SMILES):
 if __name__ == "__main__":
+    # Testing on daidzein (an isoflavonoid) and a negative control.
     test_smiles = [
-        # These are examples of known or putative isoflavonoids:
         "Oc1ccc(cc1)-c1coc2cc(O)ccc2c1=O",  # daidzein (should be True)
-        "O1C2=C(C=C(C)C)C(O)=CC(O)=C2C(=O)C(C3=CC=C(OC)C=C3)=C1",  # Gancaonin M (True)
-        "O1C2=C(C/C=C(/CO)\\C)C(O)=CC(O)=C2C(=O)C(C3=C(O)C=C(O)C=C3)=C1",  # 2,3-Dehydrokievitol (True)
-        # A negative control:
-        "CC(=O)O",  # acetic acid (False)
+        "CC(=O)O",  # Acetic acid (negative control)
     ]
     for smi in test_smiles:
         classification, reason = is_isoflavonoid(smi)
