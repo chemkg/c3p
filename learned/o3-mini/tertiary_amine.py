@@ -4,16 +4,16 @@ Classifies: CHEBI:32876 tertiary amine
 #!/usr/bin/env python3
 """
 Classifies: A tertiary amine
-A tertiary amine is defined as a compound formally derived from ammonia by replacing
-three hydrogen atoms by hydrocarbyl groups.
-Our approach is to first find any neutral nitrogen atoms with no directly attached hydrogens 
-and exactly three neighbors that are carbon (using a SMARTS pattern). We then further require:
-  • That the N is not aromatic.
-  • That none of its three C neighbors is directly involved in a carbonyl (C=O) bond.
-  • That not all three substituents are aromatic (i.e. at least one substituent should be aliphatic),
-    consistent with the usual notion that a tertiary amine is not simply an N-(aryl)3.
-If one candidate passes all tests we classify the molecule as a tertiary amine.
-Note: This is a heuristic filter that may mis‐classify edge‐cases.
+
+A tertiary amine is defined as “a compound formally derived from ammonia
+by replacing three hydrogen atoms by hydrocarbyl groups.” In our revised
+heuristic we first search for candidate nitrogen atoms that are neutral,
+have no explicit hydrogen atoms, and are bonded to exactly three substituents.
+Then we require that (a) every one of these three neighbors is a carbon atom,
+(b) not all three are aromatic (i.e. at least one is aliphatic), and
+(c) at least two substituents have “ideal” hydrocarbon character – meaning
+    the carbon directly attached to the nitrogen is only attached to carbon or hydrogen.
+This approach is heuristic and may still mis‐classify borderline cases.
 """
 
 from rdkit import Chem
@@ -21,84 +21,77 @@ from rdkit import Chem
 def is_tertiary_amine(smiles: str):
     """
     Determines if a molecule is of the class tertiary amine based on its SMILES string.
-    A tertiary amine is defined here as a neutral nitrogen that has no explicit hydrogen atoms,
-    is connected to exactly three carbon substituents – each presumed to come from a hydrocarbyl group.
-    Additional post-filtering is applied to reduce false positives. 
+    
+    The function looks for a candidate nitrogen atom that:
+      • Is neutral and has no explicit hydrogens (H0) and exactly 3 bonds.
+      • Is connected only to carbon atoms.
+      • Has at least one aliphatic substituent (not all substituents are aromatic).
+      • Has at least 2 substituents where the carbon attached directly to the N has
+        an "ideal" hydrocarbon environment (its neighbors besides the N are only C or H).
     
     Args:
-       smiles (str): SMILES string of the molecule.
+       smiles (str): SMILES string representation of the molecule.
        
     Returns:
-       bool: True if the molecule qualifies as a tertiary amine,
-             False otherwise.
-       str: Reason for the classification.
+       bool: True if a candidate tertiary amine center passes all checks, False otherwise.
+       str: A reason describing the result.
     """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Our SMARTS pattern finds a nitrogen atom that:
-    #   - Is not positively charged (! $([N+]))
-    #   - Has no attached explicit hydrogen atoms (H0)
-    #   - Has exactly 3 neighbors (D3)
-    #   - And each of its three substituents is a carbon atom ([$([#6])])
-    tertiary_amine_smarts = "[N;!$([N+]);H0;D3]([$([#6])])([$([#6])])([$([#6])])"
-    pattern = Chem.MolFromSmarts(tertiary_amine_smarts)
-    
+    # This SMARTS finds a neutral nitrogen with no explicit H and exactly 3 neighbors.
+    # (We do not require here that each neighbor is carbon; that will be checked later.)
+    pattern = Chem.MolFromSmarts("[N;!$([N+]);H0;D3]")
     matches = mol.GetSubstructMatches(pattern)
     if not matches:
-        return False, "No tertiary amine center found"
+        return False, "No tertiary amine candidate (N with H0 and D3) found"
     
-    # Iterate over each candidate nitrogen atom to perform additional filtering.
+    # Helper function to judge if the substituent (the carbon directly attached to N)
+    # has an "ideal" hydrocarbon neighborhood. We only inspect the immediate neighbors
+    # (excluding the candidate N) and require that all are carbon or hydrogen.
+    def is_ideal_substituent(carbon_atom, parentN_idx):
+        for nb in carbon_atom.GetNeighbors():
+            if nb.GetIdx() == parentN_idx:
+                continue
+            if nb.GetAtomicNum() not in (6, 1):
+                return False
+        return True
+    
+    # Now, evaluate each candidate nitrogen.
     for match in matches:
-        n_idx = match[0]  # The 0th atom in the match is our nitrogen.
+        n_idx = match[0]
         n_atom = mol.GetAtomWithIdx(n_idx)
+        # Check that all 3 neighbors are carbon.
+        neighbors = n_atom.GetNeighbors()
+        if any(nb.GetAtomicNum() != 6 for nb in neighbors):
+            continue  # This candidate's substituents are not all hydrocarbyl.
         
-        # 1. The nitrogen should not be aromatic.
-        if n_atom.GetIsAromatic():
-            continue  # Skip candidate
-        
-        # 2. Among its three attached atoms (should be carbons by our SMARTS pattern),
-        #    check that none is directly involved in a C=O (carbonyl) double bond.
-        neighbor_idxs = [nbr.GetIdx() for nbr in n_atom.GetNeighbors()]
-        has_carbonyl_neighbor = False
-        aromatic_substituent_count = 0
-        for nbr in n_atom.GetNeighbors():
-            # We already require by SMARTS that neighbor is carbon.
-            if nbr.GetAtomicNum() != 6:
-                has_carbonyl_neighbor = True
-                break
-            # Count substituents that are aromatic.
-            if nbr.GetIsAromatic():
-                aromatic_substituent_count += 1
-            # Check bonds from the neighbor: if any double bond to oxygen is found, mark it.
-            for bond in nbr.GetBonds():
-                # Get the atom at the other end of the bond.
-                other = bond.GetOtherAtom(nbr)
-                # If the neighbor is part of a C=O, we expect a double bond to atomic number 8.
-                if other.GetAtomicNum() == 8 and bond.GetBondTypeAsDouble() == 2.0:
-                    has_carbonyl_neighbor = True
-                    break
-            if has_carbonyl_neighbor:
-                break
-        
-        if has_carbonyl_neighbor:
-            continue  # This candidate N is attached to a carbonyl carbon; skip.
-        
-        # 3. To avoid cases where the nitrogen is attached only to aromatic carbons,
-        #    at least one substituent must be aliphatic (non‐aromatic).
-        if aromatic_substituent_count == 3:
+        # Count how many substituents are "ideal" and how many are aliphatic.
+        ideal_count = 0
+        aliphatic_count = 0
+        for nb in neighbors:
+            if is_ideal_substituent(nb, n_idx):
+                ideal_count += 1
+            # Use the atom's aromatic flag: if not aromatic, assume aliphatic.
+            if not nb.GetIsAromatic():
+                aliphatic_count += 1
+
+        # Require at least one of the three groups be aliphatic.
+        if aliphatic_count < 1:
             continue
-        
-        # If we reach here, this candidate appears acceptable.
+
+        # Allow the candidate if at least 2 of the 3 substituents have ideal hydrocarbon character.
+        if ideal_count < 2:
+            continue
+
         return True, f"Found tertiary amine center at atom index {n_idx}"
     
-    # If no candidate tertiary amine passes all criteria, return False.
     return False, "No valid tertiary amine center found"
 
-# Optional: testing code (can be removed when using as a module)
+# Optional testing block
 if __name__ == "__main__":
-    examples = {
+    test_examples = {
         "benzphetamine": "C[C@@H](Cc1ccccc1)N(C)Cc1ccccc1",
         "lumefantrine": "CCCCN(CCCC)CC(O)c1cc(Cl)cc2\\C(=C/c3ccc(Cl)cc3)c3cc(Cl)ccc3-c12",
         "(-)-lobeline": "[H][C@]1(CCC[C@]([H])(CC(=O)c2ccccc2)N1C)C[C@H](O)c1ccccc1",
@@ -107,10 +100,13 @@ if __name__ == "__main__":
         "N,N-dimethylethanolamine": "CN(C)CCO",
         "triethylamine": "CCN(CC)CC",
         "(-)-selegiline": "C[C@H](Cc1ccccc1)N(C)CC#C",
-        # A known example that was previously a false positive:
+        # One example previously a false positive:
         "6-chloro-4-...benzopyran-2-one": "CN(CC1=CC=CC=C1F)CC2=CC(=O)OC3=CC(=C(C=C23)Cl)O",
+        # Examples that were originally missed (false negatives):
+        "Tri-allate": "CC(C)N(C(C)C)C(=O)SCC(Cl)=C(Cl)Cl",
+        "Pebulate": "CCCN(CCC)C(=O)SCCC",
+        "EPTC": "CCCN(CCC)C(=O)SCC",
     }
-    
-    for name, smi in examples.items():
+    for name, smi in test_examples.items():
         res, reason = is_tertiary_amine(smi)
         print(f"{name}: {res} - {reason}")
