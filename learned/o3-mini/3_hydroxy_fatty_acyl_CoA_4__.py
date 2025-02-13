@@ -6,98 +6,71 @@ Classifies: 3-hydroxy fatty acyl-CoA(4-)
 Definition:
   "An acyl-CoA(4-) oxoanion arising from deprotonation of the phosphate and diphosphate OH groups 
    of any 3-hydroxy fatty acyl-CoA; major species at pH 7.3."
-
-This version improves on a previous attempt by:
-  • Using a SMARTS pattern for the 3-hydroxy fatty acyl chain that ignores stereochemistry (via [CX3](O)CC(=O)S)
-    and then filtering out candidates where the –OH bearing carbon is directly bonded to an aromatic carbon.
-  • Ensuring that the CoA moiety fragment (“SCCNC(=O)CCNC(=O)”) is present.
-  • Counting deprotonated oxygens in two ways:
-       - via formal charges on oxygen atoms in the molecule,
-       - via a literal count of "[O-]" in the input SMILES.
-    In case both counts return zero but the molecule contains phosphorus (and hence a phosphate group)
-    we assume the deprotonation occurred.
+This classifier checks for:
+  - A 3-hydroxy fatty acyl substructure as indicated by the presence of a hydroxylated carbon 
+    two carbons away from a thioester (i.e., pattern "[C;H1](O)CC(=O)S").
+  - A CoA moiety partial fragment (i.e., the "SCCNC(=O)CCNC(=O)" section commonly seen in CoA).
+  - At least 4 negatively charged oxygens (O with formal charge -1) due to deprotonation.
 """
 
 from rdkit import Chem
+from rdkit.Chem import AllChem
 from rdkit.Chem import rdMolDescriptors
 
 def is_3_hydroxy_fatty_acyl_CoA_4__(smiles: str):
     """
     Determines if a molecule is a 3-hydroxy fatty acyl-CoA(4-) based on its SMILES string.
     
-    The molecule must contain:
-      - A 3-hydroxy fatty acyl chain. We look for a substructure 
-        that matches a carbon with an –OH followed by 2 carbons (the second being the thioester carbonyl)
-        i.e. a fragment matching "[CX3](O)CC(=O)S". In addition, we inspect the candidate so that the 
-        hydroxyl-bearing carbon is not directly attached to an aromatic carbon (which would be more typical for 
-        a substituted aromatic acyl chain rather than a fatty acyl chain).
-      - A CoA moiety defined by the fragment "SCCNC(=O)CCNC(=O)".
-      - At least 4 deprotonated oxygens. We count oxygens carrying a -1 formal charge (via RDKit) 
-        and also count literal occurrences of "[O-]" in the SMILES. In case both return zero but phosphorus
-        atoms are present (as a proxy for a phosphate/diphosphate group) we assume that the CoA would be deprotonated.
-    
+    The molecule should contain:
+      - A 3-hydroxy fatty acyl chain (with the pattern [C;H1](O)CC(=O)S found in examples).
+      - A CoA moiety as indicated by a fragment matching "SCCNC(=O)CCNC(=O)".
+      - At least 4 deprotonated phosphate oxygens (O with a formal charge of -1).
+
+    Args:
+        smiles (str): SMILES string of the molecule.
+
     Returns:
-        (bool, str): A tuple where the first element is True (if the molecule meets all criteria) 
-                     or False otherwise, and the second element is a string explaining the decision.
+        bool: True if molecule is a 3-hydroxy fatty acyl-CoA(4-), False otherwise.
+        str: Explanation/reason for the classification.
     """
-    # Parse the input SMILES string.
+    
+    # Parse the SMILES string to a molecule
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
 
-    # Define a SMARTS pattern for the 3-hydroxy fatty acyl fragment.
-    # We lose any stereochemistry in this step by using [CX3] (3-coordinate carbon).
-    acyl_pattern = Chem.MolFromSmarts("[CX3](O)CC(=O)S")
-    if acyl_pattern is None:
-        return False, "Failed to generate acyl substructure SMARTS pattern"
-        
-    acyl_matches = mol.GetSubstructMatches(acyl_pattern)
-    valid_acyl = False
-    for match in acyl_matches:
-        # match[0] corresponds to the carbon bearing the hydroxyl (the –OH carbon)
-        acyl_carbon = mol.GetAtomWithIdx(match[0])
-        # Check neighbor atoms (other than the attached O from –OH) to see if any of them is aromatic.
-        # If an aromatic carbon is directly attached, this candidate is suspect (e.g. 3-hydroxy-3-(3,4-dihydroxyphenyl)propanoate)
-        neighbor_aromatic = False
-        for nbr in acyl_carbon.GetNeighbors():
-            # Exclude oxygen from the –OH group.
-            if nbr.GetAtomicNum() == 8:
-                continue
-            if nbr.GetAtomicNum() == 6 and nbr.GetIsAromatic():
-                neighbor_aromatic = True
-                break
-        if not neighbor_aromatic:
-            valid_acyl = True
-            break
-            
-    if not valid_acyl:
-        return False, "No valid 3-hydroxy fatty acyl substructure ([CX3](O)CC(=O)S) found without aromatic interference"
+    # Define SMARTS pattern for 3-hydroxy fatty acyl part.
+    # This pattern looks for a carbon with an -OH, followed by CH2 and a C(=O)S group.
+    hydroxy_acyl_pattern = Chem.MolFromSmarts("[C;H1](O)CC(=O)S")
+    if hydroxy_acyl_pattern is None:
+        return False, "Failed to generate acyl substructure pattern"
+    
+    if not mol.HasSubstructMatch(hydroxy_acyl_pattern):
+        return False, "No 3-hydroxy fatty acyl substructure pattern ([C](O)CC(=O)S) found"
 
-    # Define a SMARTS for the CoA moiety fragment.
+    # Define SMARTS pattern for a CoA moiety fragment.
+    # We require the fragment "SCCNC(=O)CCNC(=O)" which is common in all provided examples.
     coa_pattern = Chem.MolFromSmarts("SCCNC(=O)CCNC(=O)")
     if coa_pattern is None:
-        return False, "Failed to generate CoA moiety SMARTS pattern"
+        return False, "Failed to generate CoA moiety pattern"
     
     if not mol.HasSubstructMatch(coa_pattern):
         return False, "No CoA moiety fragment (SCCNC(=O)CCNC(=O)) detected"
-    
-    # Count deprotonated oxygens in two ways.
-    neg_ox_rdkit = sum(1 for atom in mol.GetAtoms() 
-                         if atom.GetAtomicNum() == 8 and atom.GetFormalCharge() == -1)
-    neg_ox_smiles = smiles.count("[O-]")
-    neg_ox = max(neg_ox_rdkit, neg_ox_smiles)
-    
-    # If neither method detected any negative oxygen but the molecule contains phosphorus, assume it is deprotonated.
-    if neg_ox == 0:
-        has_phosphorus = any(atom.GetAtomicNum() == 15 for atom in mol.GetAtoms())
-        if has_phosphorus:
-            neg_ox = 4  # Assume full deprotonation as expected in CoA(4-)
-    
-    if neg_ox < 4:
-        return False, f"Insufficient deprotonated phosphate oxygens: found {neg_ox}, need at least 4"
-    
-    return True, "Molecule contains a valid 3-hydroxy fatty acyl chain and CoA moiety with at least 4 deprotonated oxygen(s) (CoA(4-))"
 
-# Example usage (for testing):
-# test_smiles = "CC\\C=C/C\\C=C/C\\C=C/C\\C=C/C\\C=C/C\\C=C/CC[C@H](O)CC(=O)SCCNC(=O)CCNC(=O)[C@H](O)C(C)(C)COP([O-])(=O)OP([O-])(=O)OC[C@H]1O[C@H]([C@H](O)[C@@H]1OP([O-])([O-])=O)n1cnc2c(N)ncnc12"
+    # Count the number of oxygens carrying a -1 formal charge.
+    neg_oxygens = 0
+    for atom in mol.GetAtoms():
+        if atom.GetAtomicNum() == 8 and atom.GetFormalCharge() == -1:
+            neg_oxygens += 1
+            
+    if neg_oxygens < 4:
+        return False, f"Insufficient deprotonated phosphate oxygens: found {neg_oxygens}, need at least 4"
+
+    # Optional additional checks can include molecular weight, total atom counts, or rotatable bonds.
+    # For this classification, our key substructure matches and negative charge count suffice.
+    
+    return True, "Molecule contains the 3-hydroxy fatty acyl chain and CoA moiety with at least 4 deprotonated oxygens (CoA(4-))"
+
+# Example usage (uncomment for testing):
+# test_smiles = "CCCCCCCCCCCCCC[C@@H](O)CC(=O)SCCNC(=O)CCNC(=O)[C@H](O)C(C)(C)COP([O-])(=O)OP([O-])(=O)OC..."
 # print(is_3_hydroxy_fatty_acyl_CoA_4__(test_smiles))
