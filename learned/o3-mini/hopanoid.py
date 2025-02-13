@@ -3,9 +3,11 @@ Classifies: CHEBI:51963 hopanoid
 """
 """
 Classifies: A hopanoid, defined as a triterpenoid based on a hopane skeleton.
-A true hopanoid should have a fused (≥5 rings) polycyclic core with a characteristic 
-6–6–6–6–5 ring arrangement (i.e. at least one 5-membered ring and at least 3 six‐membered rings 
-in the fused system) and a sufficient number of carbon atoms in the core (around 30).
+A hopanoid is (roughly) expected to have a saturated, fused polycyclic core 
+with ≥5 rings (with at least one five‐membered ring and three six‐membered rings)
+and a total carbon count in the molecule (or core) near 30. Additional criteria 
+are used to reduce false positives (for example, many aromatic rings are not typical).
+Note: If the classification is too uncertain, the function may return (None, None).
 """
 from rdkit import Chem
 
@@ -13,34 +15,43 @@ def is_hopanoid(smiles: str):
     """
     Determines if a molecule belongs to the hopanoid class based on its SMILES string.
     
-    A hopanoid is defined as a triterpenoid based on a hopane skeleton – that is, the molecule
-    should possess a fused polycyclic core of at least 5 rings. In hopanoids the pentacyclic skeleton 
-    tends to have a specific 6–6–6–6–5 ring arrangement (i.e. one of the rings is 5-membered, while 
-    at least three rings are 6-membered) and the fused core should contain roughly 30 carbon atoms.
+    The molecule must have a fused polycyclic core (a connected group of rings, sharing at least
+    two atoms per pair) with at least 5 rings, at least one of which is 5-membered and at least three
+    that are 6-membered, and the overall molecule should be roughly in the triterpenoid range
+    (total carbon count between 25 and 40) with a high sp3 fraction (most carbons are saturated).
     
     Args:
         smiles (str): SMILES string of the molecule.
     
     Returns:
-        bool: True if the molecule is recognized as a hopanoid, False otherwise.
+        bool: True if the molecule is classified as a hopanoid, False otherwise.
         str: Explanation for the classification decision.
     """
-    # Parse SMILES
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Get ring information: each ring is a tuple of atom indices.
+    # Get overall carbon count in the molecule.
+    all_atoms = list(mol.GetAtoms())
+    total_carbon = sum(1 for atom in all_atoms if atom.GetAtomicNum() == 6)
+    if total_carbon < 25 or total_carbon > 40:
+        return False, f"Total carbon count ({total_carbon}) is outside expected triterpenoid range (25-40)"
+    
+    # Calculate sp3 carbon fraction (hopanoids are highly saturated).
+    carbons = [atom for atom in all_atoms if atom.GetAtomicNum() == 6]
+    nsp3 = sum(1 for atom in carbons if atom.GetHybridization() == Chem.rdchem.HybridizationType.SP3)
+    sp3_fraction = nsp3/len(carbons) if carbons else 0
+    if sp3_fraction < 0.7:
+        return False, f"Low sp3 fraction ({sp3_fraction:.2f}) among carbons; hopanoids are expected to be highly saturated"
+    
+    # Get ring information from RDKit. (Each ring is returned as a tuple of atom indices.)
     ring_info = mol.GetRingInfo().AtomRings()
     num_rings = len(ring_info)
-    
     if num_rings < 5:
         return False, f"Found only {num_rings} rings; hopanoid core requires at least 5 fused rings"
     
-    # For each ring, get a set of atom indices.
-    ring_sets = [set(ring) for ring in ring_info]
-    
-    # Build an adjacency graph between rings: two rings are fused if they share >=2 atoms.
+    # Create sets so we can test “fused” rings (we define rings as fused if they share ≥2 atoms)
+    ring_sets = [set(r) for r in ring_info]
     n = len(ring_info)
     adj = {i: set() for i in range(n)}
     for i in range(n):
@@ -48,8 +59,8 @@ def is_hopanoid(smiles: str):
             if len(ring_sets[i].intersection(ring_sets[j])) >= 2:
                 adj[i].add(j)
                 adj[j].add(i)
-    
-    # Find connected components (clusters of fused rings) using DFS.
+                
+    # Find connected components (clusters of fused rings) via DFS.
     visited = set()
     components = []
     for i in range(n):
@@ -68,36 +79,43 @@ def is_hopanoid(smiles: str):
         visited |= comp
         components.append(comp)
     
-    # Identify the largest fused cluster.
+    # Use the largest fused ring cluster for further criteria.
     max_component = max(components, key=lambda comp: len(comp))
     if len(max_component) < 5:
-        return False, (f"Largest group of fused rings has {len(max_component)} rings; "
-                       f"hopanoid core requires at least 5 fused rings")
+        return False, f"Largest group of fused rings has {len(max_component)} rings; hopanoid core requires at least 5 fused rings"
     
-    # Now, for the rings in the largest fused cluster, check ring sizes.
-    # We extract the list of ring sizes.
-    ring_sizes = [len(ring_info[i]) for i in max_component]
-    
-    # Check for presence of at least one 5-membered ring and at least three 6-membered rings.
-    num_5 = sum(1 for size in ring_sizes if size == 5)
-    num_6 = sum(1 for size in ring_sizes if size == 6)
+    # Check the ring sizes in the cluster.
+    cluster_ring_sizes = [len(ring_info[i]) for i in max_component]
+    num_5 = sum(1 for size in cluster_ring_sizes if size == 5)
+    num_6 = sum(1 for size in cluster_ring_sizes if size == 6)
     if num_5 < 1:
-        return False, f"Largest fused ring cluster does not contain any 5-membered ring; hopanoid core requires a 5-membered ring"
+        return False, "Fused ring cluster does not contain any 5-membered ring; hopanoid core requires at least one"
     if num_6 < 3:
-        return False, f"Largest fused ring cluster contains only {num_6} six-membered rings; hopanoid core requires at least 3 six-membered rings"
+        return False, f"Fused ring cluster contains only {num_6} six-membered rings; at least 3 are required"
     
-    # Next, measure the carbon count in the fused core: take the union of atoms in the largest cluster.
-    fused_atom_indices = set()
+    # Get all atoms that participate in the fused cluster (union over constituent rings).
+    fused_atoms = set()
     for i in max_component:
-        fused_atom_indices |= ring_sets[i]
+        fused_atoms |= ring_sets[i]
     
-    # Count only carbon atoms in the fused core.
-    carbon_count = sum(1 for idx in fused_atom_indices if mol.GetAtomWithIdx(idx).GetAtomicNum() == 6)
-    if carbon_count < 30:
-        return False, f"Fused core contains only {carbon_count} carbon atoms; expected at least 30 carbons in a hopanoid skeleton"
+    # Ensure that none of the atoms in the core are aromatic.
+    for idx in fused_atoms:
+        if mol.GetAtomWithIdx(idx).GetIsAromatic():
+            return False, "Fused ring core contains aromatic atoms; hopanoid cores are typically fully alicyclic (non‐aromatic)"
     
-    return True, (f"Contains fused polycyclic structure (largest cluster of {len(max_component)} rings with "
-                  f"ring sizes {ring_sizes}) and fused core has {carbon_count} carbons, consistent with a hopanoid skeleton")
+    # (Optional) One could try to “recover” additional carbons that belong to the core by expanding
+    # one bond out from the fused rings. However, given inconsistent ring perception for hopane-like
+    # backbones by RDKit, we use here the union of the rings from the fused cluster.
+    fused_core_carbons = sum(1 for idx in fused_atoms if mol.GetAtomWithIdx(idx).GetAtomicNum() == 6)
+    # Note: In some hopanoids the union appears lower than the “true” 30. If fused_core_carbons is very low,
+    # we are reluctant to classify as hopanoid.
+    if fused_core_carbons < 20:
+        return False, f"Fused core appears to contain only {fused_core_carbons} carbon atoms; too few for a hopane skeleton"
+    
+    # If you reached here, we consider the molecule to meet many of the expected criteria.
+    return True, (f"Contains a fused polycyclic structure (largest cluster with {len(max_component)} rings, ring sizes: {cluster_ring_sizes}) "
+                  f"and overall molecule has {total_carbon} carbons with high sp3 fraction ({sp3_fraction:.2f}), "
+                  f"consistent with a hopanoid skeleton")
 
 # Example usage (for testing):
 if __name__ == "__main__":
