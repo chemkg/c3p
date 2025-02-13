@@ -2,130 +2,152 @@
 Classifies: CHEBI:87657 octanoate ester
 """
 """
-Classifies: Octanoate ester 
+Classifies: Octanoate ester
 Definition: Any fatty acid ester in which the carboxylic acid component is octanoic acid (caprylic acid).
 
 Improvement rationale:
-  • Instead of merely checking for the substring "CCCCCCCC(=O)O", we search for ester groups.
-  • For each ester group we identify the acyl fragment attached to the carbonyl carbon.
-  • We then traverse that chain (ensuring it is an unbranched aliphatic chain with only single bonds)
-    and count the number of carbons. An octanoate ester must have an acyl group with exactly eight carbons
-    (the carbonyl carbon counts as one).
+  • Instead of simply verifying the presence of an ester, we inspect each ester group found.
+  • For each ester, we identify the acyl (acid) side and “walk” along its carbon skeleton
+    following only single bonds between sp3 carbons, ensuring that the chain is linear.
+  • We then check that exactly eight carbons are present (the carbonyl carbon plus 7 more)
+    and that the terminal carbon is a methyl group.
+  • Only then do we consider the ester to be derived from octanoic acid.
+  
+Note: This method may not be perfect for every edge case but is a step toward reducing false positives.
 """
+
 from rdkit import Chem
 from rdkit.Chem import rdchem
 
-def _count_linear_acyl_chain(mol: rdchem.Mol, carbonyl, acyl_neighbor):
+def _get_linear_acyl_chain(mol: rdchem.Mol, carbonyl, acyl_neighbor):
     """
-    Starting from the carbonyl carbon (already counted as 1) and its acyl side neighbor,
-    follow the chain along single bonds between sp3 carbons that form a linear (nonbranching) alkyl chain.
-    Return the total number of carbons in the acyl chain (including the carbonyl carbon).
-    If a branch is encountered, then the chain is not linear and we return None.
+    Traverses from the carbonyl carbon through the acyl chain
+    following single bonds between sp3 carbons.
+    
+    Args:
+        mol (rdchem.Mol): The molecule.
+        carbonyl (Atom): The carbonyl carbon atom (starts the chain).
+        acyl_neighbor (Atom): The neighbor (sp3 carbon) attached to the carbonyl that begins the chain.
+        
+    Returns:
+        list: A list of atoms in order from the carbonyl to the end of the chain,
+              if the chain is linear. Returns None if a branch is encountered.
     """
-    count = 1  # starting with the carbonyl carbon
+    # Start chain with the carbonyl carbon and the neighbor.
+    chain = [carbonyl, acyl_neighbor]
     prev_atom = carbonyl
     current = acyl_neighbor
-    # Check that the acyl neighbor is a saturated carbon
-    if current.GetAtomicNum() != 6:
-        return None
-    # Increase count for the acyl neighbor
-    count += 1
-
+    
     while True:
-        # Find carbon neighbors of current that are not the one we came from.
-        next_carbons = []
+        # Look for next carbon neighbors (exclude the atom we came from)
+        next_atoms = []
         for nbr in current.GetNeighbors():
             if nbr.GetIdx() == prev_atom.GetIdx():
                 continue
+            # Only follow carbon atoms with single bonds.
             if nbr.GetAtomicNum() == 6:
-                # Also ensure the bond is a single bond
                 bond = mol.GetBondBetweenAtoms(current.GetIdx(), nbr.GetIdx())
                 if bond is not None and bond.GetBondType() == rdchem.BondType.SINGLE:
-                    next_carbons.append(nbr)
-        if len(next_carbons) == 0:
-            # End of chain reached
+                    next_atoms.append(nbr)
+        if len(next_atoms) == 0:
+            # End of chain reached.
             break
-        elif len(next_carbons) == 1:
-            # Linear continuation
+        elif len(next_atoms) == 1:
+            # Continue linearly.
             prev_atom = current
-            current = next_carbons[0]
-            count += 1
+            current = next_atoms[0]
+            chain.append(current)
         else:
-            # Branch detected; not a linear fatty acid chain.
+            # Branching encountered, so not a linear chain.
             return None
-    return count
+    return chain
 
 def is_octanoate_ester(smiles: str):
     """
     Determines if a molecule is an octanoate ester based on its SMILES string.
-    An octanoate ester is defined as any fatty acid ester in which the acid component is octanoic acid.
-    Octanoic acid contains 8 carbons (CH3(CH2)6COOH); hence the acyl group has exactly eight carbons,
-    counting the carbonyl carbon.
+    An octanoate ester is defined as a fatty acid ester whose acid part is derived from octanoic acid.
     
-    The algorithm works as follows:
-      1. Parse the SMILES to obtain the molecule.
-      2. Find ester groups using the SMARTS pattern for an ester fragment [#6](=O)[O].
-      3. For each match (the carbonyl carbon and the ester oxygen), identify the acyl side by taking the
-         carbonyl neighbor that is not the ester oxygen.
-      4. Traverse this acyl chain as a linear series of sp3 carbons (single bonds only) and count the total
-         number of carbons. If the count equals 8, then the acid component must be octanoic acid.
+    Octanoic acid has 8 carbons in total:
+       CH3(CH2)6C(=O)OH
+    In an ester the acidic –OH is replaced, so we want to see a chain of exactly 8 carbons
+    (with the carbonyl counting as one) that is linear and with the terminal carbon being CH3.
+    
+    The algorithm:
+      1. Parses the SMILES string.
+      2. Finds ester groups using the SMARTS pattern "[#6X3](=O)[OX2H0]".
+      3. For each match, identifies the acyl neighbor of the carbonyl
+         (i.e. the carbon attached to the carbonyl, not the ester oxygen).
+      4. Traverses the acyl chain in a strictly linear fashion.
+      5. Checks that the acyl chain has exactly 8 carbons and ends in a methyl group.
     
     Args:
         smiles (str): SMILES string of the molecule.
     
     Returns:
-        bool: True if the molecule contains an octanoate ester moiety, False otherwise.
-        str: Reason for the classification.
+        (bool, str): True and a reason if the molecule contains an octanoate ester moiety,
+                     False and a reason otherwise.
     """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # SMARTS pattern for an ester group:
-    # The pattern [#6](=O)[O] matches a carbonyl carbon (atomic number 6, with three connections)
-    # attached via a double bond to oxygen and single bond to an oxygen.
+    # SMARTS for an ester group: a carbonyl carbon (sp2 carbon, atomic number 6, 3 connected atoms)
+    # with a double bond to oxygen and a single bond to an oxygen (not an -OH)
     ester_smarts = "[#6X3](=O)[OX2H0]"
     ester_pattern = Chem.MolFromSmarts(ester_smarts)
     if ester_pattern is None:
-        return None, None  # something went wrong
+        return None, None
     
     matches = mol.GetSubstructMatches(ester_pattern)
     if not matches:
         return False, "No ester group found in molecule"
     
-    # Look at each ester match and test the acyl chain length.
+    # Check each ester match.
     for match in matches:
         # In the SMARTS, match[0] is the carbonyl carbon and match[1] is the ester oxygen.
         carbonyl = mol.GetAtomWithIdx(match[0])
         ester_oxygen = mol.GetAtomWithIdx(match[1])
         
-        # Identify the acyl-chain neighbor of the carbonyl carbon (ignore the oxygen).
-        acyl_neighbors = [nbr for nbr in carbonyl.GetNeighbors() if nbr.GetIdx() != ester_oxygen.GetIdx() and nbr.GetAtomicNum() == 6]
+        # Identify the other neighbor of the carbonyl: the acyl chain side.
+        acyl_neighbors = []
+        for nbr in carbonyl.GetNeighbors():
+            # Exclude the ester oxygen as well as the carbonyl's double-bonded oxygen.
+            if nbr.GetIdx() == ester_oxygen.GetIdx():
+                continue
+            # The acyl chain should be a carbon.
+            if nbr.GetAtomicNum() == 6:
+                acyl_neighbors.append(nbr)
         if not acyl_neighbors:
-            continue  # no acyl side found in this ester
-        
-        # We assume there is only one acyl side (if more, each will be checked)
-        acyl_neighbor = acyl_neighbors[0]
-        chain_len = _count_linear_acyl_chain(mol, carbonyl, acyl_neighbor)
-        if chain_len is None:
-            # chain is not linear so skip
-            continue
-        
-        # For octanoate ester the acyl chain length must be exactly 8 carbons (including the carbonyl carbon).
-        if chain_len == 8:
+            continue  # no acyl branch found in this ester
+        # We check each possible acyl neighbor.
+        for acyl in acyl_neighbors:
+            # Get the full linear chain from the carbonyl outward.
+            chain = _get_linear_acyl_chain(mol, carbonyl, acyl)
+            if chain is None:
+                continue  # chain was branched or not linear
+            # We expect exactly 8 carbons in the acyl chain for octanoic acid.
+            if len(chain) != 8:
+                continue
+            # Additionally, check the terminal carbon is a methyl group:
+            # it should have exactly one carbon neighbor (the previous atom in the chain)
+            terminal = chain[-1]
+            carbon_neighbors = [nbr for nbr in terminal.GetNeighbors() if nbr.GetAtomicNum() == 6]
+            if len(carbon_neighbors) != 1:
+                continue
+            # If all conditions are met, we classify this as an octanoate ester.
             return True, "Molecule contains an octanoate ester moiety"
-    
+        
     return False, "Molecule does not contain an octanoate ester moiety"
 
-# Example usage:
+# Example usage and testing:
 if __name__ == "__main__":
     test_smiles_list = [
-        "CCCCCCCC(=O)OCC",  # ethyl octanoate
-        "CCCCCCCC(=O)OC",   # methyl octanoate
-        "CC(=O)OCCCCCCCC(=O)O",  # a molecule with one octanoate ester and one acetyl group
-        "CCCCCCCC(=O)OC[C@H](O)CO", # 1-octanoyl-sn-glycerol
-        # Some false positive example (should not match):
-        "CCC(=O)O[C@H]1[C@H](C)O[C@H](C[C@@]1(C)O)...",  # truncated leucomycin like SMILES
+        "CCCCCCCC(=O)OCC",  # ethyl octanoate - expect True
+        "CCCCCCCC(=O)OC",   # methyl octanoate - expect True
+        "CCCCCCCC(=O)OC[C@H](O)CO", # 1-octanoyl-sn-glycerol - expect True
+        "CC(=O)OCCCCCCCC(=O)O",  # one octanoate, one acetyl ester - expect True only if an octanoate is present
+        # A false positive example from prior results may be a phosphocholine ester (if its acyl chain is octanoyl)
+        "P(OC[C@@H](CO)OC(CCCCCCC)=O)(=O)(OCC[N+](C)(C)C)[O-]",  # 2-octanoyl-sn-glycero-3-phosphocholine; expecting False
     ]
     for smi in test_smiles_list:
         result, reason = is_octanoate_ester(smi)
