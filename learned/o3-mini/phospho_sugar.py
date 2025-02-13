@@ -3,8 +3,13 @@ Classifies: CHEBI:33447 phospho sugar
 """
 """
 Classifies: Phospho sugars 
-Definition: Any monosaccharide (here assumed to contain a 5- or 6-membered ring with exactly one ring oxygen) 
-that contains an alcoholic –OH that is esterified with phosphoric acid (i.e. has a phosphate group attached via oxygen).
+Definition: Any monosaccharide (cyclic OR open‐chain sugar-like polyol) that contains 
+an alcoholic –OH esterified with phosphoric acid.
+The algorithm first looks for a phosphate group. It then checks if the oxygen that 
+links the phosphate to the rest of the molecule is attached to a carbon that either 
+(a) is part of a 5- or 6-membered ring containing exactly one oxygen (a typical cyclic sugar)
+or 
+(b) is part of a contiguous carbon chain in which at least two carbons bear hydroxyl groups.
 """
 
 from rdkit import Chem
@@ -13,97 +18,117 @@ from rdkit.Chem import rdMolDescriptors
 def is_phospho_sugar(smiles: str):
     """
     Determines if a molecule is a phospho sugar based on its SMILES string.
-    Definition (in this implementation):
-      - The molecule contains a sugar ring, defined as a 5- or 6-membered ring with exactly one oxygen atom.
-      - The molecule contains a phosphate ester group. This is detected by finding a phosphorus atom
-        that has at least one double-bonded oxygen (indicating a P=O) and that is connected via an oxygen 
-        (the ester oxygen) to either the ring directly or to a substituent attached to a ring atom.
+    We require that a phosphate group is found (P with a P=O) and that one of its ester 
+    oxygen atoms is attached to a carbon that is part of a sugar ring (5- or 6-membered ring with one oxygen)
+    or is a part of an open-chain polyol (determined from a short DFS that finds at least 2 extra OH groups).
     
     Args:
-        smiles (str): SMILES string of the molecule.
-
+       smiles (str): SMILES string of the molecule.
     Returns:
-        bool: True if molecule is classified as a phospho sugar, False otherwise.
-        str: Reason for the classification decision.
+       bool: True if classified as phospho sugar, False otherwise.
+       str: A reason for the decision.
     """
-    # Parse the SMILES string.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
 
-    # --- STEP 1: Find a candidate sugar ring ---
-    # We look for rings of size 5 or 6 that have exactly one oxygen atom.
-    ring_info = mol.GetRingInfo()
-    atom_rings = ring_info.AtomRings()
-    sugar_ring_indices = []  # will hold indices of atoms in one of the sugar rings, if found
-    found_sugar_ring = False
-    
-    for ring in atom_rings:
-        if len(ring) in (5, 6):
-            # Count the number of oxygen atoms in the ring.
-            o_count = sum(1 for idx in ring if mol.GetAtomWithIdx(idx).GetAtomicNum() == 8)
-            if o_count == 1:
-                sugar_ring_indices = list(ring)
-                found_sugar_ring = True
-                break
-    if not found_sugar_ring:
-        return False, "No sugar ring detected (no 5- or 6-membered ring with exactly one oxygen found)"
-
-    # --- STEP 2: Look for a phosphate ester group ---
-    # A phosphate group typically has a phosphorus atom (atomic num 15)
-    # bonded to at least one oxygen atom via a double bond (P=O).
-    phosphate_found = False
-    # Also track if the connecting oxygen is linked to the sugar ring.
-    phosphate_connected_to_sugar = False
-
-    # Iterate over all atoms looking for an oxygen that is connected to a phosphorus.
+    # --- STEP 1: Identify candidate phosphate groups.
+    # We iterate over phosphorus atoms that have at least one double-bonded oxygen (P=O).
+    phosphate_candidates = []
     for atom in mol.GetAtoms():
-        # Check if current atom is oxygen (atomic num 8)
-        if atom.GetAtomicNum() != 8:
+        if atom.GetAtomicNum() != 15:
             continue
-        for neighbor in atom.GetNeighbors():
-            if neighbor.GetAtomicNum() == 15:  # phosphorus found
-                p_atom = neighbor
-                # Check that the phosphorus has at least one double-bonded oxygen (P=O)
-                has_double_bonded_O = False
-                for bond in p_atom.GetBonds():
-                    # Get the other atom of the bond.
-                    other = bond.GetOtherAtom(p_atom)
-                    if other.GetAtomicNum() == 8 and bond.GetBondTypeAsDouble() == 2.0:
-                        has_double_bonded_O = True
-                        break
-                if not has_double_bonded_O:
-                    continue  # not a phosphate-like group
-
-                phosphate_found = True
-                # Now, we expect the O (atom) that is attached to phosphorus to be an ester oxygen.
-                # Check if this oxygen is either part of the sugar ring or attached to an atom in the sugar ring.
-                # First, check if the oxygen itself is in sugar ring.
-                if atom.GetIdx() in sugar_ring_indices:
-                    phosphate_connected_to_sugar = True
-                    break
-                # Otherwise, check its neighbors: is one of them in the sugar ring?
-                for o_neighbor in atom.GetNeighbors():
-                    if o_neighbor.GetIdx() in sugar_ring_indices:
-                        phosphate_connected_to_sugar = True
-                        break
-                if phosphate_connected_to_sugar:
-                    break
-        if phosphate_found and phosphate_connected_to_sugar:
-            break
-
-    if not phosphate_found:
-        return False, "No phosphate group (with a P=O bond) found in the molecule"
+        has_dblO = False
+        for bond in atom.GetBonds():
+            # Check bond: if it is a double bond and the other atom is oxygen.
+            other = bond.GetOtherAtom(atom)
+            if other.GetAtomicNum() == 8 and bond.GetBondTypeAsDouble() == 2.0:
+                has_dblO = True
+                break
+        if has_dblO:
+            phosphate_candidates.append(atom)
     
-    if not phosphate_connected_to_sugar:
-        return False, "Phosphate group found but not connected to the detected sugar ring"
+    if not phosphate_candidates:
+        return False, "No phosphate group (with P=O) found in the molecule"
+        
+    # --- Helper function: Check if a candidate carbon is part of a sugar ring.
+    def in_sugar_ring(carbon_idx):
+        # Look through the rings of the molecule.
+        ring_info = mol.GetRingInfo()
+        for ring in ring_info.AtomRings():
+            if len(ring) in (5, 6) and carbon_idx in ring:
+                # Count the number of oxygen atoms in the ring.
+                o_count = sum(1 for idx in ring if mol.GetAtomWithIdx(idx).GetAtomicNum() == 8)
+                if o_count == 1:
+                    return True
+        return False
 
-    # --- If both criteria are met, classify as phospho sugar ---
-    return True, "Molecule contains a sugar ring and a phosphate ester group attached via an alcoholic oxygen"
+    # --- Helper function: Check if a contiguous carbon-chain (open-chain sugar-like region) exists
+    # starting from candidate carbon. We use a DFS of limited depth (max_depth) and count how many carbons
+    # in this region (including the start) have an attached hydroxyl group (O connected with at least one hydrogen).
+    def has_polyol_environment(start_atom, max_depth=3):
+        visited = set()
+        stack = [(start_atom, 0)]
+        oh_count = 0
+        
+        while stack:
+            atom, depth = stack.pop()
+            if atom.GetIdx() in visited:
+                continue
+            visited.add(atom.GetIdx())
+            # For each carbon, look for attached O bearing at least one hydrogen.
+            for nbr in atom.GetNeighbors():
+                if nbr.GetAtomicNum() == 8:
+                    # We check explicit hydrogens: if the oxygen has any hydrogen neighbor.
+                    for subnbr in nbr.GetNeighbors():
+                        # Note: hydrogen atoms have atomic number 1.
+                        if subnbr.GetAtomicNum() == 1:
+                            oh_count += 1
+                            break
+            if depth < max_depth:
+                for nbr in atom.GetNeighbors():
+                    if nbr.GetAtomicNum() == 6 and nbr.GetIdx() not in visited:
+                        stack.append((nbr, depth + 1))
+        # A minimal polyol environment for a sugar: at least 2 OH groups (besides the one esterified).
+        return oh_count >= 2
+
+    # --- STEP 2: For each phosphate candidate, check its attached oxygens.
+    for p_atom in phosphate_candidates:
+        for bond in p_atom.GetBonds():
+            # We skip bonds that are double bonds (P=O) so only consider ester oxygens.
+            if bond.GetBondTypeAsDouble() == 2.0:
+                continue
+            ester_oxygen = bond.GetOtherAtom(p_atom)
+            if ester_oxygen.GetAtomicNum() != 8:
+                continue
+            # For this ester oxygen, get the neighbor atom (other than the phosphorus).
+            neighbor_atoms = [nbr for nbr in ester_oxygen.GetNeighbors() if nbr.GetIdx() != p_atom.GetIdx()]
+            if not neighbor_atoms:
+                continue
+            # We are expecting the oxygen to be attached to a carbon
+            for n_at in neighbor_atoms:
+                if n_at.GetAtomicNum() != 6:
+                    continue  # not a carbon, skip
+                sugar_candidate = n_at
+                # Option (a): if this carbon is part of a typical sugar ring.
+                if in_sugar_ring(sugar_candidate.GetIdx()):
+                    return True, ("Molecule contains a sugar ring (5-/6-membered with one oxygen) and a phosphate ester " 
+                                  "group attached via an alcoholic oxygen")
+                # Option (b): if not cyclic, check for an open-chain sugar-like (polyol) environment.
+                if has_polyol_environment(sugar_candidate):
+                    return True, ("Molecule contains a polyol environment (open-chain sugar-like) and a phosphate ester group " 
+                                  "attached via an alcoholic oxygen")
+    # If no candidate passed the tests:
+    return False, "Phosphate group found but not connected to a detected sugar-like moiety"
 
 # (Optional) For testing, one can run:
 if __name__ == "__main__":
-    test_smiles = "O[C@H](COP(O)(O)=O)[C@@H](O)CC=O"  # 2-deoxy-D-ribose 5-phosphate example
-    result, reason = is_phospho_sugar(test_smiles)
-    print("Result:", result)
-    print("Reason:", reason)
+    # Feel free to test with one of the provided examples:
+    test_examples = [
+        ("Nc1nc(=O)[nH]c2n(cnc12)[C@H]1C[C@H](O)[C@@H](COP(O)(O)=O)O1", "2-hydroxy-dAMP"),
+        ("O[C@H](COP(O)(O)=O)[C@@H](O)CC=O", "2-deoxy-D-ribose 5-phosphate"),
+        ("O[C@H](COP(O)(O)=O)[C@@H](O)[C@H](O)[C@H](O)COP(O)(O)=O", "D-glucose 1,6-bisphosphate")
+    ]
+    for smi, name in test_examples:
+        result, reason = is_phospho_sugar(smi)
+        print(f"Example: {name}\n SMILES: {smi}\n Result: {result}\n Reason: {reason}\n")
