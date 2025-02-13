@@ -1,103 +1,155 @@
 """
 Classifies: CHEBI:25627 octadecadienoic acid
 """
-#!/usr/bin/env python
 """
 Classifies: Octadecadienoic acid
-Definition: Any straight-chain, C18 polyunsaturated fatty acid having two C=C double bonds.
-In this implementation we require that:
-  - The molecule contains a carboxylic acid group (C(=O)[OH])
-  - Starting from the carboxyl carbon (the C in the acid group) there is a single, linear, unbranched chain of 18 carbon atoms.
-  - Counting only the bonds linking consecutive carbons in that chain (and ignoring the C=O of the acid group),
-    exactly 2 of these bonds are C=C double bonds.
-Note: This procedure is a simplified approach and may not cover all edge cases.
+Definition: Any straight-chain, C18 polyunsaturated fatty acid having exactly two C=C double bonds.
+This implementation:
+  - Searches for a carboxylic acid group (C(=O)[OH])
+  - Selects the acid carbon and then attempts to find a simple (acyclic) carbon-only path
+    from that atom to a terminal methyl group that contains exactly 18 carbons.
+  - In that candidate chain, every bond must be either a single or double bond (no triple bonds)
+  - And exactly two of the chain bonds must be carbon–carbon double bonds.
+Note: This is a simplified approach and may not treat all edge cases.
 """
-
 from rdkit import Chem
-from rdkit.Chem import rdMolDescriptors
 
 def is_octadecadienoic_acid(smiles: str):
     """
     Determines if a molecule is an octadecadienoic acid based on its SMILES string.
-    Octadecadienoic acid is defined as any straight-chain, C18 fatty acid with exactly two C=C double bonds.
+    An octadecadienoic acid is defined as any straight-chain, C18 fatty acid that has exactly
+    two C=C double bonds along the chain.
     
     Args:
         smiles (str): SMILES string of the molecule.
     
     Returns:
-        bool: True if molecule qualifies as octadecadienoic acid, False otherwise.
+        bool: True if the molecule qualifies, False otherwise.
         str: A textual reason for the decision.
     """
-    # Parse the SMILES string into an RDKit molecule object
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Find the carboxylic acid group using SMARTS: C(=O)[OH]
+    # Step 1. Look for the carboxylic acid group using a SMARTS pattern.
+    # We require C(=O)[OH] where the acid carbon is the one with atomic number 6.
     acid_smarts = "C(=O)[OH]"
     acid_pattern = Chem.MolFromSmarts(acid_smarts)
     acid_matches = mol.GetSubstructMatches(acid_pattern)
     if not acid_matches:
         return False, "No carboxylic acid group found"
-        
+    
     # Assume the first match is our acid group.
-    # Identify the acid carbon (the one with atomic number 6) from the match.
     acid_carbon = None
     for atom_idx in acid_matches[0]:
-        if mol.GetAtomWithIdx(atom_idx).GetAtomicNum() == 6:
+        atom = mol.GetAtomWithIdx(atom_idx)
+        if atom.GetAtomicNum() == 6:
             acid_carbon = atom_idx
             break
     if acid_carbon is None:
-        return False, "Carboxylic acid pattern found but no acid carbon identified"
+        return False, "Carboxylic acid group found but no acid carbon identified"
     
-    # Now we try to locate the straight chain of carbons starting from the acid carbon.
-    # In a straight chain, the acid carbon should be attached to exactly one carbon (the chain continuation).
-    chain = [acid_carbon]  # this list of atom indices will represent our candidate fatty acid chain
-    acid_atom = mol.GetAtomWithIdx(acid_carbon)
-    chain_neighbors = [nbr.GetIdx() for nbr in acid_atom.GetNeighbors() if nbr.GetAtomicNum() == 6]
-    if len(chain_neighbors) != 1:
-        return False, f"Acid carbon has {len(chain_neighbors)} carbon neighbors, expected exactly one for a straight-chain fatty acid"
-    next_atom = chain_neighbors[0]
-    chain.append(next_atom)
+    # Helper: DFS to recursively find carbon-only paths of a given length (number of atoms).
+    # We are only following carbon atoms (atomic number 6).
+    def dfs_paths(current, target, max_len, path, paths):
+        if len(path) == max_len:
+            if current == target:
+                paths.append(path.copy())
+            return
+        # Traverse neighbors that are carbons and not already in the path.
+        for nbr in mol.GetAtomWithIdx(current).GetNeighbors():
+            if nbr.GetAtomicNum() != 6:
+                continue
+            if nbr.GetIdx() in path:
+                continue
+            path.append(nbr.GetIdx())
+            dfs_paths(nbr.GetIdx(), target, max_len, path, paths)
+            path.pop()
     
-    # Walk down the chain in a linear, unbranched fashion.
-    # At every step, from the current atom, choose the next carbon neighbor not already in our chain.
-    while len(chain) < 18:
-        current_atom = mol.GetAtomWithIdx(chain[-1])
-        # Get neighbors that are carbon and not already in the chain.
-        cand_neighbors = [nbr.GetIdx() for nbr in current_atom.GetNeighbors() 
-                          if nbr.GetAtomicNum() == 6 and nbr.GetIdx() not in chain]
-        if len(cand_neighbors) == 0:
-            break  # chain ended prematurely
-        if len(cand_neighbors) > 1:
-            return False, f"Branching detected at atom index {chain[-1]} (chain is not straight)"
-        chain.append(cand_neighbors[0])
+    # Identify candidate terminal methyl carbons.
+    # For our purposes a terminal methyl carbon must be carbon with exactly 1 carbon neighbor.
+    candidate_terminals = []
+    for atom in mol.GetAtoms():
+        if atom.GetAtomicNum() != 6:
+            continue
+        # Count neighbors that are carbon atoms.
+        carbon_neighs = [nbr for nbr in atom.GetNeighbors() if nbr.GetAtomicNum() == 6]
+        if len(carbon_neighs) == 1 and atom.GetIdx() != acid_carbon:
+            candidate_terminals.append(atom.GetIdx())
+    if not candidate_terminals:
+        return False, "No terminal methyl group found (as a candidate end of chain)"
     
-    if len(chain) != 18:
-        return False, f"Chain length is {len(chain)}, expected 18 carbons for an octadecadienoic acid"
+    # We now search for a carbon-only path from the acid carbon to a terminal carbon.
+    # In a C18 fatty acid the chain should have exactly 18 carbon atoms (including the acid carbon)
+    target_chain_len = 18
+    valid_chain_found = False
+    found_details = []
     
-    # Verify that the terminal carbon is a methyl group.
-    terminal_atom = mol.GetAtomWithIdx(chain[-1])
-    # For a methyl group (in a straight chain), the only heavy-atom neighbor should be the preceding chain carbon.
-    terminal_carbons = [nbr.GetIdx() for nbr in terminal_atom.GetNeighbors() if nbr.GetAtomicNum() == 6]
-    if len(terminal_carbons) != 1:
-        return False, "Terminal carbon is not a methyl group (unexpected extra carbon neighbors)"
-    
-    # Count the carbon–carbon double bonds along the chain.
-    # We ignore the carbonyl double bond in the acid group.
-    dbl_bond_count = 0
-    for i in range(len(chain) - 1):
-        bond = mol.GetBondBetweenAtoms(chain[i], chain[i+1])
-        if bond is not None and bond.GetBondType() == Chem.BondType.DOUBLE:
-            dbl_bond_count += 1
-    if dbl_bond_count != 2:
-        return False, f"Found {dbl_bond_count} carbon–carbon double bond(s) in the chain, expected exactly 2"
-    
-    return True, "Molecule is a straight-chain C18 fatty acid with 2 C=C bonds"
+    for term in candidate_terminals:
+        paths = []
+        dfs_paths(acid_carbon, term, target_chain_len, [acid_carbon], paths)
+        for p in paths:
+            # p is a candidate chain: it must be exactly 18 carbons.
+            if len(p) != target_chain_len:
+                continue
+            # Check that the path is “straight”.
+            # For each internal carbon (other than first and last), the number of adjacent carbons that are in the chain should be exactly 2.
+            straight = True
+            for i, idx in enumerate(p):
+                # Get neighbors in chain
+                chain_neighs = [nbr for nbr in mol.GetAtomWithIdx(idx).GetNeighbors() 
+                                if nbr.GetAtomicNum() == 6 and nbr.GetIdx() in p]
+                if i == 0 or i == len(p)-1:
+                    if len(chain_neighs) != 1:
+                        straight = False
+                        break
+                else:
+                    if len(chain_neighs) != 2:
+                        straight = False
+                        break
+            if not straight:
+                found_details.append(f"Chain {p} is branched.")
+                continue
+
+            # Check the bonds between consecutive carbons in the chain:
+            dbl_bond_count = 0
+            valid_bond_types = True
+            for i in range(len(p)-1):
+                bond = mol.GetBondBetweenAtoms(p[i], p[i+1])
+                if bond is None:
+                    valid_bond_types = False
+                    break
+                btype = bond.GetBondType()
+                # Allow only SINGLE or DOUBLE bonds.
+                if btype not in (Chem.BondType.SINGLE, Chem.BondType.DOUBLE):
+                    valid_bond_types = False
+                    break
+                if btype == Chem.BondType.DOUBLE:
+                    dbl_bond_count += 1
+            if not valid_bond_types:
+                found_details.append(f"Chain {p} contains a bond that is not single or double.")
+                continue
+            
+            if dbl_bond_count != 2:
+                found_details.append(f"Chain {p} has {dbl_bond_count} C=C bond(s), expected exactly 2.")
+                continue
+
+            # If we are here, we found a valid chain.
+            valid_chain_found = True
+            break
+        if valid_chain_found:
+            break
+
+    if valid_chain_found:
+        return True, "Molecule is a straight-chain C18 fatty acid with exactly 2 C=C bonds"
+    else:
+        # We could not find any valid path. Report the reasons from candidate chains.
+        debug_reasons = "; ".join(found_details) if found_details else "No chain found with the required criteria."
+        return False, f"No valid straight-chain C18 found with exactly 2 C=C bonds. {debug_reasons}"
 
 # Example usage:
 if __name__ == "__main__":
-    # Try one of the given examples:
+    # test one of the provided examples:
     test_smiles = "CCCCCC\\C=C\\C=C/CCCCCCCC(O)=O"  # 9-cis,11-trans-octadecadienoic acid
     result, reason = is_octadecadienoic_acid(test_smiles)
     print(result, reason)
