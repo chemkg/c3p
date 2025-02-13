@@ -4,147 +4,141 @@ Classifies: CHEBI:32863 secondary amine
 """
 Classifies: Secondary Amine
 Definition: A compound formally derived from ammonia by replacing two hydrogen atoms by hydrocarbyl groups.
-A “classic” secondary amine has a nitrogen that (after “ignoring”
-an N–nitroso substituent if present) is bonded to exactly two carbon atoms and (effectively) exactly one hydrogen.
-This program also excludes nitrogen atoms that are part of an amide (i.e. attached to a carbonyl carbon)
-or that are part of an aromatic ring system (such as in pyrrole) where the nitrogen is integrated into the pi system.
+A “classic” secondary amine here is defined as a nitrogen that, after ignoring any nitroso substituents (i.e. a nitrogen double‐bonded to oxygen),
+has exactly two non‐nitroso substituents – both of which are carbon atoms – and an (effective) hydrogen count of one.
+Additionally, we require that the N atom is sp3 hybridized (thus excluding aromatic or planar amide centers).
 """
 
 from rdkit import Chem
+from rdkit.Chem import rdchem
 
 def is_secondary_amine(smiles: str):
     """
-    Determines if a molecule contains at least one secondary amine group.
-    A candidate secondary amine (derived from ammonia, NH3 -> R2NH) is defined here as a nitrogen atom that,
-      1) after “ignoring” any nitroso substituents, has exactly 2 heavy substituents (which must be carbon atoms),
-      2) has an (effective) hydrogen count of exactly 1,
-      3) is not directly bonded to a carbonyl carbon (to rule out amide-like environments),
-      4) and is not part of an aromatic ring (to rule out cases like pyrrole).
-      
+    Determines if a molecule contains at least one classic secondary amine group.
+    Our candidate secondary amine is defined as an sp3-hybridized nitrogen (not in an aromatic system)
+    that, once any attached nitroso substituents (N=O) are ignored, is bonded to exactly two carbon atoms and has one hydrogen.
+    Also, the candidate is rejected if any of its carbon substituents is involved in a carbonyl bond (i.e. C=O), which would indicate an amide environment.
+    
     Args:
         smiles (str): SMILES string of the molecule.
         
     Returns:
-        bool: True if at least one secondary amine group is identified, False otherwise.
+        bool: True if at least one secondary amine group (R2NH) is identified.
         str: A brief explanation of the decision.
     """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Helper function: determine if a carbon atom is part of a carbonyl group.
-    def is_carbonyl(carbon_atom):
-        for bond in carbon_atom.GetBonds():
-            neighbor = bond.GetOtherAtom(carbon_atom)
-            # Check for a double bond to oxygen.
-            if neighbor.GetAtomicNum() == 8 and bond.GetBondTypeAsDouble() == 2.0:
-                return True
+    # Helper: check if a neighboring atom qualifies as a nitroso substituent. We define nitroso as a nitrogen double bonded to oxygen.
+    def is_nitroso(atom):
+        if atom.GetSymbol() != "N":
+            return False
+        for bond in atom.GetBonds():
+            if bond.GetBondType() == rdchem.BondType.DOUBLE:
+                other = bond.GetOtherAtom(atom)
+                if other.GetAtomicNum() == 8:
+                    return True
         return False
     
-    # Helper: check if a neighbor is a nitroso substituent (a nitrogen double-bonded to oxygen)
-    def is_nitroso(neighbor):
-        if neighbor.GetSymbol() != 'N':
+    # Helper: check if a carbon atom is part of a carbonyl. Very crude: we look for a double bond from this carbon to an oxygen.
+    def is_carbonyl(carbon):
+        if carbon.GetAtomicNum() != 6:
             return False
-        for bond in neighbor.GetBonds():
-            if bond.GetBondTypeAsDouble() == 2.0:
-                other = bond.GetOtherAtom(neighbor)
+        for bond in carbon.GetBonds():
+            if bond.GetBondType() == rdchem.BondType.DOUBLE:
+                other = bond.GetOtherAtom(carbon)
                 if other.GetAtomicNum() == 8:
                     return True
         return False
 
-    found = False
-    details_list = []
+    found_candidates = []
     
     # Loop over all atoms that are nitrogen.
     for atom in mol.GetAtoms():
-        if atom.GetSymbol() != 'N':
+        # Must be nitrogen.
+        if atom.GetSymbol() != "N":
             continue
 
-        # Exclude candidate if the N atom is part of an aromatic ring.
-        # (This step tends to remove cases like pyrrole, where the lone pair is in the aromatic pi system.)
-        if atom.IsInRing() and atom.GetIsAromatic():
+        # Only consider sp3 centers to avoid aromatic or planar amide cases.
+        if atom.GetHybridization() != rdchem.HybridizationType.SP3:
             continue
 
-        # Get the total (explicit + implicit) H count.
-        orig_H = atom.GetTotalNumHs()
-
-        # Split neighbors into those that are nitroso (to be “recovered” as lost hydrogens) and others.
-        heavy_neighbors = list(atom.GetNeighbors())
+        # Also exclude if the atom is part of an aromatic ring (a further safeguard).
+        if atom.GetIsAromatic():
+            continue
+        
+        # Get the total (explicit + implicit) hydrogen count
+        orig_hcount = atom.GetTotalNumHs()
+        
+        # We will “recover” any hydrogen lost due to attached nitroso groups.
+        neighbors = list(atom.GetNeighbors())
         nitroso_neighbors = []
         effective_neighbors = []
-        for nb in heavy_neighbors:
+        for nb in neighbors:
             if is_nitroso(nb):
                 nitroso_neighbors.append(nb)
             else:
                 effective_neighbors.append(nb)
+                
+        effective_hcount = orig_hcount + len(nitroso_neighbors)
         
-        effective_H = orig_H + len(nitroso_neighbors)
-
-        # We now require that the *effective* heavy neighbors are exactly 2 and that both are carbons,
-        # and that the effective hydrogen count is exactly 1.
-        if len(effective_neighbors) != 2 or effective_H != 1:
-            continue  # candidate fails the basic count requirement
-        
-        # Check that both effective substituents are carbon atoms.
-        all_carbons = all(nb.GetAtomicNum() == 6 for nb in effective_neighbors)
-        if not all_carbons:
+        # Our criteria: effective heavy substituents count must be exactly 2 and effective H must be exactly 1.
+        if len(effective_neighbors) != 2 or effective_hcount != 1:
             continue
         
-        # Exclude the candidate if any of the carbon substituents is part of a carbonyl group.
-        carbonyl_found = False
+        # Check that both effective neighboring atoms are carbons.
+        if not all(nb.GetAtomicNum() == 6 for nb in effective_neighbors):
+            continue
+        
+        # Exclude candidate if any of effective carbon neighbors is part of a carbonyl group.
+        carbonyl_flag = False
         for nb in effective_neighbors:
             if is_carbonyl(nb):
-                carbonyl_found = True
+                carbonyl_flag = True
                 break
-        if carbonyl_found:
+        if carbonyl_flag:
             continue
         
-        # This nitrogen qualifies as a secondary amine candidate.
-        found = True
-        details_list.append(
-            f"Atom index {atom.GetIdx()} (N): original H count={orig_H}, nitroso_substituted={len(nitroso_neighbors)}, effective H count={effective_H}, effective C neighbors={len(effective_neighbors)}"
-        )
+        # This candidate qualifies.
+        details = (f"Atom index {atom.GetIdx()} (N): original H count={orig_hcount}, "
+                   f"nitroso_substituted={len(nitroso_neighbors)}, "
+                   f"effective H count={effective_hcount}, effective C neighbors={len(effective_neighbors)}")
+        found_candidates.append(details)
     
-    if found:
-        return True, "Secondary amine group found: " + "; ".join(details_list)
+    if found_candidates:
+        return True, "Secondary amine group found: " + "; ".join(found_candidates)
     else:
-        return False, ("No nitrogen found with exactly two carbon substituents (ignoring any nitroso groups), "
-                       "one hydrogen, not attached to a carbonyl carbon, and not in an aromatic ring.")
+        return False, ("No sp³-hybridized nitrogen found with exactly two carbon substituents (ignoring nitroso groups), "
+                       "one hydrogen, and no carbonyl-adjacent substituents, or it is in an aromatic environment.")
 
 # Example usage when run as a script:
 if __name__ == "__main__":
-    # A list of SMILES to test including known true positives and known false positives.
-    test_cases = [
-        "CC(C)(C)CCNC1=C(N=NC(=N1)C2=CC=CC=N2)C3=CC=CC=C3",  # True: N-(3,3-dimethylbutyl)-6-phenyl-3-(2-pyridinyl)-1,2,4-triazin-5-amine
-        "CNc1ccccc1",   # True: N-methylaniline
-        "O1N=C(NCC2=CN=CC=C2)C=C1C",  # True: 5-methyl-n-(pyridin-3-ylmethyl)isoxazol-3-amine
-        "[H]N(C)C",     # True: dimethylamine
-        "CNC1=NNC(=S)S1",  # True: 5-(methylamino)-3H-1,3,4-thiadiazole-2-thione
-        "CC(C)NCC(O)COc1cccc2ccccc12",  # True: propranolol
-        "CC(CCc1ccc(O)cc1)NCCc1ccc(O)c(O)c1",  # True: dobutamine
-        "CCCCNC",  # True: N-methylbutylamine
-        "[H]C(=O)CCCNCCCN",  # True: N-(3-aminopropyl)-4-aminobutanal
-        "CCCCCCCCCNCCCCCCCC",  # True: dioctylamine
-        "CNC1CCCCC1",  # True: N-methylcyclohexylamine
-        "CC(C)NCC(O)COc1cccc2[nH]ccc12",  # True: pindolol
-        "CC(C)NCC(C)(C)N",  # True: N(1)-isopropyl-2-methylpropan-1,2-diamine
-        "CCCCCCCCCCCNCCCCCCCCCCC",  # True: N-undecylundecan-1-amine
-        "S(CCNC1CCCCC1)(O)(=O)=O",  # True: N-cyclohexyl-2-aminoethanesulfonic acid
-        "O=CCCNCCCCN",  # True: 3-[(4-aminobutyl)amino]propanal
-        "O=C1OC2=CC=C([C@H](O)CNC=3C=C1C=CC3O)C=C2",  # True: Bagrelactone A
-        "C#CCN[C@@H]1CCc2ccccc12",  # True: rasagiline
-        "CC(C)NC[C@@H](O)COc1cccc2ccccc12",  # True: (R)-(+)-propranolol
-        "C1=CC=C(C=C1)/C=C/C(CCO)NCC2=CC=CC=C2",  # True: (4E)-3-(benzylamino)-5-phenyl-4-penten-1-ol
-        "C(NC1=CC=C(C=C1)C[C@@H]2CC[C@@H](N2)[C@@H](C3=CC=CC=C3)O)([C@H]4N5C(C=CN=C5CC4)=O)=O",  # True: vibegron
-        "OCC(O)CNc1ccccc1",  # True: PAP
-        "S1C(NC#N)=NN=C1",  # True: amitivir
-        "CNCC(O)CO",  # True: 3-methylamino-1,2-propanediol
-        "CN[C@@H](C)Cc1ccccc1",  # True: methamphetamine
-        "CCNCC",  # False: diethylamine (tertiary amine)
-        "c1cc[nH]c1",  # False: 1H-pyrrole (N in aromatic ring)
-        "O=NN1CCCCC1"  # False: N-nitrosopiperidine (nitroso group on a cyclic secondary amine)
+    test_smiles = [
+        "CC(C)(C)CCNC1=C(N=NC(=N1)C2=CC=CC=N2)C3=CC=CC=C3",  # secondary amine in a large molecule
+        "CNc1ccccc1",   # N-methylaniline (should qualify as secondary amine if sp3; note that aniline N is typically sp2 so might be excluded)
+        "O1N=C(NCC2=CN=CC=C2)C=C1C",  # 5-methyl-n-(pyridin-3-ylmethyl)isoxazol-3-amine
+        "[H]N(C)C",    # dimethylamine
+        "CNC1=NNC(=S)S1",  # 5-(methylamino)-3H-1,3,4-thiadiazole-2-thione
+        "CC(C)NCC(O)COc1cccc2ccccc12",  # propranolol
+        "CC(CCc1ccc(O)cc1)NCCc1ccc(O)c(O)c1",  # dobutamine
+        "CCCCNC",  # N-methylbutylamine
+        "[H]C(=O)CCCNCCCN",  # N-(3-aminopropyl)-4-aminobutanal
+        "CCCCCCCCCNCCCCCCCC",  # dioctylamine
+        "CNC1CCCCC1",  # N-methylcyclohexylamine
+        "CC(C)NCC(O)COc1cccc2[nH]ccc12",  # pindolol
+        "CC(C)NCC(C)(C)N",  # N(1)-isopropyl-2-methylpropan-1,2-diamine
+        "CCCCCCCCCCCNCCCCCCCCCCC",  # N-undecylundecan-1-amine
+        "S(CCNC1CCCCC1)(O)(=O)=O",  # N-cyclohexyl-2-aminoethanesulfonic acid
+        "O=CCCNCCCCN",  # 3-[(4-aminobutyl)amino]propanal
+        "O=C1OC2=CC=C([C@H](O)CNC=3C=C1C=CC3O)C=C2",  # Bagrelactone A
+        "C#CCN[C@@H]1CCc2ccccc12",  # rasagiline
+        "CC(C)NC[C@@H](O)COc1cccc2ccccc12",  # (R)-(+)-propranolol
+        "C1=CC=C(C=C1)/C=C/C(CCO)NCC2=CC=CC=C2",  # (4E)-3-(benzylamino)-5-phenyl-4-penten-1-ol
+        # Some potential false positives/negatives:
+        "c1cc[nH]c1",  # 1H-pyrrole (aromatic, should be excluded)
+        "CCNCC",  # diethylamine (tertiary, should not qualify)
     ]
-    
-    for s in test_cases:
-        result, reason = is_secondary_amine(s)
-        print(f"SMILES: {s}\nResult: {result}\nReason: {reason}\n")
+    for s in test_smiles:
+        res, reason = is_secondary_amine(s)
+        print(f"SMILES: {s}\nResult: {res}\nReason: {reason}\n")
