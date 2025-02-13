@@ -5,9 +5,9 @@ Classifies: CHEBI:16180 N-acylglycine
 Classifies: N-acylglycine
 Definition: An N-acyl-amino acid in which the amino acid specified is glycine.
 The key motif is: R-C(=O)-N-CH2-C(=O)O.
-This implementation uses an initial SMARTS pattern that is relaxed and then post-filters
-matches to enforce that the glycine α‐carbon has exactly two hydrogens and that
-the amide nitrogen (bridging the acyl group and the glycine unit) is terminal.
+This implementation iterates over amide nitrogens to identify a terminal amide
+bond where one neighbor is a carbonyl (the acyl group) and the other neighbor is a CH2
+(which is further connected to a carboxylic acid group).
 """
 
 from rdkit import Chem
@@ -15,82 +15,115 @@ from rdkit import Chem
 def is_N_acylglycine(smiles: str):
     """
     Determines if a molecule is an N-acylglycine based on its SMILES string.
-    An N-acylglycine must contain an acyl group attached to glycine via an amide bond,
-    resulting in the motif: R-C(=O)-N-CH2-C(=O)O. To avoid false positives when glycine
-    residues are embedded within peptides, we check that (a) the glycine alpha-carbon
-    has exactly two hydrogens (i.e. it is CH2) and (b) that the amide nitrogen only bears
-    connections to the acyl group and the glycine alpha-carbon.
+    The molecule must contain an acyl group attached to a glycine unit via an amide bond,
+    i.e., the key motif: R-C(=O)-N-CH2-C(=O)O.
+    
+    The function identifies candidate amide nitrogens that are terminal (bonded to exactly
+    2 heavy atoms) and then tests if one substituent is a carbonyl carbon (acyl group)
+    and the other is a CH2 group that is connected to a carboxylic acid.
     
     Args:
         smiles (str): SMILES string of the molecule.
-
+        
     Returns:
         bool: True if a valid N-acylglycine motif is detected, False otherwise.
         str: Reason for the classification.
     """
-    # Parse the SMILES string into an RDKit molecule.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-        
-    # Add explicit hydrogens so that the hydrogen counts in the glycine CH2 unit are explicit.
+    
+    # Add explicit hydrogens for proper hydrogen counting.
     mol = Chem.AddHs(mol)
     
-    # Define a relaxed SMARTS pattern for the key motif.
-    # Here we define four atoms with mappings:
-    #   [C:1](=O)   --> acyl carbon (from the R-C(=O) group)
-    #   [N:2]       --> amide nitrogen linking acyl to glycine
-    #   [C:3]       --> glycine alpha-carbon (which must be CH2)
-    #   [C:4](=O)[O] --> carboxylic acid carbon (glycine C-terminus)
-    # Note: the pattern is written with explicit single bonds ('-').
-    motif_smarts = "[C:1](=O)-[N:2]-[C:3]-[C:4](=O)[O]"
-    pattern = Chem.MolFromSmarts(motif_smarts)
-    if pattern is None:
-        return False, "Error creating SMARTS pattern."
-    
-    # Search for substructure matches using the pattern.
-    matches = mol.GetSubstructMatches(pattern)
-    if not matches:
-        return False, "The molecule does not contain the N-acylglycine motif (R-C(=O)-N-CH2-C(=O)O)."
-    
-    # For each match candidate, check:
-    #   (1) the glycine alpha-carbon (mapped as atom 3) has exactly 2 hydrogens.
-    #   (2) the amide nitrogen (mapped as atom 2) is terminal (only two heavy-atom neighbors).
-    for match in matches:
-        # Map each component of the motif.
-        acylC = mol.GetAtomWithIdx(match[0])   # acyl carbonyl carbon (from the R-C(=O) group)
-        amideN = mol.GetAtomWithIdx(match[1])    # amide nitrogen bridging groups
-        alphaC = mol.GetAtomWithIdx(match[2])    # glycine α‐carbon, expected to be CH2
-        acidC = mol.GetAtomWithIdx(match[3])     # glycine carboxyl carbon; no further filtering needed here
-        
-        # Ensure that the glycine alpha carbon (atom mapped as 3) has exactly two hydrogens.
-        if alphaC.GetTotalNumHs() != 2:
-            continue  # Not glycine; try next match.
-        
-        # Check that the amide nitrogen is only bonded to two heavy atoms.
-        # (It should be connected only to the acyl carbon and the alpha carbon.)
-        heavy_neighbors = [nbr for nbr in amideN.GetNeighbors() if nbr.GetAtomicNum() > 1]
+    # Iterate over all atoms looking for nitrogen atoms that could form an amide.
+    for atom in mol.GetAtoms():
+        if atom.GetAtomicNum() != 7:
+            continue  # Skip non-nitrogen atoms.
+            
+        # For our candidate amide nitrogen, check that it is terminal
+        # (i.e. only two heavy-atom neighbors).
+        heavy_neighbors = [nbr for nbr in atom.GetNeighbors() if nbr.GetAtomicNum() > 1]
         if len(heavy_neighbors) != 2:
-            continue  # The amide nitrogen has extra substituents.
+            continue  # Skip if nitrogen is substituted further (e.g., peptide bonds).
         
-        # If both checks pass, we consider the N-acylglycine motif to be present.
-        return True, "Molecule contains the N-acylglycine motif (R-C(=O)-N-CH2-C(=O)O)."
+        # Consider the two heavy neighbors in both possible assignments:
+        # one must be the acyl carbon (part of R-C(=O)) and the other the glycine alpha carbon.
+        for acyl_candidate, alpha_candidate in [(heavy_neighbors[0], heavy_neighbors[1]),
+                                                (heavy_neighbors[1], heavy_neighbors[0])]:
+            # Check acyl candidate: It should be a carbon and look like a carbonyl.
+            if acyl_candidate.GetAtomicNum() != 6:
+                continue
+            # Look among its neighbors (except the nitrogen) for at least one oxygen
+            # with a double bond.
+            found_carbonyl = False
+            for nbr in acyl_candidate.GetNeighbors():
+                # Exclude the amide nitrogen.
+                if nbr.GetIdx() == atom.GetIdx():
+                    continue
+                # Check that neighbor is oxygen.
+                if nbr.GetAtomicNum() == 8:
+                    bond = mol.GetBondBetweenAtoms(acyl_candidate.GetIdx(), nbr.GetIdx())
+                    if bond is not None and bond.GetBondTypeAsDouble() == 2.0:
+                        found_carbonyl = True
+                        break
+            if not found_carbonyl:
+                continue  # Not a valid acyl carbon.
+            
+            # Check that alpha candidate is a carbon and has exactly 2 hydrogens (CH2).
+            if alpha_candidate.GetAtomicNum() != 6:
+                continue
+            if alpha_candidate.GetTotalNumHs() != 2:
+                continue  # Not glycine if not CH2.
+            
+            # Now check for the glycine carboxyl terminus:
+            # The alpha carbon should be bonded to a carboxyl carbon (other than the amide nitrogen).
+            acid_candidate = None
+            for nbr in alpha_candidate.GetNeighbors():
+                if nbr.GetIdx() == atom.GetIdx():
+                    continue  # Skip amide nitrogen.
+                if nbr.GetAtomicNum() == 6:
+                    acid_candidate = nbr
+                    break
+            if acid_candidate is None:
+                continue  # No carboxylic acid carbon found.
+            
+            # Examine the candidate acid carbon.
+            # It should be bound to alpha_candidate (already true) and two oxygens: one double bonded and one single bonded to an H.
+            oxy_double = 0
+            oxy_single = 0
+            for nbr in acid_candidate.GetNeighbors():
+                # Skip the connection back to alpha carbon.
+                if nbr.GetIdx() == alpha_candidate.GetIdx():
+                    continue
+                if nbr.GetAtomicNum() == 8:
+                    bond = mol.GetBondBetweenAtoms(acid_candidate.GetIdx(), nbr.GetIdx())
+                    if bond is None:
+                        continue
+                    # Count based on bond order.
+                    if bond.GetBondTypeAsDouble() == 2.0:
+                        oxy_double += 1
+                    elif bond.GetBondType().name == "SINGLE":
+                        # Ensure that this oxygen has at least one hydrogen in the explicit representation.
+                        if nbr.GetTotalNumHs() >= 1:
+                            oxy_single += 1
+            if (oxy_double >= 1 and oxy_single >= 1):
+                # We found a valid candidate.
+                return True, "Molecule contains the N-acylglycine motif (R-C(=O)-N-CH2-C(=O)O)."
     
-    # If no candidate match passes the additional filtering, return False.
     return False, "The molecule does not contain a valid N-acylglycine moiety after filtering."
 
-# Example test cases.
+# Example test cases (you may add more tests if desired).
 if __name__ == "__main__":
-    # Example: N-benzoylglycine.
-    test_smiles = "OC(=O)CNC(=O)c1ccccc1"
-    result, reason = is_N_acylglycine(test_smiles)
-    print(f"SMILES: {test_smiles}\nClassification: {result}\nReason: {reason}\n")
-    
-    # You can test with other examples (such as N-acetylglycine and N-cinnamoylglycine) below.
-    examples = [
+    test_examples = [
+        ("Cepaciachelin", "O=C(N[C@H](C(=O)NCCCCN)CCCCNC(=O)C1=C(O)C(O)=CC=C1)C2=C(O)C(O)=CC=C2"),
+        ("N-benzoylglycine", "OC(=O)CNC(=O)c1ccccc1"),
+        ("N-(2-furoyl)glycine", "O1C=CC=C1C(NCC(O)=O)=O"),
+        ("N-cinnamoylglycine", "OC(=O)CNC(=O)\\C=C\\c1ccccc1"),
+        ("butyrylglycine", "C(CNC(=O)CCC)(=O)O"),
         ("N-acetylglycine", "CC(=O)NCC(O)=O"),
-        ("N-cinnamoylglycine", "OC(=O)CNC(=O)\\C=C\\c1ccccc1")
     ]
-    for name, smiles in examples:
-        res, rsn = is_N_acylglycine(smiles)
-        print(f"Name: {name}\nSMILES: {smiles}\nClassification: {res}\nReason: {rsn}\n")
+    
+    for name, smi in test_examples:
+        res, reason = is_N_acylglycine(smi)
+        print(f"Name: {name}\nSMILES: {smi}\nClassification: {res}\nReason: {reason}\n")
