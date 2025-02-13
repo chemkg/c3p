@@ -5,83 +5,56 @@ Classifies: CHEBI:46895 lipopeptide
 """
 Classifies: Lipopeptide
 Definition: A compound consisting of a peptide with an attached lipid.
-The algorithm first checks for the presence of at least one amide bond as a marker for the peptide portion.
-Then it computes the longest contiguous chain of non‐aromatic carbon atoms (using a DFS).
-If that chain has at least eight carbons, it is taken as evidence for a lipid tail.
+This version avoids heavy recursion by using SMARTS patterns.
+The algorithm checks for:
+  (1) at least one peptide (amide) bond (C(=O)N)
+  (2) a lipid tail recognized as a contiguous chain of eight carbon atoms
+      (allowing for single or double bonds).
 """
 
 from rdkit import Chem
 
-def longest_chain_from(atom_idx, mol, visited):
-    """Recursively compute longest chain length starting from atom_idx.
-    Only considers neighboring atoms that are carbon (atomic number 6)
-    and not aromatic. The bond type is allowed if it is SINGLE or DOUBLE.
-    """
-    visited.add(atom_idx)
-    current_length = 1
-    max_extension = 0
-    atom = mol.GetAtomWithIdx(atom_idx)
-    for bond in atom.GetBonds():
-        # Get the neighboring atom's index
-        nbr = bond.GetOtherAtom(atom).GetIdx()
-        nbr_atom = mol.GetAtomWithIdx(nbr)
-        # Only consider neighbor if it is a carbon (atomic num 6) and non‐aromatic.
-        if nbr not in visited and nbr_atom.GetAtomicNum() == 6 and not nbr_atom.GetIsAromatic():
-            # Allow single or double bonds (lipid chains sometimes contain unsaturation)
-            if bond.GetBondType() in (Chem.BondType.SINGLE, Chem.BondType.DOUBLE):
-                # Use a copy of visited to allow different DFS paths
-                extension = longest_chain_from(nbr, mol, visited.copy())
-                if extension > max_extension:
-                    max_extension = extension
-    return current_length + max_extension
-
-def get_longest_aliphatic_chain(mol):
-    """Loops over all carbon atoms in the molecule (non‐aromatic)
-    and returns the maximum chain length found.
-    """
-    max_chain = 0
-    for atom in mol.GetAtoms():
-        if atom.GetAtomicNum() == 6 and not atom.GetIsAromatic():
-            chain_length = longest_chain_from(atom.GetIdx(), mol, set())
-            if chain_length > max_chain:
-                max_chain = chain_length
-    return max_chain
-
 def is_lipopeptide(smiles: str):
     """
     Determines if a molecule is a lipopeptide based on its SMILES string.
-    A lipopeptide should contain a peptide portion (indicated by amide bonds)
-    and an attached lipid chain (modeled as a contiguous chain of at least 8 carbons).
+    A lipopeptide is defined as a compound that contains a peptide portion
+    (indicated by at least one amide bond, C(=O)N) and an attached lipid tail
+    (approximated by the presence of at least eight connected carbon atoms).
     
     Args:
-        smiles (str): SMILES string of the molecule
-
+        smiles (str): SMILES string of the molecule.
+        
     Returns:
-        bool: True if molecule is classified as a lipopeptide, False otherwise.
+        bool: True if the molecule is classified as a lipopeptide, False otherwise.
         str: Reason for the classification.
     """
-    # Parse SMILES to molecule object
+    # Parse the SMILES string
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
-        return False, "Invalid SMILES string"
+        return False, "Invalid SMILES string."
     
-    # Check for presence of amide bonds (the peptide bond is typically C(=O)N)
-    amide_pattern = Chem.MolFromSmarts("C(=O)N")
+    # Check for peptide (amide) bonds. Typical peptide bonds have a C(=O)N functionality.
+    amide_smarts = "C(=O)N"
+    amide_pattern = Chem.MolFromSmarts(amide_smarts)
     peptide_matches = mol.GetSubstructMatches(amide_pattern)
     if not peptide_matches:
-        return False, "No amide (peptide) bonds found"
-
-    # Compute the longest contiguous chain of non-aromatic carbons (heuristic for lipid chain)
-    longest_chain = get_longest_aliphatic_chain(mol)
-    if longest_chain < 8:
-        return False, f"Longest contiguous non-aromatic carbon chain is {longest_chain}, which is insufficient (need >= 8)"
+        return False, "No amide (peptide) bonds found in the molecule."
     
-    return True, f"Molecule contains peptide bonds and a carbon chain of length {longest_chain}"
+    # Check for a lipid chain. The heuristic here is to look for a linear chain of at least 8 carbons.
+    # We allow for either single or double bonds between carbons.
+    # The SMARTS pattern below looks for 8 carbon atoms connected by any bond (the '~' operator).
+    lipid_chain_smarts = "[#6]~[#6]~[#6]~[#6]~[#6]~[#6]~[#6]~[#6]"
+    lipid_pattern = Chem.MolFromSmarts(lipid_chain_smarts)
+    lipid_matches = mol.GetSubstructMatches(lipid_pattern)
+    if not lipid_matches:
+        return False, "No contiguous chain of at least eight carbon atoms (lipid tail) found."
+    
+    # If both peptide bonds and a lipid tail are present the molecule is classified as a lipopeptide.
+    return True, ("Molecule contains peptide bonds and has a lipid tail (at least one chain of eight connected carbons).")
 
 # Example usage (for testing purposes)
 if __name__ == '__main__':
-    # Here we test using one of the lipopeptide examples.
-    # For example, surfactin A is known to be a lipopeptide.
+    # Here we test using one of the sample lipopeptide structures (surfactin A).
     surfactin_A = "[H][C@@]1(CCCCCCCC(C)C)CC(=O)N[C@@H](CCC(O)=O)C(=O)N[C@@H](CC(C)C)C(=O)N[C@H](CC(C)C)C(=O)N[C@@H](C(C)C)C(=O)N[C@@H](CC(O)=O)C(=O)N[C@H](CC(C)C)C(=O)N[C@@H](CC(C)C)C(=O)O1"
     result, reason = is_lipopeptide(surfactin_A)
     print("Surfactin A classification:", result, reason)
