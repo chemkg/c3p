@@ -5,16 +5,21 @@ Classifies: CHEBI:35819 branched-chain fatty acid
 """
 Classifies: branched-chain fatty acid (BCFA).
 
-A branched-chain fatty acid is a fatty acid (a carboxylic acid with an aliphatic acyl chain)
-which has one or more alkyl substituents (typically a methyl branch or similar) on its main chain.
+A branched-chain fatty acid (BCFA) is a fatty acid (a carboxylic acid with a long aliphatic acyl chain)
+that has one or more alkyl substituents (typically a methyl or similarly short branch) on its main chain.
 This implementation:
-  1. Rejects molecules containing atoms other than carbon and oxygen.
-  2. Detects a carboxyl group (–COOH or deprotonated –COO–) via SMARTS.
-  3. Finds the alpha carbon (the acyclic carbon directly attached to the carboxyl carbon).
-  4. Restricts the analysis to acyclic (non‐ring) carbon atoms (the “fatty acyl chain”).
-  5. Finds the longest acyclic chain (by DFS) starting from the alpha carbon.
-  6. Checks each main‐chain carbon for an extra (branch) neighbor (a carbon not in the main chain).
-If any valid branch is found, the molecule is declared a branched‐chain fatty acid.
+  • Rejects molecules that contain atoms besides carbon and oxygen.
+  • Checks that the oxygen count is typical for a fatty acid (either 2 or 3 oxygens).
+  • Locates a single carboxyl group (–COOH or deprotonated –COO–).
+  • Identifies the alpha carbon (the first carbon attached to the carboxyl carbon).
+  • Builds a graph of acyclic (non‐ring) carbon atoms (the fatty acyl chain is assumed acyclic).
+  • Uses depth‐first search (DFS) from the alpha carbon to find the longest “main chain”.
+  • For each carbon in that main chain, examines neighboring acyclic carbons not on the main chain.
+    If such a “branch” is detected and its total number of carbons is short (≤ 3 atoms), it is
+    considered a valid alkyl substituent, and the molecule classifies as a BCFA.
+    
+Note: This is a heuristic approach; different thresholds (minimum main chain length, branch length)
+and additional filters (such as rejecting molecules with multiple carboxy groups) can be applied.
 """
 
 from rdkit import Chem
@@ -24,58 +29,69 @@ def is_branched_chain_fatty_acid(smiles: str):
     Determines if a molecule is a branched-chain fatty acid (BCFA) based on its SMILES string.
     
     The algorithm:
-      1. Parses the molecule and rejects those with heteroatoms (atoms besides C and O).
-      2. Uses SMARTS to locate a carboxyl group (-COOH or -COO–).
-      3. Finds the alpha carbon attached to the carboxyl carbon.
-      4. Constructs an explicit connectivity graph of acyclic (non‐ring) carbon atoms.
-      5. Uses a DFS to find the longest acyclic main chain starting at the alpha carbon.
-      6. For each carbon in the main chain, any extra carbon not in the main chain is marked as a branch.
+      1. Parses the molecule and rejects those with atoms besides C and O.
+      2. Verifies that the overall oxygen count is what we expect (2 or 3 atoms).
+      3. Uses SMARTS to locate a single carboxyl group (-COOH or its deprotonated form).
+      4. Finds the alpha carbon (first non-ring carbon attached to the carboxyl carbon).
+      5. Constructs a connectivity graph of all acyclic carbon atoms.
+      6. Uses DFS to determine the longest acyclic chain (the “main chain”) starting at the alpha carbon.
+      7. For each main-chain carbon, any neighboring acyclic carbons that are not part
+         of the main chain are explored. If the branch (its total number of carbon atoms)
+         is small (≤ 3 atoms), then it is considered an alkyl substituent, and the molecule
+         is declared a BCFA.
     
     Args:
         smiles (str): SMILES string of the molecule.
     
     Returns:
         bool: True if molecule is classified as a branched-chain fatty acid, else False.
-        str: Reason for classification.
+        str: A brief explanation for the classification decision.
     """
-    # Step 1: Parse molecule and check for allowed elements.
+    # Parse the SMILES string.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-    # For our purpose, we restrict to fatty acids made solely of carbon and oxygen.
-    # (Hydrogens are implicit.) This helps reject peptides and other compounds.
+    
+    # Step 1: Only allow carbon and oxygen (hydrogens are implicit).
     allowed_atomic_nums = {6, 8}
     for atom in mol.GetAtoms():
         if atom.GetAtomicNum() not in allowed_atomic_nums:
             return False, f"Contains atom {atom.GetSymbol()} (atomic number {atom.GetAtomicNum()}), not typical for a fatty acid"
     
-    # Step 2: Find a carboxyl group.
-    # The following SMARTS covers both -COOH and deprotonated -COO–:
+    # Step 2: Check total oxygen count.
+    ox_count = sum(1 for atom in mol.GetAtoms() if atom.GetAtomicNum() == 8)
+    if ox_count not in {2, 3}:
+        return False, f"Oxygen count of {ox_count} not typical for a fatty acid (expected 2 or 3)"
+    
+    # Step 3: Find the carboxyl group.
+    # This SMARTS covers both -COOH and deprotonated -COO–.
     carboxyl_smarts = "[CX3](=O)[OX1H0-,OX2H1]"
     carboxyl_query = Chem.MolFromSmarts(carboxyl_smarts)
     carboxyl_matches = mol.GetSubstructMatches(carboxyl_query)
     if not carboxyl_matches:
         return False, "No carboxyl group found; not a fatty acid"
-    # Use the first matching carboxyl group. In the SMARTS, the first atom is the carbonyl carbon.
-    carboxyl_C = carboxyl_matches[0][0]
-    carboxyl_atom = mol.GetAtomWithIdx(carboxyl_C)
+    if len(carboxyl_matches) != 1:
+        return False, "Multiple carboxyl groups detected; not a typical fatty acid"
+    # In the SMARTS, the first atom is the carboxyl (carbonyl) carbon.
+    carboxyl_C_idx = carboxyl_matches[0][0]
+    carboxyl_atom = mol.GetAtomWithIdx(carboxyl_C_idx)
     
-    # Step 3: Find the alpha carbon (first carbon attached to the carboxyl carbon)
-    alpha_carbon = None
+    # Step 4: Identify the alpha carbon.
+    alpha_carbon_idx = None
     for nbr in carboxyl_atom.GetNeighbors():
         if nbr.GetAtomicNum() == 6 and not nbr.IsInRing():
-            alpha_carbon = nbr.GetIdx()
+            alpha_carbon_idx = nbr.GetIdx()
             break
-    if alpha_carbon is None:
+    if alpha_carbon_idx is None:
         return False, "No suitable alpha carbon attached to the carboxyl group; not a fatty acid"
     
-    # Step 4: Build a graph of acyclic carbons in the molecule.
-    # We consider only carbon atoms that are not in any ring.
-    carbon_indices = [atom.GetIdx() for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6 and not atom.IsInRing()]
-    if not carbon_indices:
+    # Step 5: Build the acyclic carbon graph.
+    # We only consider carbon atoms that are not in a ring.
+    acyclic_carbon_indices = [atom.GetIdx() for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6 and not atom.IsInRing()]
+    if not acyclic_carbon_indices:
         return False, "No acyclic carbon atoms found"
-    acyclic_carbon_set = set(carbon_indices)
-    # Construct a dictionary mapping each acyclic carbon index to its neighboring acyclic carbons.
+    acyclic_carbon_set = set(acyclic_carbon_indices)
+    # Build a dictionary mapping each acyclic carbon index to its neighboring acyclic carbons.
     carbon_graph = { idx: [] for idx in acyclic_carbon_set }
     for idx in acyclic_carbon_set:
         atom = mol.GetAtomWithIdx(idx)
@@ -83,56 +99,61 @@ def is_branched_chain_fatty_acid(smiles: str):
             if nbr.GetAtomicNum() == 6 and nbr.GetIdx() in acyclic_carbon_set:
                 carbon_graph[idx].append(nbr.GetIdx())
     
-    # Step 5: Starting at the alpha carbon, perform DFS to find the longest linear chain.
-    # We disallow revisiting nodes.
+    # Step 6: Determine the main (longest) acyclic chain starting at the alpha carbon.
+    # We use DFS (disallowing revisiting nodes) to find the longest path.
     def dfs_longest(current, visited):
         longest_path = [current]
         for nbr in carbon_graph.get(current, []):
             if nbr in visited:
                 continue
-            path = dfs_longest(nbr, visited | {nbr})
-            # Prepend current to the candidate path
-            candidate = [current] + path
-            if len(candidate) > len(longest_path):
-                longest_path = candidate
+            candidate_path = [current] + dfs_longest(nbr, visited | {nbr})
+            if len(candidate_path) > len(longest_path):
+                longest_path = candidate_path
         return longest_path
 
-    main_chain = dfs_longest(alpha_carbon, {alpha_carbon})
-    # A minimal fatty acid should have at least 2 carbons in its chain (alpha + one more)
+    main_chain = dfs_longest(alpha_carbon_idx, {alpha_carbon_idx})
     if len(main_chain) < 2:
         return False, "Alkyl chain too short to be considered a fatty acid"
     
-    # Step 6: Check each carbon in the main chain for extra branch substituents.
+    # Step 7: For every atom in the main chain, check for branch substituents.
+    # A valid branch here is a connected set of acyclic carbons, disjoint from the main chain,
+    # with a small total number of carbons (here, we require size <= 3, e.g. methyl, ethyl, or propyl).
     main_chain_set = set(main_chain)
-    # For each atom in the main chain, see if it has a neighboring acyclic carbon that is not part of the main chain.
+    # Helper: given a starting branch atom, get all connected branch carbons (disallowing main-chain atoms).
+    def get_branch_atoms(start):
+        branch_atoms = set()
+        stack = [start]
+        while stack:
+            cur = stack.pop()
+            if cur in branch_atoms:
+                continue
+            branch_atoms.add(cur)
+            for nb in carbon_graph.get(cur, []):
+                if nb in main_chain_set:
+                    continue
+                if nb not in branch_atoms:
+                    stack.append(nb)
+        return branch_atoms
+
     for idx in main_chain:
         for nbr in carbon_graph.get(idx, []):
             if nbr not in main_chain_set:
-                # We found a candidate branch. Perform a simple DFS on the branch (excluding the main chain)
-                branch_atoms = set()
-                stack = [nbr]
-                while stack:
-                    current_branch = stack.pop()
-                    if current_branch in branch_atoms:
-                        continue
-                    branch_atoms.add(current_branch)
-                    for nb in carbon_graph.get(current_branch, []):
-                        if nb in main_chain_set:
-                            continue
-                        if nb not in branch_atoms:
-                            stack.append(nb)
-                if branch_atoms:
-                    return True, f"Branching detected at main chain carbon atom index {idx}"
+                branch_atoms = get_branch_atoms(nbr)
+                branch_size = len(branch_atoms)
+                # For a typical BCFA, the branch (alkyl substituent) is very short.
+                if branch_size <= 3:
+                    return True, f"Branching detected at main chain carbon atom index {idx} (branch size: {branch_size})"
     
-    return False, "No branching substituents detected on the fatty acyl chain"
+    return False, "No suitable short branching substituents detected on the fatty acyl chain"
 
-# Example usage (uncomment to test):
-# test_smiles = [
-#     "OC(=O)CC(C)=C",                        # isopropenylacetic acid: expected BCFA (branch off main chain)
-#     "CCC(C)CCCCCCCCCCCCCCCCCCCCCCCCCCC(O)=O",# 28-methyltriacontanoic acid: expected BCFA
-#     "OC(=O)CCCCCCCC",                        # linear fatty acid: expected not BCFA
-#     "OC(=O)C(CC)CC",                         # 2-Ethylbutanoic acid: expected BCFA
-# ]
-# for s in test_smiles:
-#     result, reason = is_branched_chain_fatty_acid(s)
-#     print(s, "->", result, ":", reason)
+# Example usage (for debugging/testing):
+if __name__ == '__main__':
+    test_smiles = [
+        "OC(=O)CC(C)=C",                         # isopropenylacetic acid: expected BCFA
+        "CCC(C)CCCCCCCCCCCCCCCCCCCCCCCCCCC(O)=O", # 28-methyltriacontanoic acid: expected BCFA
+        "OC(=O)CCCCCCCC",                         # linear fatty acid: expected NOT BCFA
+        "OC(=O)C(CC)CC",                          # 2-Ethylbutanoic acid: expected BCFA
+    ]
+    for s in test_smiles:
+        result, reason = is_branched_chain_fatty_acid(s)
+        print(s, "->", result, ":", reason)
