@@ -1,17 +1,21 @@
 """
 Classifies: CHEBI:16389 ubiquinones
 """
-#!/usr/bin/env python
 """
 Classifies: Ubiquinones – any benzoquinone derived from 2,3-dimethoxy-5-methylbenzoquinone.
-Ubiquinones usually carry a polyprenyl side chain at position 6.
-This version inspects each 6-membered ring to verify:
-    • Exactly 2 ring carbons bear a double-bonded oxygen (carbonyl group – the quinone motif)
-    • Among the remaining 4 ring atoms there are exactly 2 oxygen substituents 
-      (representing the 2,3-dimethoxy pattern, allowing either methoxy or hydroxy) 
-      and exactly 1 methyl group (representing the 5-methyl substituent).
-    • At least one prenyl (isoprene) fragment is attached to any of the ring atoms.
-The program also returns the global count of prenyl (isoprenoid) units as an integer in the explanation.
+Ubiquinones usually carry a polyprenyl side chain (an isoprenoid chain) at position 6.
+This improved version:
+  • Iterates over each six-membered ring to detect a quinone core by:
+      – Detecting exactly two ring carbons with exocyclic carbonyls.
+      – Ensuring that among the remaining ring atoms there are at least two oxygen substituents
+        (indicative of a dimethoxy/hydroxy pattern) and at least one methyl substituent.
+  • Then it attempts to identify a unique external branch (the candidate position-6 side chain)
+    that is not already a carbonyl/oxygen/methyl substituent.
+  • It “grows” the branch (using a DFS while avoiding the core) and requires that some double bond is present
+    (to reject saturated chains). It further counts prenyl (isoprene) repeating units using a SMARTS match.
+  • If the candidate core and prenyl branch are found, the function returns True along with a message
+    stating the number of isoprenoid unit(s) detected.
+If no candidate ring passes these tests the function returns False with an explanation.
 """
 
 from rdkit import Chem
@@ -19,8 +23,9 @@ from rdkit import Chem
 def is_ubiquinones(smiles: str):
     """
     Determines if a molecule belongs to the class of ubiquinones based on its SMILES string.
-    It searches for a 6-membered benzoquinone ring with exactly two carbonyl groups and a 2,3-dimethoxy-5-methyl pattern,
-    and it requires that at least one prenyl (isoprene) fragment is attached.
+    It looks for a 2,3-dimethoxy-5-methylbenzoquinone-derived core (a six-membered ring with two carbonyl groups,
+    at least two oxy functions on non-carbonyl atoms, and at least one methyl substituent) and requires that a polyprenyl 
+    (isoprenoid) branch attached (at position 6) is present. The branch must contain at least one double bond.
     
     Args:
         smiles (str): SMILES string of the molecule.
@@ -33,130 +38,163 @@ def is_ubiquinones(smiles: str):
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Define a SMARTS for an isoprene (prenyl) fragment.
-    # This pattern matches one isoprene repeating unit.
-    prenyl_query = Chem.MolFromSmarts("C/C=C(C)")
-    # Get all prenyl matches globally (they may be part of a long polyprenyl chain)
-    prenyl_matches = mol.GetSubstructMatches(prenyl_query)
-    n_prenyl_global = len(prenyl_matches)
+    # SMARTS query for one prenyl (isoprene) unit: a fragment with an alkene and a methyl branch.
+    prenyl_query = Chem.MolFromSmarts("C/C=C(/C)")
     
-    # Helper functions to decide substituent type
-    def is_double_bonded_oxygen(bond, nbr):
-        # Returns True if the bond from a ring carbon to neighbor is a double bond and neighbor is oxygen.
+    # Helper to check for a double-bonded oxygen (i.e. a carbonyl bond)
+    def is_carbonyl(bond, nbr):
         return (nbr.GetAtomicNum() == 8 and bond.GetBondType() == Chem.rdchem.BondType.DOUBLE)
     
-    def is_hydroxy(oatom):
-        # Returns True if oxygen has at least one explicit hydrogen (–OH)
-        # Note: sometimes H atoms are implicit; we use GetTotalNumHs() here.
-        return (oatom.GetAtomicNum() == 8 and oatom.GetTotalNumHs() >= 1)
-    
-    def is_methoxy(oatom, from_atom_idx):
-        # Check if the oxygen (that is not a double-bonded carbonyl oxygen) is linked to a methyl group.
-        # We require that one of its neighbors (other than the ring atom) is a CH3 group.
+    # Helper to decide if an oxygen substituent is methoxy or hydroxy.
+    def is_oxy_substituent(oatom, from_atom_idx):
+        # Expects an oxygen not connected via a double bond.
         if oatom.GetAtomicNum() != 8:
             return False
+        # Either a hydroxy (at least one hydrogen) or methoxy (attached to a CH3)
+        if oatom.GetTotalNumHs() >= 1:
+            return True
+        # Alternatively, check for methoxy: one neighbor besides the core should be a methyl.
         for nb in oatom.GetNeighbors():
             if nb.GetIdx() == from_atom_idx:
                 continue
-            # A methyl carbon should have atomic num 6, degree 1 and 3 hydrogens.
             if nb.GetAtomicNum() == 6 and nb.GetDegree() == 1 and nb.GetTotalNumHs() == 3:
                 return True
         return False
-
+    
+    # Helper to check if a carbon atom is a methyl group.
     def is_methyl(catom):
-        # Check if a carbon is a methyl: atomic no.6, degree=1 and 3 total hydrogens.
         return (catom.GetAtomicNum() == 6 and catom.GetDegree() == 1 and catom.GetTotalNumHs() == 3)
     
-    # For each 6-membered ring, test if it matches the core pattern.
+    # For a given branch attachment, collect all atom indices reachable off the core (avoid core atoms).
+    def get_branch_atom_indices(start_idx, core_set):
+        branch_atoms = set()
+        stack = [start_idx]
+        while stack:
+            curr = stack.pop()
+            if curr in branch_atoms:
+                continue
+            branch_atoms.add(curr)
+            atom = mol.GetAtomWithIdx(curr)
+            for nbr in atom.GetNeighbors():
+                if nbr.GetIdx() in core_set:
+                    continue
+                if nbr.GetIdx() not in branch_atoms:
+                    stack.append(nbr.GetIdx())
+        return branch_atoms
+    
+    # Check if the branch (given by a set of atom indices) contains at least one double bond.
+    def branch_has_double_bond(branch_atom_indices):
+        for idx in branch_atom_indices:
+            atom = mol.GetAtomWithIdx(idx)
+            for nbr in atom.GetNeighbors():
+                if nbr.GetIdx() not in branch_atom_indices:
+                    continue
+                bond = mol.GetBondBetweenAtoms(idx, nbr.GetIdx())
+                if bond and bond.GetBondType() == Chem.rdchem.BondType.DOUBLE:
+                    return True
+        return False
+
+    # Our strategy:
+    # Iterate over each 6-membered ring in the molecule. For each, we try to detect:
+    #   1. Exactly two ring carbons with an exocyclic double-bonded oxygen (carbonyl groups)
+    #   2. Among remaining ring carbons, at least 2 oxygen substituents (methoxy/hydroxy) and at least 1 methyl substituent.
+    #   3. A unique external branch (other than those already counted) which qualifies as a polyprenyl side chain (with unsaturation).
     ring_info = mol.GetRingInfo().AtomRings()
     for ring in ring_info:
         if len(ring) != 6:
-            continue
+            continue  # We only consider six-membered rings.
+        ring_set = set(ring)
         
-        # First pass: Identify which ring atoms are carbonyl centers.
-        carbonyl_indices = set()
+        carbonyl_indices = set()  # ring atom indices that have an exocyclic C=O.
+        oxy_substituent_count = 0
+        methyl_substituent_count = 0
+        # We will record, for each ring atom, the external neighbor indices and classify them.
+        branch_candidates = set()  # potential attachment atoms for the prenyl chain.
+        
+        # First, mark carbonyls in the ring.
         for idx in ring:
             atom = mol.GetAtomWithIdx(idx)
             if atom.GetAtomicNum() != 6:
-                continue  # only consider carbons
-            # Look at neighbors that are not in the ring.
+                continue  # Only carbon atoms considered for the core.
             for nbr in atom.GetNeighbors():
-                if nbr.GetIdx() in ring:
+                if nbr.GetIdx() in ring_set:
                     continue
                 bond = mol.GetBondBetweenAtoms(atom.GetIdx(), nbr.GetIdx())
-                if is_double_bonded_oxygen(bond, nbr):
+                if is_carbonyl(bond, nbr):
                     carbonyl_indices.add(idx)
-                    break  # only mark once per ring atom
+                    break  # Only count once per ring atom.
         
-        # We require exactly 2 carbonyl groups on the ring.
+        # We require exactly two ring carbons with carbonyl groups.
         if len(carbonyl_indices) != 2:
             continue
         
-        # For the non-carbonyl atoms in the ring, count substituents.
-        oxy_substituent_count = 0   # for –OH or –OCH3 groups
-        methyl_substituent_count = 0  # for direct CH3 groups
-        prenyl_attached = False
-        
-        # To help ensure that the prenyl side chain is attached to the candidate core,
-        # we record the set of non-ring neighbors of any ring atom.
-        external_neighbors = set()
-        
+        # Now, on each ring atom, examine external substituents.
+        # For atoms not already classified as carbonyl-bearing, record oxygen and methyl substituents.
+        # Also record any external carbon that is not a simple methyl (could be prenyl branch).
         for idx in ring:
-            # Skip atoms that were already counted as having a carbonyl (their substituent is the =O).
             atom = mol.GetAtomWithIdx(idx)
-            if idx in carbonyl_indices:
-                continue
-            # For each neighbor not in the ring:
+            # Skip if this ring atom already gave a carbonyl bond.
+            # (Assume that if an atom is carbonyl-bearing, its substituent is "taken".)
             for nbr in atom.GetNeighbors():
-                if nbr.GetIdx() in ring:
+                if nbr.GetIdx() in ring_set:
                     continue
-                external_neighbors.add(nbr.GetIdx())
-                # If neighbor is oxygen and not involved in a double bond (already counted as carbonyl), check substituent type.
+                # Check if this neighbor was already accounted for by being a carbonyl (by checking bond type)
+                bond = mol.GetBondBetweenAtoms(atom.GetIdx(), nbr.GetIdx())
+                if nbr.GetAtomicNum() == 8 and bond.GetBondType() == Chem.rdchem.BondType.DOUBLE:
+                    continue  # already in carbonyl
+                # Classify oxygens:
                 if nbr.GetAtomicNum() == 8:
-                    bond = mol.GetBondBetweenAtoms(atom.GetIdx(), nbr.GetIdx())
-                    if bond.GetBondType() == Chem.rdchem.BondType.DOUBLE:
-                        continue  # skip if this were a carbonyl (should not happen here)
-                    # Count if it is hydroxy or methoxy.
-                    if is_hydroxy(nbr) or is_methoxy(nbr, atom.GetIdx()):
+                    if is_oxy_substituent(nbr, atom.GetIdx()):
                         oxy_substituent_count += 1
-                # If neighbor is carbon, check if it is a methyl group.
-                elif nbr.GetAtomicNum() == 6:
+                    continue
+                # Classify methyl substituents:
+                if nbr.GetAtomicNum() == 6:
                     if is_methyl(nbr):
                         methyl_substituent_count += 1
+                    else:
+                        # Candidate branch for prenyl side chain.
+                        branch_candidates.add(nbr.GetIdx())
         
-        # The desired pattern on the non-carbonyl ring atoms is:
-        # exactly 2 oxygen substituents and exactly 1 methyl substituent.
-        if oxy_substituent_count != 2 or methyl_substituent_count != 1:
+        # For the core matching we require at least 2 oxygen substituents and at least 1 methyl group.
+        if oxy_substituent_count < 2 or methyl_substituent_count < 1:
             continue
         
-        # Now check if at least one prenyl (isoprene unit) fragment is attached to one of the ring atoms.
-        # We filter global prenyl matches to see if any has at least one atom that is directly attached
-        # to a ring atom in this candidate core.
-        for match in prenyl_matches:
-            # For each prenyl match, check if any atom is an external neighbor of a ring atom.
-            for atom_idx in match:
-                if atom_idx in external_neighbors:
-                    prenyl_attached = True
-                    break
-            if prenyl_attached:
-                break
-        
-        # If core pattern is met and a prenyl fragment is attached, we classify as a ubiquinone.
-        if prenyl_attached:
-            reason = (f"Contains 2,3-dimethoxy-5-methylbenzoquinone derived core "
-                      f"with {n_prenyl_global} isoprenoid unit(s) detected")
+        # Next, from branch candidates, we try to pick exactly one candidate branch that is adjacent to the core.
+        # (If several exist, we will process each in turn.)
+        for branch_start in branch_candidates:
+            branch_atoms = get_branch_atom_indices(branch_start, ring_set)
+            # Check that the branch has at least one double bond (to distinguish unsaturated polyprenyl from a saturated alkyl chain).
+            if not branch_has_double_bond(branch_atoms):
+                continue
+            # Now, attempt to count the isoprene (prenyl) units in the branch.
+            # We extract a sub-molecule corresponding to the branch.
+            branch_atom_list = list(branch_atoms)
+            try:
+                branch_mol = Chem.PathToSubmol(mol, branch_atom_list)
+            except Exception:
+                continue
+            prenyl_matches = branch_mol.GetSubstructMatches(prenyl_query)
+            n_prenyl = len(prenyl_matches)
+            if n_prenyl < 1:
+                continue  # No prenyl unit detected on this branch.
+            # If we get here, we have a candidate quinone core with a prenyl branch.
+            reason = (f"Contains 2,3-dimethoxy-5-methylbenzoquinone-derived core with "
+                      f"{n_prenyl} isoprenoid unit(s) detected")
             return True, reason
 
-    # If no candidate ring passed our screening, return false.
+    # If no candidate ring passed our screening, then reject.
     return False, ("Does not contain a suitable 2,3-dimethoxy-5-methylbenzoquinone derived core "
                    "with proper substituents and a prenyl side chain")
-    
+
 # Example usage (uncomment the block below to test):
 # if __name__ == "__main__":
 #     tests = [
-#         "S(C=1C(=O)C(OC)=C(OC)C(C1CC(=O)OC)=O)C",  # Coptirhoquinone A (expected false by our definition)
-#         "COC1=C(OC)C(=O)C(CC=C(C)C)=C(C)C1=O",      # ubiquinone-1 (expected true)
-#         "O=C1C(OC)=C(OC)C(=O)C(=C1CC=C(CCCC(=O)C)C)C",# Pseudoalteromone A (expected true)
+#         # True positives:
+#         "O=C1C(OC)=C(OC)C(=O)C(C\\C=C(/CC/C=C(/C[C@H](O)C=C(C)C)\\C)\\C)C1=O",  # Antroquinonol N
+#         "COC1=C(OC)C(=O)C(CC=C(C)C)=C(C)C1=O",                                # ubiquinone-1
+#         # False negatives (expected ubiquinones but our improved method might need further tuning):
+#         "S(C=1C(=O)C(OC)=C(OC)C(C1CC(=O)OC)=O)C",                              # Coptirhoquinone A
+#         "O(C=1C(=O)C([C@@H](C2=CC=C(O)C=C2)C=C)=CC(=O)C1OC)C",                  # (R)-4'-Hydroxy-3,4-dimethoxydalbergione
 #     ]
 #     for s in tests:
 #         result, explanation = is_ubiquinones(s)
