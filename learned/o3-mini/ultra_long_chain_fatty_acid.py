@@ -2,96 +2,128 @@
 Classifies: CHEBI:143004 ultra-long-chain fatty acid
 """
 """
-Classifies: Ultra Long‐Chain Fatty Acid (chain length > C27)
-Definition: A fatty acid with a continuous, acyclic carbon chain (including the acid carbon) longer than 27 carbons.
+Classifies: Ultra Long‐Chain Fatty Acid
+Definition: A fatty acid whose free carboxylic acid group (C(=O)[OH]) is attached to a continuous acyclic carbon chain 
+            (possibly with minor branching) that has a length (counting the acid carbon) greater than 27.
+            In addition the molecule must be “pure” (i.e. nearly all non‐H atoms belong to the fatty acid fragment).
+            
 The approach:
-  1. Find free carboxylic acid group via SMARTS "[CX3](=O)[OX2H1]".
-  2. From the carboxyl carbon, find the attached carbon (the fatty acid chain should be attached to the acid carbon).
-  3. Perform a DFS over carbon atoms “in line” (skipping any atoms in rings) to determine the longest linear chain.
-  4. If the chain length (counting the acid carbon) exceeds 27, qualify the molecule.
-Note: Complex molecules might have long carbon chains in other contexts;
-      we aim to restrict the search to the chain attached to the acid group.
+  1. Look for a free carboxylic acid group via SMARTS "[CX3](=O)[OX2H1]".
+  2. Ensure that the acid carbon has exactly one carbon neighbor (the fatty acyl chain start).
+  3. Using a DFS (ignoring atoms in rings), follow only carbon neighbors to obtain the longest connected acyclic carbon set.
+  4. Form the “fatty acid fragment” as that set plus the acid carbon and its two oxygen atoms.
+  5. Compare the number of heavy atoms in this fragment to the molecule’s total heavy atoms, and only accept
+     if most (≥80%) belong to the fragment – this reduces false positives from complex molecules.
+  6. Finally, if the computed chain length (fatty acyl chain plus the acid carbon) is > 27, then classify it as an ultra‐long‐chain fatty acid.
 """
 
 from rdkit import Chem
 
 def is_ultra_long_chain_fatty_acid(smiles: str):
     """
-    Determines whether a molecule is an ultra long-chain fatty acid,
-    i.e. has a free carboxylic acid group (C(=O)[OH]) attached to a carbon chain whose
-    longest continuous chain (with no ring atoms) is greater than 27.
+    Determines whether a molecule qualifies as an ultra long-chain fatty acid.
+    A qualifying molecule must have a free carboxylic acid group (C(=O)[OH])
+    where the acid carbon is attached to a continuous, acyclic chain of carbons such that 
+    (chain length counting the acid carbon) > 27. Also the molecule should be largely
+    composed of the fatty acyl fragment so that we do not falsely classify complex molecules.
     
     Args:
-        smiles (str): Input SMILES string.
-    
+        smiles (str): SMILES string of the molecule.
+        
     Returns:
-        bool: True if molecule qualifies, False otherwise.
+        bool: True if the molecule qualifies, False otherwise.
         str: Explanation of the classification.
     """
     # Parse input SMILES
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-
-    # Look for a free carboxylic acid group (C(=O)[OH]).
+    
+    # Look for free carboxylic acid group: C(=O)[OH]
     acid_smarts = "[CX3](=O)[OX2H1]"
     acid_pattern = Chem.MolFromSmarts(acid_smarts)
     acid_matches = mol.GetSubstructMatches(acid_pattern)
     if not acid_matches:
         return False, "No free carboxylic acid group found"
     
-    # Helper DFS function to find the longest acyclic carbon chain.
-    # We propagate a visited set (copied at each branch) so that branching is explored.
-    def dfs_chain(atom, visited):
-        """
-        Recursively search the longest chain (number of carbon atoms) starting from "atom".
-        Only follow carbon neighbors that are not in a ring.
-        """
+    # We assume that the molecule should behave as a fatty acid if one (or more) acid groups are present.
+    # We will try each acid group and classify if one qualifies.
+    fatty_acid_found = False
+    explanations = []
+    
+    # Helper DFS: Given a carbon atom, traverse neighbors that are carbon, not in a ring.
+    def dfs_carbon(atom, visited):
         visited.add(atom.GetIdx())
-        max_len = 1  # Count current atom
-        for neighbor in atom.GetNeighbors():
-            # Continue only if neighbor is carbon, has not been used, and is not in a ring.
-            if neighbor.GetAtomicNum() == 6 and neighbor.GetIdx() not in visited and not neighbor.IsInRing():
-                branch_len = 1 + dfs_chain(neighbor, visited.copy())
-                if branch_len > max_len:
-                    max_len = branch_len
-        return max_len
+        length = 1  # count current carbon
+        for nbr in atom.GetNeighbors():
+            if nbr.GetAtomicNum() == 6 and nbr.GetIdx() not in visited and not nbr.IsInRing():
+                # continue DFS on this carbon neighbor
+                branch_len = 1 + dfs_carbon(nbr, visited.copy())
+                if branch_len > length:
+                    length = branch_len
+        return length
 
-    chain_lengths = []
-    # For each acid group (if multiple exist, we consider each separately)
+    # We also want to collect the set of atom indices that are part of the acyclic carbon chain.
+    def dfs_collect(atom, visited):
+        visited.add(atom.GetIdx())
+        for nbr in atom.GetNeighbors():
+            if nbr.GetAtomicNum() == 6 and nbr.GetIdx() not in visited and not nbr.IsInRing():
+                dfs_collect(nbr, visited)
+        return visited
+
+    # Count heavy atoms in the molecule (atoms with atomic number > 1)
+    total_heavy = sum(1 for atom in mol.GetAtoms() if atom.GetAtomicNum() > 1)
+    
+    # Process each acid match
     for match in acid_matches:
-        # In the SMARTS, index 0 is the carboxyl carbon.
-        acid_carbon = mol.GetAtomWithIdx(match[0])
-        # Look for carbon neighbors of the acid carbon.
-        chain_neighbors = [n for n in acid_carbon.GetNeighbors() if n.GetAtomicNum() == 6]
-        if not chain_neighbors:
-            continue  # Not attached to any carbon chain
-        # Some fatty acids might be branched at the acid carbon; choose the branch with maximal chain length.
-        branch_lengths = []
-        for nbr in chain_neighbors:
-            # We require that the neighbor is not in a ring
-            if nbr.IsInRing():
-                continue
-            branch_len = dfs_chain(nbr, set())
-            branch_lengths.append(branch_len)
-        if not branch_lengths:
+        # According to our SMARTS "[CX3](=O)[OX2H1]", index 0 is the acid (C) and index 1 is the hydroxyl oxygen.
+        acid_c = mol.GetAtomWithIdx(match[0])
+        
+        # The acid carbon should have exactly one carbon neighbor (the fatty acyl chain start)
+        chain_neighs = [nbr for nbr in acid_c.GetNeighbors() if nbr.GetAtomicNum() == 6]
+        if len(chain_neighs) != 1:
+            explanations.append(f"Acid carbon (idx {acid_c.GetIdx()}) does not have exactly one carbon neighbor, found {len(chain_neighs)}")
             continue
-        # Total chain length counts the acid carbon plus the longest branch.
-        total_chain_length = 1 + max(branch_lengths)
-        chain_lengths.append(total_chain_length)
+        
+        chain_start = chain_neighs[0]
+        # Calculate longest acyclic carbon chain starting from chain_start.
+        chain_length = dfs_carbon(chain_start, set())
+        # Total chain length including the acid carbon itself.
+        total_chain_atoms = chain_length + 1
+        
+        # Collect all acyclic carbons in the fatty acyl fragment (the DFS may be branched)
+        chain_atom_idxs = dfs_collect(chain_start, set())
+        # Build the fatty acid fragment: include the acid carbon and the two oxygens directly bound to it.
+        fragment_idxs = set(chain_atom_idxs)
+        fragment_idxs.add(acid_c.GetIdx())
+        # Add oxygens attached to acid carbon that form the acid group.
+        for nbr in acid_c.GetNeighbors():
+            if nbr.GetAtomicNum() == 8:
+                fragment_idxs.add(nbr.GetIdx())
+        
+        # Count heavy atoms in the fatty acid fragment.
+        frag_heavy = sum(1 for idx in fragment_idxs if mol.GetAtomWithIdx(idx).GetAtomicNum() > 1)
+        
+        # We require that the fatty acid fragment makes up most (>=80%) of the heavy atoms.
+        ratio = frag_heavy / total_heavy
+        if ratio < 0.8:
+            explanations.append(f"Fatty acyl fragment only accounts for {ratio:.0%} of heavy atoms; molecule appears to have substantial extra substructures")
+            continue
+        
+        # Now, if overall chain length exceeds 27 carbons, we classify as ultra-long-chain.
+        if total_chain_atoms > 27:
+            return True, f"Chain length is {total_chain_atoms} carbons, which qualifies as an ultra-long-chain fatty acid; fatty acid fragment comprises {ratio:.0%} of heavy atoms."
+        else:
+            explanations.append(f"Chain length is {total_chain_atoms} carbons, which does not exceed the C27 threshold")
     
-    if not chain_lengths:
-        return False, "Carboxylic acid group found but no eligible carbon chain attached"
-    
-    max_chain_length = max(chain_lengths)
-    if max_chain_length > 27:
-        return True, f"Chain length is {max_chain_length} carbons, which qualifies as an ultra-long-chain fatty acid"
-    else:
-        return False, f"Chain length is {max_chain_length} carbons, which does not exceed the C27 threshold"
+    # If none of the acid groups qualified, return False.
+    if explanations:
+        return False, " ; ".join(explanations)
+    return False, "No qualifying free carboxylic acid with a sufficiently long and pure chain was found"
 
 # Example usage:
 if __name__ == "__main__":
-    # Test with dotriacontanoic acid: a 32-carbon fatty acid.
+    # Test with dotriacontanoic acid (32-carbon fatty acid)
     test_smiles = "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC(O)=O"
     result, explanation = is_ultra_long_chain_fatty_acid(test_smiles)
     print(result, explanation)
