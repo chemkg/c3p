@@ -3,22 +3,10 @@ Classifies: CHEBI:46722 carbonate ester
 """
 """
 Classifies: Carbonate Ester
-
-Definition:
-  A carbonate ester is any derivative of carbonic acid (O=C(OH)2) in which one or both –OH groups
-  have been replaced by organyl groups (R). This includes diesters (O=C(–O–R)2), monoesters (O=C(–OH)(–O–R))
-  and cyclic carbonates that embed the C(=O)(O)(O) unit.
-  
-The strategy is to:
-  1. Parse the SMILES and add explicit hydrogens so that –OH groups will be represented as O–H.
-  2. Loop over all carbon atoms and identify those that have exactly three heavy (non‐hydrogen) neighbors,
-     all being oxygen.
-  3. Among its bonds, require exactly one double bond (i.e. a carbonyl) and two single bonds to oxygen.
-  4. For each of the single‐bonded oxygens, examine if it is substituted (i.e. if it has any heavy neighbor 
-     in addition to the central carbon). In a valid carbonate ester, at least one oxygen must be substituted.
-  
-If such a carbonate moiety is found, the function returns True along with a reason indicating whether
-one or both –OH groups have been substituted; otherwise it returns False.
+Definition: Any carbonate that is carbonic acid in which the hydrogens have been replaced by organyl groups.
+That is, a carbonate ester is a derivative of carbonic acid (O=C(OH)2) in which at least one -OH group has been replaced
+by an organo (typically –OC(alkyl)) group. This includes diesters (e.g. dimethyl carbonate), monoesters (e.g. monoethyl carbonate)
+as well as cyclic carbonate derivatives (e.g. ethylene carbonate).
 """
 
 from rdkit import Chem
@@ -27,95 +15,82 @@ def is_carbonate_ester(smiles: str):
     """
     Determines if a molecule is a carbonate ester based on its SMILES string.
     
-    The method adds explicit hydrogens so that –OH groups are represented properly.
-    Then for every carbon atom in the molecule, it checks whether the carbon appears to be in a
-    carbonic acid environment (C with one double-bonded oxygen and two single-bonded oxygens), and further
-    whether at least one of the two single-bonded oxygens is substituted (i.e. attached to a non-hydrogen besides the carbon).
+    The method looks for a central carbon atom that is connected in a carbonate fashion:
+      - It is double bonded to one oxygen.
+      - It is single bonded to two oxygens.
+      - In the parent carbonic acid the two singly-bound oxygens would have an H each.
+      - In a carbonate ester, at least one of these oxygens is substituted with a non-H (an organyl group).
+    
+    To enforce that we are dealing with an unmodified carbonic acid scaffold (and not a more extended acyl unit),
+    we require that the central carbon (the one bearing the carbonate motif) is bonded to exactly three heavy atoms.
+    
+    We handle three cases via SMARTS:
+      (a) A diester pattern: both singly-bound oxygens are substituted by a carbon (or, more generally, a non-H).
+      (b) Two monoester patterns: one version where the first oxygen is unsubstituted (i.e. remains –OH)
+          and the second is substituted and vice versa.
+      (c) Cyclic carbonates are expected to satisfy the diester condition because in the ring the oxygen(s) are bound to carbons.
     
     Args:
-        smiles (str): SMILES string of the molecule.
-    
+        smiles (str): SMILES string of the molecule
+
     Returns:
-        bool: True if molecule is classified as a carbonate ester, False otherwise.
-        str: Reason for classification.
+        bool: True if molecule is a carbonate ester, False otherwise
+        str: Reason for classification
     """
-    # Parse SMILES into a molecule
+    # Parse SMILES
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-    
-    # Add explicit hydrogens so that -OH groups are seen as O-H.
+    # Add explicit hydrogens so that -OH groups become visible
     mol = Chem.AddHs(mol)
     
-    # Loop over all atoms to try to identify the carbonate moiety
-    for atom in mol.GetAtoms():
-        # We only focus on carbon atoms
-        if atom.GetAtomicNum() != 6:
-            continue
-        
-        # Get non-hydrogen (heavy) neighbors
-        heavy_neighbors = [nbr for nbr in atom.GetNeighbors() if nbr.GetAtomicNum() > 1]
-        # The central carbon in a carbonic acid unit should be bound to exactly 3 heavy atoms (all oxygens)
-        if len(heavy_neighbors) != 3:
-            continue
-        
-        # Check that all three neighbors are oxygens.
-        if any(nbr.GetAtomicNum() != 8 for nbr in heavy_neighbors):
-            continue
-        
-        # Now check the bond types: exactly one double bond (C=O) and two single bonds (C-O)
-        double_bonded_oxygen = None
-        single_bonded_oxygens = []
-        for bond in atom.GetBonds():
-            # Consider only bonds where the neighbor is oxygen
-            # Note: We check both ends but we want the oxygen neighbor.
-            nbr = bond.GetOtherAtom(atom)
-            if nbr.GetAtomicNum() != 8:
-                continue
-            # Distinguish double and single bonds
-            if bond.GetBondType() == Chem.BondType.DOUBLE:
-                if double_bonded_oxygen is None:
-                    double_bonded_oxygen = nbr
+    # Define SMARTS patterns with explicit atom mappings.
+    # The central carbonate carbon is tagged as :1.
+    # For a diester, both oxygens (tagged :2 and :3) are bound to a heavy atom (here we require a bound carbon, [#6])
+    patt_diester = Chem.MolFromSmarts("[C:1](=O)([O:2][#6])([O:3][#6])")
+    
+    # For a monoester, one of the singly-bound oxygens is an –OH (explicit H attached, so [OX2H])
+    patt_monoester1 = Chem.MolFromSmarts("[C:1](=O)([O:2][H])([O:3][#6])")
+    patt_monoester2 = Chem.MolFromSmarts("[C:1](=O)([O:2][#6])([O:3][H])")
+    
+    # List of SMARTS candidate patterns
+    patterns = [
+        ("diester", patt_diester),
+        ("monoester", patt_monoester1),
+        ("monoester", patt_monoester2)
+    ]
+    
+    # For each pattern, see if it appears in the molecule.
+    for patt_type, patt in patterns:
+        matches = mol.GetSubstructMatches(patt)
+        if matches:
+            # For every match, do an extra check on the central carbon.
+            for match in matches:
+                # match is a tuple of atom indices corresponding to the mapped atoms [C:1], [O:2], [O:3]
+                carbon_idx = match[0]
+                carbon_atom = mol.GetAtomWithIdx(carbon_idx)
+                # Count heavy-atom (non-hydrogen) neighbors of the central carbon.
+                heavy_neighbors = [nbr for nbr in carbon_atom.GetNeighbors() if nbr.GetAtomicNum() > 1]
+                if len(heavy_neighbors) != 3:
+                    # This likely means the carbon is further substituted; skip this match.
+                    continue
+                # If we get here, we have a good match for a carbonate ester.
+                if patt_type == "diester":
+                    reason = "Found carbonate moiety (O=C(–O–R)2) with both –OH replaced by organyl groups."
                 else:
-                    # More than one double bond disqualifies this carbon.
-                    double_bonded_oxygen = None
-                    break
-            elif bond.GetBondType() == Chem.BondType.SINGLE:
-                single_bonded_oxygens.append(nbr)
-        # Must have exactly one double-bonded oxygen and exactly two single-bonded oxygens.
-        if double_bonded_oxygen is None or len(single_bonded_oxygens) != 2:
-            continue
-        
-        # Check substitution on the two single-bonded oxygens:
-        # For each such oxygen, consider its heavy neighbors excluding the central carbon.
-        substitution_flags = []
-        for oxy in single_bonded_oxygens:
-            other_heavy = [nbr for nbr in oxy.GetNeighbors() if nbr.GetIdx() != atom.GetIdx() and nbr.GetAtomicNum() > 1]
-            # In an unsubstituted –OH group, the only heavy neighbor would be the central carbon.
-            # So if other_heavy is non-empty, the O has an extra (organyl) substituent.
-            substitution_flags.append(len(other_heavy) > 0)
-        
-        # At least one oxygen must be substituted (for a carbonate ester).
-        if any(substitution_flags):
-            if all(substitution_flags):
-                reason = "Found carbonate moiety (O=C(–O–R)2) with both –OH replaced by organyl groups."
-            else:
-                reason = "Found carbonate moiety (O=C(–OH)(–O–R)) with at least one organyl substitution."
-            return True, reason
+                    reason = "Found carbonate moiety (O=C(–OH)(–O–R)) with at least one organyl substitution."
+                return True, reason
+    # If no match was found, either no carbonate motif is present or it did not satisfy the restraints.
+    return False, "No carbonate ester motif (O=C(–OH/–O–R)2 with correct connectivity) detected in the molecule."
 
-    # If no such substructure is found, then we do not classify the molecule as a carbonate ester.
-    return False, "No carbonate ester motif (C(=O)(O)(O) derivative with required substitution) detected."
-
-# Uncomment below for quick testing:
+# For quick testing, you can uncomment the lines below.
 # test_smiles = [
-#     "O(CCC(C)=C)C(OCC)=O",  # Ethyl 3-methylbut-3-enyl carbonate (diester)
-#     "COC(=O)OC",            # dimethyl carbonate (diester)
-#     "O1CCOC1=O",            # Ethylene carbonate (cyclic diester)
-#     "CCOC(O)=O",            # monoethyl carbonate (monoester)
-#     "CC(C)(C)C(=O)OCOP(=O)(COCCN1C=NC2=C1N=CN=C2N)OCOC(=O)C(C)(C)C",  # adefovir pivoxil (previously a false negative)
-#     "O=C1OC(=O)C=CO1",       # Pleurone (cyclic carbonate, previously a false negative)
-#     "CCOc1nc2cccc(C(=O)OCc3oc(=O)oc3C)c2n1Cc1ccc(cc1)-c1ccccc1-c1noc(=O)[nH]1",  # azilsartan medoxomil (previously a false negative)
+#     "O(CCC(C)=C)C(OCC)=O",  # Ethyl 3-methylbut-3-enyl carbonate
+#     "COC(=O)OC",            # dimethyl carbonate
+#     "O1CCOC1=O",            # Ethylene carbonate
+#     "CCOC(O)=O",            # monoethyl carbonate
+#     "O=C(O)O",              # carbonic acid (should be False)
 # ]
 # for smi in test_smiles:
 #     result, reason = is_carbonate_ester(smi)
-#     print(f"SMILES: {smi}\n --> {result}. Reason: {reason}\n")
+#     print(f"SMILES: {smi} --> {result}. Reason: {reason}")
