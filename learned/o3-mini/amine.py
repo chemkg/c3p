@@ -3,101 +3,67 @@ Classifies: CHEBI:32952 amine
 """
 """
 Classifies: Amine
-A compound formally derived from ammonia by replacing one, two or three hydrogen atoms 
-by hydrocarbyl groups.
-
-This implementation inspects each nitrogen atom in the molecule and:
-  1. Accepts both sp2 and sp3 nitrogen if it is not embedded in an aromatic ring.
-  2. Checks that the total substituent count (explicit heavy neighbors + implicit hydrogens)
-     equals 3 for neutral amines (as in primary, secondary or tertiary amines) or 4 for 
-     positively charged (e.g. quaternary) ammoniums.
-  3. Rejects a candidate if any neighboring carbon is “carbonyl‐like” (i.e. has a double bond 
-     to oxygen) and that carbon is not “thio‐modified” (i.e. lacking a single-bonded sulfur neighbor).
-     
-This design aims to reduce both the false negatives (by accepting sp2 amines not embedded
-in a ring) and the false positives (by excluding nitrogens adjacent to “amide‐like” carbonyls).
+A compound formally derived from ammonia by replacing one, two or three hydrogen atoms by hydrocarbyl groups.
 """
+
 from rdkit import Chem
-from rdkit.Chem import rdchem
 
 def is_amine(smiles: str):
     """
-    Determines if a molecule contains an amine functional group (derived from ammonia).
-    
-    The procedure is as follows:
-      1. Parse the SMILES to an RDKit molecule.
-      2. For each nitrogen (atomic number 7):
-           - Skip if the nitrogen is part of an aromatic ring (e.g. pyridine) 
-             because such ring‐members are generally not considered ammonia derivatives.
-           - Compute the total substituent count as the number of heavy atom neighbors plus implicit Hs.
-           - For a neutral amine, require a count of 3 (as in RNH2, R2NH, or R3N).
-             For a positively charged nitrogen, require a count of 4.
-           - For each neighbor carbon, if that carbon bears a double bond to oxygen,
-             then check if that same carbon also is single‐bonded to at least one sulfur.
-             If not, then the candidate is likely an amide and is rejected.
-      3. Return True (plus a reason) as soon as one candidate passes these criteria.
-         If none are found, return False.
-    
+    Determines if a molecule contains an amine functional group.
+    An amine is defined as a compound derived from ammonia (NH3) by replacing one, two or three hydrogen atoms by hydrocarbyl groups.
+    This function identifies a nitrogen atom whose total substituent count (neighbors + implicit/exlicit hydrogens) equals 3.
+    It intentionally excludes nitrogen atoms that are part of an amide (N attached to a carbonyl group)
+    or are quaternary (having four substituents).
+
     Args:
-        smiles (str): SMILES string representing the molecule.
-        
+        smiles (str): SMILES string of the molecule
+
     Returns:
-        (bool, str): A tuple: True and a reason if at least one amine group is found;
-                     otherwise False and an explanatory reason.
+        bool: True if at least one amine group is found, False otherwise
+        str: Reason for the classification
     """
+    # Parse the SMILES string into a molecule
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-    
-    # Loop over atoms, searching for candidate nitrogen atoms.
+
+    # Iterate over all atoms to search for relevant nitrogen atoms
     for atom in mol.GetAtoms():
-        if atom.GetAtomicNum() != 7:
+        if atom.GetAtomicNum() != 7:   # skip non-nitrogen atoms
             continue
 
-        # Exclude nitrogen atoms that are members of an aromatic ring.
-        # (This avoids, for example, pyridine-like nitrogens.)
-        if atom.IsInRing() and atom.GetIsAromatic():
+        # Exclude nitrogen with an explicit formal charge that might indicate a quaternary ammonium
+        # (or other nitrogen not derived directly from ammonia by substitution)
+        if atom.GetFormalCharge() > 0:
             continue
 
-        # Calculate the total substituent count:
-        # (number of heavy atom neighbors + implicit hydrogens).
-        tot_subs = len(atom.GetNeighbors()) + atom.GetTotalNumHs()
-        fc = atom.GetFormalCharge()
-        # For a neutral amine, we expect three substituents
-        if fc == 0 and tot_subs != 3:
-            continue
-        # For a positively charged nitrogen (e.g. quaternary ammonium), permit a total of 4.
-        if fc > 0 and tot_subs != 4:
+        # Calculate the total number of substituents derived from bonds and implicit hydrogens.
+        # For example, in a tertiary amine, there are three heavy atom neighbors and 0 hydrogens.
+        total_substituents = atom.GetTotalNumHs() + len(atom.GetNeighbors())
+
+        # The amine definition expects the nitrogen to have three substituents (as in NH3, RNH2, R2NH, or R3N).
+        if total_substituents != 3:
             continue
 
-        # Check: if the nitrogen is directly attached to a carbonyl-like carbon, then exclude.
-        reject_candidate = False
-        for nbr in atom.GetNeighbors():
-            if nbr.GetAtomicNum() == 6:  # carbon neighbor
-                for bond in nbr.GetBonds():
-                    if bond.GetBondType() == rdchem.BondType.DOUBLE:
-                        other = bond.GetOtherAtom(nbr)
-                        if other.GetAtomicNum() == 8:  # oxygen found (carbonyl)
-                            # Check if this carbon (nbr) is also attached to at least one sulfur (by a single bond).
-                            has_sulfur = any(
-                                (b.GetBondType() == rdchem.BondType.SINGLE and 
-                                 b.GetOtherAtom(nbr).GetAtomicNum() == 16)
-                                for b in nbr.GetBonds()
-                            )
-                            if not has_sulfur:
-                                reject_candidate = True
-                                break
-                if reject_candidate:
-                    break
-        
-        if reject_candidate:
+        # Exclude if the nitrogen is directly bonded to a carbon that is part of a carbonyl group (i.e. amide formation)
+        amide_flag = False
+        for neighbor in atom.GetNeighbors():
+            if neighbor.GetAtomicNum() == 6:  # carbon neighbor
+                # Look at bonds from the neighbor to oxygen; if any of these is a double bond then exclude.
+                for bond in neighbor.GetBonds():
+                    # Check if the bond is a double bond and if the other atom is oxygen.
+                    if bond.GetBondTypeAsDouble() and bond.GetOtherAtom(neighbor).GetAtomicNum() == 8:
+                        amide_flag = True
+                        break
+            if amide_flag:
+                break
+
+        if amide_flag:
             continue
 
-        # If we reached here, we have found an appropriate amine candidate.
+        # If we have reached here then we have a nitrogen with exactly 3 substituents and no carbonyl involvement.
         return True, "Found at least one amine functional group derived from ammonia"
-    
-    return False, "No amine functional group (derived from ammonia) identified"
 
-# Example (uncomment to test with one of the provided SMILES):
-# test_smiles = "CCCN(CCCC)CC(O)c1cc(Cl)cc2\\C(=C/c3ccc(Cl)cc3)c3cc(Cl)ccc3-c12"  # lumefantrine example
-# print(is_amine(test_smiles))
+    # If no such nitrogen is found then the molecule does not conform to the amine definition.
+    return False, "No amine functional group (derived from ammonia) identified"
