@@ -8,110 +8,102 @@ Definition:
   initial boiling point less than or equal to 250 °C measured at 101.3 kPa.
   
 Note:
-  Because boiling point is not directly calculable from the SMILES (without 
-  detailed quantitative structure–property relationships such as the Joback method),
-  this implementation uses a crude combination of molecular descriptors. In particular,
-  we use molecular weight (MW), topological polar surface area (TPSA), and pattern matching
-  to screen molecules. These rules are entirely heuristic.
+  Because boiling point is not directly calculable from the SMILES (without detailed
+  quantitative structure–property relationships), this implementation uses a 
+  heuristic based on molecular weight (MW), topological polar surface area (TPSA), 
+  substructure patterns (for free acids and phenols) and aromaticity.
+  
+Heuristic rules in this implementation:
+  1. The molecule must be an organic compound (contain at least one carbon).
+  2. If TPSA is very high (> 100 Å²), predict nonvolatile because strong intermolecular
+     interactions are likely.
+  3. If a free (non‐esterified) carboxylic acid group is present, predict nonvolatile.
+  4. For “light” molecules (MW ≤ 250 Da):
+       • If an aromatic “phenol” (an –OH directly bonded to an aromatic carbon) exists,
+         predict nonvolatile because hydrogen bonding raises the boiling point.
+       • Otherwise, predict volatile.
+  5. For “heavier” molecules (MW > 250 Da):
+       • If the molecule contains any aromatic rings then predict nonvolatile (many heavy
+         aromatic compounds tend to have higher boiling points, even if nonpolar).
+       • Otherwise, if the polarity (TPSA/MW) is very low (< 0.08), then predict volatile;
+         else, predict nonvolatile.
+         
+Note: This heuristic is only one possible approach.
 """
 
 from rdkit import Chem
-from rdkit.Chem import rdMolDescriptors, Crippen
+from rdkit.Chem import rdMolDescriptors
 
 def is_volatile_organic_compound(smiles: str):
     """
     Determines if a molecule is predicted to be a volatile organic compound (VOC)
     based on its SMILES string using a heuristic that combines molecular weight,
-    polarity and selected substructure patterns.
-    
-    Rules (all are crude approximations):
-      1. The molecule must be organic (contain at least one carbon).
-      2. If the topological polar surface area (TPSA) is very high (>100 Å²) then
-         the molecule is predicted non-volatile.
-      3. If the molecule is light (MW <= 250 Da) then it is predicted volatile 
-         unless it is an aromatic molecule having exactly one phenolic -OH group.
-      4. If the molecule is heavy (MW > 250 Da) then we compute the ratio TPSA/MW.
-         If the ratio is very low (<0.08) then the molecule is “rescued” and predicted volatile,
-         otherwise non-volatile.
-      5. If a free carboxylic acid group (non-ester) is found, this will tend to raise the boiling 
-         point. In that case we predict non-volatile.
-    
-    Note: Because many of these criteria are problematic and not unambiguous,
-          this is only one possible heuristic approach.
+    polarity (TPSA) and selected substructure patterns.
     
     Args:
       smiles (str): a SMILES string representing the molecule
       
     Returns:
-      bool: True if predicted to be a volatile organic compound, False otherwise.
+      bool: True if predicted to be a VOC (initial boiling point <= 250°C), False otherwise.
       str: A short explanation for the classification.
     """
-    # Parse SMILES
+    # Try to parse the SMILES string into an RDKit molecule.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Check that molecule is organic (has at least one carbon)
+    # Ensure the molecule is organic (contains at least one carbon).
     if not any(atom.GetAtomicNum() == 6 for atom in mol.GetAtoms()):
-        return False, "No carbon atom found; not considered an organic compound"
+        return False, "No carbon atom found; not an organic compound"
     
-    # Calculate descriptors: molecular weight and topological polar surface area (TPSA)
+    # Calculate key descriptors.
     mol_wt = rdMolDescriptors.CalcExactMolWt(mol)
     tpsa = rdMolDescriptors.CalcTPSA(mol)
-    
-    # Compute the ratio of polarity per unit weight
     polarity_ratio = tpsa / mol_wt if mol_wt else 0.0
     
-    # Rule 1: If TPSA is very high, predict non-volatile.
+    # Rule 1: Very high TPSA => nonvolatile.
     if tpsa > 100:
-        return False, f"TPSA is high ({tpsa:.1f} Å²); likely has strong intermolecular interactions and a boiling point > 250°C"
+        return False, f"TPSA is high ({tpsa:.1f} Å²); strong intermolecular interactions suggest BP > 250°C"
     
-    # Rule 2: Check for free carboxylic acid group (but not ester).
-    # The pattern [CX3](=O)[OX1H] typically matches a carboxylic acid.
+    # Rule 2: Identify free carboxylic acid groups.
+    # SMARTS for carboxylic acid: [CX3](=O)[OX1H]
     acid_pattern = Chem.MolFromSmarts("[CX3](=O)[OX1H]")
+    # Exclude cases where the acid is part of an ester.
+    ester_pattern = Chem.MolFromSmarts("[CX3](=O)O[C]")
     if acid_pattern and mol.HasSubstructMatch(acid_pattern):
-        # But also check that it is not part of an ester (which has [CX3](=O)O[C])
-        ester_pattern = Chem.MolFromSmarts("[CX3](=O)O[C]")
         if not mol.HasSubstructMatch(ester_pattern):
-            return False, "Contains a free carboxylic acid group; likely has a boiling point > 250°C"
+            return False, "Contains a free carboxylic acid group; likely BP > 250°C"
     
-    # For aromatic –OH (phenolic) groups, count the number attached to aromatic carbons.
-    aromatic_oh_count = 0
-    for atom in mol.GetAtoms():
-        # Look for oxygen atom (potential -OH)
-        if atom.GetSymbol() == "O":
-            # Check if this oxygen is bonded to a hydrogen and to at least one carbon
-            neighbors = atom.GetNeighbors()
-            if len(neighbors) >= 1:
-                # Check if any neighbor is a hydrogen (implicit or explicit)
-                has_h = any(neighbor.GetSymbol() == "H" for neighbor in neighbors)
-                # Check if at least one neighbor is aromatic carbon
-                bonded_aromatic_c = any(neighbor.GetSymbol() == "C" and neighbor.GetIsAromatic() for neighbor in neighbors)
-                if has_h and bonded_aromatic_c:
-                    aromatic_oh_count += 1
-    
-    # Rule 3: For light molecules (MW <= 250 Da) use MW cutoff
+    # For light molecules (MW <= 250 Da).
     if mol_wt <= 250:
-        if aromatic_oh_count == 1:
-            # In our training outcomes, some aromatic alcohols with one -OH (e.g. certain phenols)
-            # were mis‐classified as volatile; here we override and mark them as non-volatile.
-            return False, f"Aromatic molecule with one phenolic -OH and low weight ({mol_wt:.1f} Da) - likely has a higher boiling point"
+        # Check for an aromatic–OH (phenol) pattern.
+        # SMARTS: an oxygen (OH group) directly bound to an aromatic carbon.
+        phenol_pattern = Chem.MolFromSmarts("c[OH]")
+        if phenol_pattern and mol.HasSubstructMatch(phenol_pattern):
+            return False, f"Light aromatic phenol detected; hydrogen bonding may raise BP above 250°C (MW = {mol_wt:.1f} Da)"
         else:
-            return True, f"Molecular weight ({mol_wt:.1f} Da) is within light range; likely has an initial boiling point <= 250°C"
+            return True, f"Molecular weight ({mol_wt:.1f} Da) is light; likely has BP <= 250°C"
     
-    # Rule 4: For heavier compounds (MW > 250 Da), “rescue” if the molecule is very nonpolar.
-    if mol_wt > 250:
-        if polarity_ratio < 0.08:
-            return True, f"Molecular weight ({mol_wt:.1f} Da) is high but low polarity (TPSA/MW = {polarity_ratio:.3f}) suggests a lower boiling point"
-        else:
-            return False, f"Molecular weight ({mol_wt:.1f} Da) and polarity (TPSA = {tpsa:.1f} Å², ratio = {polarity_ratio:.3f}) indicate a boiling point > 250°C"
+    # For heavier molecules (MW > 250 Da):
+    # First check: if any aromatic rings are present, assume nonvolatile.
+    aromatic_ring_found = False
+    ri = mol.GetRingInfo()
+    for ring in ri.AtomRings():
+        if all(mol.GetAtomWithIdx(idx).GetIsAromatic() for idx in ring):
+            aromatic_ring_found = True
+            break
+    if aromatic_ring_found:
+        return False, "Heavy molecule with aromatic ring(s); likely has BP > 250°C"
     
-    # Fallback (should not be reached)
-    return None, None
+    # For heavy, nonaromatic molecules, try to "rescue" if polarity is very low.
+    if polarity_ratio < 0.08:
+        return True, f"Heavy molecule (MW = {mol_wt:.1f} Da) but very low polarity (TPSA/MW = {polarity_ratio:.3f}) suggests BP <= 250°C"
+    else:
+        return False, f"Heavy molecule (MW = {mol_wt:.1f} Da) with moderate polarity (TPSA = {tpsa:.1f} Å², ratio = {polarity_ratio:.3f}) likely has BP > 250°C"
 
-# Example usage (for testing purposes only):
+# Example usage (for testing):
 if __name__ == "__main__":
-    # List a few example SMILES strings and names:
+    # Example SMILES strings and names (selected from provided outcomes):
     examples = [
         ("CCCCCC(O)CCC", "nonan-4-ol"),
         ("CCCCCCCCCCCCCCCCCCCC(O)CCCCC", "hexacosan-6-ol"),
@@ -121,8 +113,12 @@ if __name__ == "__main__":
         ("CC[C@@H](C)C(C)C", "(3R)-2,3-dimethylpentane"),
         ("OC(=O)CC=C(C)C", "4-methylpent-3-enoic acid"),
         ("OC1=C(C(O)=CC(=C1)C)C", "Beta-Orcinol"),
-        ("OCCCC(=O)O", "Acetic acid derivative"),
+        ("CCCCCCCCCCCCCC(O)CCCCCCCCCCC", "pentacosan-12-ol"),
+        ("ClC(Cl)([H])[H]", "dichloromethane-d2"),
+        ("Cc1ccccc1", "toluene"),
+        ("COc1cc(ccc1O)[C@@H](O)[C@@H]1CO[C@@H]([C@H]1CO)c1ccc(O)c(OC)c1", "tanegool"),
     ]
+    
     for smi, name in examples:
         result, reason = is_volatile_organic_compound(smi)
-        print(f"SMILES: {smi:40s} NAME: {name:25s} -> {result}, REASON: {reason}")
+        print(f"SMILES: {smi:60s} NAME: {name:35s} -> {result}, REASON: {reason}")
