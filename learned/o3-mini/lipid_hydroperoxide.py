@@ -4,15 +4,14 @@ Classifies: CHEBI:61051 lipid hydroperoxide
 """
 Classifies: Lipid Hydroperoxide
 Defined as any lipid carrying one or more hydroperoxy (-OOH) substituents.
-This implementation uses additional constraints:
-  1. The molecule must contain at least one hydroperoxy (-OOH) group (detected by SMARTS "[OX2H]-[OX2]").
-  2. The molecule must be lipid‐like:
-       • At least 16 carbon atoms.
-       • Molecular weight of at least 300 Da.
-       • A long uninterrupted carbon chain of at least 8 carbons.
-       • The longest carbon chain must account for at least 50% of all carbons.
-       • At most one ring system.
-       • An oxygen-to-carbon ratio below 0.3.
+This revised implementation now checks:
+  1. The molecule parses correctly.
+  2. There is at least one hydroperoxy (-OOH) group (using SMARTS "[OX2H]-[OX2]").
+  3. The molecule has at least 16 carbon atoms and a molecular weight of at least 300 Da.
+  4. It has an uninterrupted carbon chain of at least 8 atoms that represents at least 50% of total carbons.
+  5. It has at most one ring system.
+  6. Its oxygen-to-carbon ratio is below 0.35.
+  7. It does not contain anionic oxygen atoms that are not part of a carboxylate group.
 """
 
 from rdkit import Chem
@@ -20,15 +19,15 @@ from rdkit.Chem import rdMolDescriptors
 
 def longest_carbon_chain(mol):
     """
-    Computes the length of the longest simple path made exclusively of carbon atoms.
-    Builds a graph where only carbon atoms (atomic number 6) are nodes and bonds connecting them are edges.
-    A DFS is used to find the longest simple (acyclic) chain.
+    Computes the length of the longest simple (acyclic) carbon chain in the molecule.
+    Only carbon atoms (atomic number 6) and bonds among them are considered.
+    Uses a DFS approach and returns the maximum chain length found.
     """
-    # Identify carbon atoms
+    # Get indexes of carbon atoms
     carbon_atoms = [atom.GetIdx() for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6]
     if not carbon_atoms:
         return 0
-    # Build a graph (dictionary) restricted to carbon atoms.
+    # Build a graph (dictionary) for carbon atoms only.
     carbon_graph = {idx: [] for idx in carbon_atoms}
     for bond in mol.GetBonds():
         a1 = bond.GetBeginAtom()
@@ -37,7 +36,6 @@ def longest_carbon_chain(mol):
             carbon_graph[a1.GetIdx()].append(a2.GetIdx())
             carbon_graph[a2.GetIdx()].append(a1.GetIdx())
     
-    # Depth-first search to find longest simple path
     def dfs(node, visited):
         max_length = 1
         for neigh in carbon_graph[node]:
@@ -57,33 +55,33 @@ def longest_carbon_chain(mol):
 def is_lipid_hydroperoxide(smiles: str):
     """
     Determines if a molecule is a lipid hydroperoxide based on its SMILES string.
-    
+
     The molecule must:
       1. Parse correctly.
       2. Contain at least one hydroperoxy (-OOH) group.
       3. Have at least 16 carbon atoms.
       4. Possess a molecular weight of at least 300 Da.
-      5. Have a long uninterrupted carbon chain (>=8 atoms) that also accounts for at least 50% of all carbons.
-      6. Have an oxygen:carbon ratio of less than 0.3.
+      5. Have a long uninterrupted carbon chain (>=8 atoms) that accounts for at least 50% of all carbons.
+      6. Have an oxygen:carbon ratio below 0.35.
       7. Have at most one ring system.
-    
+      8. Not contain any anionic oxygen atoms that are not part of a carboxylate group.
+      
     Args:
       smiles (str): SMILES string of the molecule.
-    
+
     Returns:
-      bool: True if the molecule is classified as a lipid hydroperoxide, else False.
-      str: Explanation of the classification.
+      bool: True if the molecule is a lipid hydroperoxide; False otherwise.
+      str: Explanation of the decision.
     """
     # Convert SMILES to molecule
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Add explicit hydrogens (to capture hydroperoxy H properly)
+    # Add explicit hydrogens so that hydroperoxy H is explicit
     mol = Chem.AddHs(mol)
     
-    # Check for the hydroperoxy group (-OOH) using SMARTS:
-    # The pattern "[OX2H]-[OX2]" matches an -OOH group.
+    # Check for hydroperoxy group (-OOH) using SMARTS pattern.
     hydroperoxy_pattern = Chem.MolFromSmarts("[OX2H]-[OX2]")
     if not mol.HasSubstructMatch(hydroperoxy_pattern):
         return False, "No hydroperoxy (-OOH) substituent found"
@@ -91,32 +89,50 @@ def is_lipid_hydroperoxide(smiles: str):
     # Count carbon atoms
     carbon_count = sum(1 for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6)
     if carbon_count < 16:
-        return False, f"Insufficient carbon count: {carbon_count}; need at least 16 for lipid-like structure"
+        return False, f"Too few carbon atoms ({carbon_count}); require at least 16 for a lipid-like structure"
     
     # Check molecular weight
     mw = rdMolDescriptors.CalcExactMolWt(mol)
     if mw < 300:
-        return False, f"Molecular weight too low ({mw:.1f} Da) for a typical lipid"
+        return False, f"Molecular weight too low ({mw:.1f} Da); require at least 300 Da for a typical lipid"
     
     # Check ring systems (allow at most one)
     ring_count = mol.GetRingInfo().NumRings()
     if ring_count > 1:
         return False, f"Too many ring systems ({ring_count}); not typical for a lipid hydroperoxide"
     
-    # Determine the longest uninterrupted carbon chain length
+    # Check for a long uninterrupted carbon chain
     chain_length = longest_carbon_chain(mol)
     if chain_length < 8:
-        return False, f"Longest carbon chain too short ({chain_length} atoms); need at least 8"
-    
-    # Check that the main chain represents a large fraction of the molecule’s carbons
+        return False, f"Longest carbon chain is too short ({chain_length} atoms); need at least 8"
     if chain_length < 0.5 * carbon_count:
-        return False, f"Longest carbon chain ({chain_length} atoms) represents less than 50% of total carbons ({carbon_count})"
+        return False, f"Longest carbon chain ({chain_length} atoms) is less than 50% of total carbons ({carbon_count})"
     
-    # Compute oxygen count and check oxygen:carbon ratio
+    # Compute oxygen count and check oxygen-to-carbon ratio (< 0.35)
     oxygen_count = sum(1 for atom in mol.GetAtoms() if atom.GetAtomicNum() == 8)
     oxygen_ratio = oxygen_count / carbon_count if carbon_count > 0 else 0
-    if oxygen_ratio >= 0.3:
+    if oxygen_ratio >= 0.35:
         return False, f"Oxygen to carbon ratio too high ({oxygen_ratio:.2f}); not typical for a lipid hydroperoxide"
+    
+    # Exclude molecules with anionic oxygens that are not part of a carboxylate group.
+    # First, collect all oxygen atoms with formal charge -1.
+    anionic_oxygens = [atom for atom in mol.GetAtoms() if atom.GetAtomicNum() == 8 and atom.GetFormalCharge() == -1]
+    
+    # Define a SMARTS pattern for a carboxylate group: [CX3](=O)[O-]
+    carboxylate_smarts = Chem.MolFromSmarts("[$([CX3](=O)[O-])]")
+    carboxylate_matches = mol.GetSubstructMatches(carboxylate_smarts)
+    carboxylate_oxygens = set()
+    for match in carboxylate_matches:
+        # Add indices of oxygen atoms in the match that have a -1 charge.
+        for idx in match:
+            atom = mol.GetAtomWithIdx(idx)
+            if atom.GetAtomicNum() == 8 and atom.GetFormalCharge() == -1:
+                carboxylate_oxygens.add(idx)
+    
+    # If any anionic oxygen is present that is not part of a carboxylate, then reject.
+    for atom in anionic_oxygens:
+        if atom.GetIdx() not in carboxylate_oxygens:
+            return False, "Molecule contains anionic oxygen groups not typical for a lipid hydroperoxide"
     
     return True, "Molecule contains a hydroperoxy substituent, a long main carbon chain, low ring count, and acceptable oxygen content for a lipid hydroperoxide"
 
