@@ -4,76 +4,92 @@ Classifies: CHEBI:32877 primary amine
 """
 Classifies: Primary Amine
 Definition: A compound formally derived from ammonia by replacing one hydrogen atom by a hydrocarbyl group.
-The program looks for an –NH2 group (i.e. primary amine) that is attached to at least one carbon and is not part of an amide.
+For the purposes of this classifier, the molecule is considered a primary amine if it contains at least one –NH2 group 
+(where the nitrogen has exactly two hydrogens and one heavy-atom neighbor) that is not part of an amide bond.
+Also, if the molecule contains any amide bonds (indicative of peptides or related compounds) it is rejected.
 """
 from rdkit import Chem
 
 def is_primary_amine(smiles: str):
     """
     Determines if a molecule is a primary amine based on its SMILES string.
-    A primary amine has an –NH2 group where nitrogen is bound to one hydrocarbyl substituent.
+    A primary amine (R–NH2) is defined as a derivative of ammonia in which exactly one hydrogen is replaced by a
+    hydrocarbyl (or related) substituent. Here we require:
+      - The nitrogen has exactly 2 hydrogens.
+      - It has exactly 1 non-hydrogen neighbor (the substituent).
+      - That neighbor is not part of a carbonyl group (which would indicate an amide bond).
+    Also, if the molecule contains amide bonds (typical for peptides), the molecule is not classified as a (simple) primary amine.
     
     Args:
         smiles (str): SMILES string of the molecule.
     
     Returns:
-        bool: True if molecule is classified as a primary amine, False otherwise.
-        str: Reason for the classification.
+        bool: True if the molecule is classified as a primary amine, False otherwise.
+        str: Reason for classification.
     """
-    # Parse the SMILES string
+    # Parse SMILES string
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # SMARTS pattern for a nitrogen with exactly two attached hydrogens (i.e. potentially an NH2 group).
-    # This pattern will match both aliphatic and aromatic primary amines.
-    primary_amine_smarts = "[NX3;H2]"
-    primary_amine_pattern = Chem.MolFromSmarts(primary_amine_smarts)
-    if primary_amine_pattern is None:
-        return False, "Error in generating SMARTS pattern"
+    # Add explicit hydrogens so we can count them correctly
+    mol = Chem.AddHs(mol)
     
-    # Find all matches of the primary amine pattern in the molecule.
-    matches = mol.GetSubstructMatches(primary_amine_pattern)
-    if not matches:
-        return False, "No primary amine (-NH2) substructure found"
+    # First, if the molecule contains any amide bonds it is likely a peptide or amide derivative.
+    # We look for a bonded pattern "C(=O)N" (note: this is a heuristic).
+    amide_smarts = Chem.MolFromSmarts("C(=O)N")
+    if amide_smarts is None:
+        return False, "Error in generating amide SMARTS pattern"
+    if mol.HasSubstructMatch(amide_smarts):
+        return False, "Molecule contains amide bond(s) typical of peptides/amides"
     
-    # Check each matched nitrogen for required features:
-    # It must be attached to at least one carbon atom (i.e. the hydrocarbyl group),
-    # and it must not be part of an amide (i.e. attached to a carbonyl carbon, C(=O)-).
-    for match in matches:
-        # match is a tuple of atom indices that match the pattern.
-        # Our pattern only covers one atom (the nitrogen) so take the first index.
-        n_idx = match[0]
-        n_atom = mol.GetAtomWithIdx(n_idx)
-        # Flag to check if this nitrogen is attached to at least one carbon atom.
-        attached_to_carbon = False
-        amide_flag = False
+    # Iterate over all nitrogen atoms
+    for atom in mol.GetAtoms():
+        if atom.GetAtomicNum() != 7:
+            continue
         
-        for neighbor in n_atom.GetNeighbors():
-            # Check if the neighbor atom is carbon (atomic number 6) to represent a hydrocarbyl group.
-            if neighbor.GetAtomicNum() == 6:
-                attached_to_carbon = True
-                # Further check if this carbon is part of a carbonyl (C=O) bond,
-                # which would indicate an amide group.
-                for bond in neighbor.GetBonds():
-                    # If the bond is to an oxygen and is a double bond, then it is likely a carbonyl.
-                    other_atom = bond.GetOtherAtom(neighbor)
-                    if other_atom.GetAtomicNum() == 8 and bond.GetBondTypeAsDouble() == 2.0:
-                        amide_flag = True
+        # Count the hydrogens attached to this nitrogen using the explicit model.
+        h_count = atom.GetTotalNumHs()
+        # List heavy neighbors (non-hydrogen atoms)
+        heavy_neighbors = [nbr for nbr in atom.GetNeighbors() if nbr.GetAtomicNum() != 1]
+        
+        # We require exactly 2 hydrogens and exactly 1 heavy neighbor 
+        # (i.e. one substituent replacing one hydrogen from ammonia).
+        if h_count != 2 or len(heavy_neighbors) != 1:
+            continue
+        
+        # Now, check if the substituent (the heavy neighbor) is acceptable.
+        # For a typical primary amine it should be the hydrocarbyl group, usually containing carbon.
+        substituent = heavy_neighbors[0]
+        # (Optional) Even if the substituent is not a carbon, check if it is attached further to a carbon.
+        # For simplicity we allow any substituent, as long as the N is NH2.
+        
+        # Check for possible amide connectivity at the substituent.
+        # If the substituent is carbon, see if it is part of a carbonyl (i.e. double bond to oxygen)
+        if substituent.GetAtomicNum() == 6:
+            is_amide = False
+            for bond in substituent.GetBonds():
+                # Make sure the bond connects substituent and oxygen
+                # and that the bond is a double bond.
+                if bond.GetBondType() == Chem.rdchem.BondType.DOUBLE:
+                    other = bond.GetOtherAtom(substituent)
+                    if other.GetAtomicNum() == 8:
+                        is_amide = True
                         break
-            # If we already detected an amide connection for this candidate, break early.
-            if amide_flag:
-                break
-
-        if amide_flag:
-            # This matched amine group appears to be part of an amide.
-            continue
-        
-        if not attached_to_carbon:
-            # If not bound to any carbon, it is not derived from ammonia by replacing a hydrogen with a hydrocarbyl group.
-            continue
-        
-        # Found a valid primary amine substructure.
-        return True, "Molecule contains a primary amine (R–NH2) group."
+            if is_amide:
+                continue  # Skip this candidate since its substituent is part of a carbonyl
+        # If we reached here, we consider that this nitrogen qualifies as a primary amine.
+        return True, "Molecule contains a valid primary amine (R–NH2) group."
     
-    return False, "No valid primary amine group (bound to a hydrocarbyl moiety and not part of an amide) found."
+    return False, "No valid primary amine group (with two hydrogens and one substituent not involved in an amide) found."
+
+# Example test calls (you may remove these before use)
+if __name__ == "__main__":
+    test_smiles = [
+        "Cc1cc(cc(c1N)S(O)(=O)=O)C(=C1\\C=CC(=N)C(=C1)S(O)(=O)=O)\\c1ccc(N)c(c1)S(O)(=O)=O",  # acid fuchsin (free acid form) [TP]
+        "CN",  # methylamine [TP]
+        "O=C(N[C@@H](C(C)C)C(O)=O)[C@@H](NC(=O)[C@@H](N)CC=1C=2C(NC1)=CC=CC2)CCCCN"  # a peptide fragment [FP]
+    ]
+    for s in test_smiles:
+        res, reason = is_primary_amine(s)
+        print(f"SMILES: {s}\nResult: {res}\nReason: {reason}\n")
