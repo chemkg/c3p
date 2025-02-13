@@ -5,192 +5,167 @@ Classifies: CHEBI:61655 steroid saponin
 """
 Classifies: Steroid saponin
 Definition: Any saponin derived from a hydroxysteroid.
-That is, the molecule must contain 
-  (1) a mostly-carbon steroid tetracyclic core (three 6-membered rings and one 5-membered ring, with at least 17 carbons in the core and at least one exocyclic –OH)
-  and 
-  (2) at least one sugar ring (a 5- or 6-membered ring containing exactly one ring oxygen and at least one exocyclic –OH)
-  that is directly attached to the steroid core.
+That is, a molecule must contain (1) a steroid (hydroxysteroid) tetracyclic core and 
+(2) at least one sugar moiety (a glycoside ring) attached as a substituent.
+Our approach uses ring analysis rather than a very specific SMARTS pattern.
 """
 
 from rdkit import Chem
-from itertools import combinations
+from rdkit.Chem import rdmolops
 
 def is_steroid_saponin(smiles: str):
     """
     Determines if a molecule is a steroid saponin based on its SMILES string.
     
-    The heuristic is as follows:
-    1. Parse the SMILES string.
-    2. Identify candidate rings (only 5- or 6-membered) that are “mostly carbon”:
-         – In a 5-membered ring, at least 4 atoms must be carbon.
-         – In a 6-membered ring, at least 5 atoms must be carbon.
-    3. Build a graph of rings that are fused (sharing at least 2 atoms) and find connected components.
-    4. In each connected component, search for any combination of 4 rings that is composed of one 5-membered ring and three 6-membered rings.
-         • The union of atoms in these rings must include at least 17 carbon atoms.
-         • Also, at least one carbon in the core must have an exocyclic hydroxyl group attached – meaning it’s connected by a single bond to an oxygen that itself has at least one hydrogen.
-    5. Next, search for at least one sugar ring:
-         • A sugar ring is defined as a 5- or 6-membered ring containing exactly one ring oxygen,
-         • It has at least one exocyclic hydroxyl group,
-         • And at least one of its atoms is directly bonded to an atom in the steroid core.
+    Our strategy (heuristic):
+      1. Parse the SMILES string.
+      2. Identify candidate rings that could form a steroid core.
+         We look for four fused rings that are made entirely of carbons.
+         Furthermore, we require that within that fused set there are three 6-membered rings
+         and one 5-membered ring.
+      3. Verify that at least one carbon in these rings has an exocyclic –OH group (to meet the
+         “hydroxysteroid” requirement).
+      4. Look for at least one sugar ring – here defined as a 5- or 6-membered ring that 
+         contains exactly one oxygen atom in the ring and at least two exocyclic hydroxyl groups.
     
     Args:
-       smiles (str): A SMILES string of the molecule.
-       
+      smiles (str): SMILES string of the molecule.
+      
     Returns:
-       (bool, str): A tuple where the first element is True if the molecule qualifies as a steroid saponin
-                    and False otherwise, the second element is a message giving the reasoning.
+      (bool, str): A tuple where the first element is True if the molecule is classified as a 
+                   steroid saponin, and False otherwise; the second element is a message explaining 
+                   the reasoning.
     """
-    # Parse the SMILES string
+    # Parse the SMILES; if invalid, return immediately.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # For correct detection of exocyclic hydroxyls, add explicit hydrogens.
-    molH = Chem.AddHs(mol)
+    # For sugar detection we may need explicit hydrogens.
+    mol_with_H = Chem.AddHs(mol)
     
+    # Get ring information from the molecule.
     ring_info = mol.GetRingInfo()
     all_rings = ring_info.AtomRings()
     
-    # 1. Collect candidate rings: only 5- or 6-membered rings that are mostly carbon.
+    # Step 1 — Look for candidate steroid rings:
+    # We assume that steroid rings are composed entirely of carbons.
     candidate_rings = []
     for ring in all_rings:
+        # Only consider rings that are either 5 or 6 members.
         if len(ring) not in (5, 6):
             continue
-        # Count carbon atoms in the ring.
-        nC = sum(1 for idx in ring if mol.GetAtomWithIdx(idx).GetAtomicNum() == 6)
-        if len(ring) == 5 and nC < 4:
-            continue
-        if len(ring) == 6 and nC < 5:
-            continue
-        candidate_rings.append(ring)
+        # Check that every atom in the ring is carbon.
+        if all(mol.GetAtomWithIdx(idx).GetAtomicNum() == 6 for idx in ring):
+            candidate_rings.append(ring)
     
-    # 2. Build a graph of fused candidate rings – rings are fused if they share at least 2 atoms.
+    # Build a graph over candidate rings. Two rings are "fused" if they share at least two atoms.
     ring_graph = {i: set() for i in range(len(candidate_rings))}
     for i in range(len(candidate_rings)):
         for j in range(i+1, len(candidate_rings)):
-            if len(set(candidate_rings[i]).intersection(candidate_rings[j])) >= 2:
+            shared = set(candidate_rings[i]).intersection(set(candidate_rings[j]))
+            if len(shared) >= 2:
                 ring_graph[i].add(j)
                 ring_graph[j].add(i)
     
-    # Find connected components in the ring fusion graph using DFS.
+    # Now find connected components (clusters) from this graph.
     def dfs(node, visited, comp):
         visited.add(node)
         comp.add(node)
-        for nei in ring_graph[node]:
-            if nei not in visited:
-                dfs(nei, visited, comp)
+        for neighbor in ring_graph[node]:
+            if neighbor not in visited:
+                dfs(neighbor, visited, comp)
     
     components = []
-    visited_nodes = set()
+    visited = set()
     for node in ring_graph:
-        if node not in visited_nodes:
+        if node not in visited:
             comp = set()
-            dfs(node, visited_nodes, comp)
+            dfs(node, visited, comp)
             components.append(comp)
     
     steroid_core_found = False
-    core_atoms = set()
-    core_reason = ""
-    
-    # 3. Search for a candidate steroid core in the connected components.
-    # We look for a set of 4 fused rings: one 5-membered and three 6-membered rings.
+    reason_core = ""
+    # Check each component to see if any has exactly 4 rings with the expected size: one 5-membered and three 6-membered.
     for comp in components:
         if len(comp) < 4:
             continue
-        # Check every combination of 4 rings.
+        # We iterate over all subsets of 4 rings from this component:
+        from itertools import combinations
         for subset in combinations(comp, 4):
             ring_sizes = [len(candidate_rings[i]) for i in subset]
-            if sorted(ring_sizes) != [5, 6, 6, 6]:
-                continue
-            # Combine atoms from these rings; these form the steroid core candidate.
-            subset_atoms = set()
-            for i in subset:
-                subset_atoms.update(candidate_rings[i])
-            nC_in_core = sum(1 for idx in subset_atoms if mol.GetAtomWithIdx(idx).GetAtomicNum() == 6)
-            if nC_in_core < 17:
-                continue
-            # Check for at least one exocyclic hydroxyl group: 
-            # look for a neighbor oxygen (bonded by a single bond) attached to a core carbon that is not in the core.
-            hydroxyl_found = False
-            for idx in subset_atoms:
-                atom = mol.GetAtomWithIdx(idx)
-                if atom.GetAtomicNum() != 6:
-                    continue
-                for nbr in atom.GetNeighbors():
-                    if nbr.GetIdx() in subset_atoms:
+            if sorted(ring_sizes) == [5, 6, 6, 6]:
+                # Found a candidate steroid nucleus.
+                # Now check for at least one hydroxyl (–OH) attached to one of the carbons in these rings.
+                hydroxyl_found = False
+                # Get all atom indices in these candidate rings.
+                core_atoms = set()
+                for i in subset:
+                    core_atoms.update(candidate_rings[i])
+                for idx in core_atoms:
+                    atom = mol.GetAtomWithIdx(idx)
+                    if atom.GetAtomicNum() != 6:
                         continue
-                    if nbr.GetAtomicNum() == 8:
-                        bond = mol.GetBondBetweenAtoms(atom.GetIdx(), nbr.GetIdx())
-                        if bond is not None and bond.GetBondType().name == "SINGLE":
-                            # Use molH (the molecule with explicit hydrogens) to ensure the oxygen has at least one hydrogen.
-                            nbrH = molH.GetAtomWithIdx(nbr.GetIdx())
-                            numHs = sum(1 for n in nbrH.GetNeighbors() if n.GetAtomicNum() == 1)
-                            if numHs >= 1:
+                    # Check neighboring atoms that are not in the core.
+                    for nbr in atom.GetNeighbors():
+                        if nbr.GetIdx() in core_atoms:
+                            continue
+                        # Check if the neighbor is oxygen connected via a single bond.
+                        if nbr.GetAtomicNum() == 8:
+                            bond = mol.GetBondBetweenAtoms(atom.GetIdx(), nbr.GetIdx())
+                            if bond is not None and bond.GetBondType().name == "SINGLE":
                                 hydroxyl_found = True
                                 break
+                    if hydroxyl_found:
+                        break
                 if hydroxyl_found:
+                    steroid_core_found = True
                     break
-            if hydroxyl_found:
-                steroid_core_found = True
-                core_atoms = subset_atoms
-                core_reason = ("Found fused steroid core (rings: sizes {} with {} core carbons) "
-                               "and at least one exocyclic -OH".format(sorted(ring_sizes), nC_in_core))
-                break
         if steroid_core_found:
             break
-    
+
     if not steroid_core_found:
         return False, "No steroid (hydroxysteroid) tetracyclic core found"
     
-    # 4. Look for a sugar (glycoside) ring attached directly to the steroid core.
-    # A sugar ring is a 5- or 6-membered ring that:
-    #  - Contains exactly one oxygen atom in the ring,
-    #  - Has at least one exocyclic hydroxyl group,
-    #  - And at least one of its atoms is directly bonded to an atom in the steroid core.
+    # Step 2 — Look for at least one sugar ring.
+    # We use a similar ring search but now we look for rings that are 5 or 6 members,
+    # have exactly one ring oxygen (atomic number 8), and at least two exocyclic hydroxyl groups.
     sugar_found = False
-    sugar_reason = ""
     for ring in all_rings:
         if len(ring) not in (5, 6):
             continue
-        oxy_count = sum(1 for idx in ring if mol.GetAtomWithIdx(idx).GetAtomicNum() == 8)
-        if oxy_count != 1:
+        # Count atoms in the ring that are oxygen. (Note: we use the original mol.)
+        oxy_in_ring = sum(1 for idx in ring if mol.GetAtomWithIdx(idx).GetAtomicNum() == 8)
+        if oxy_in_ring != 1:
             continue
-        # Count exocyclic OH groups attached to ring atoms.
+        # Now count exocyclic –OH groups attached to ring atoms.
         oh_count = 0
         for idx in ring:
-            atom = molH.GetAtomWithIdx(idx)
+            atom = mol_with_H.GetAtomWithIdx(idx)
+            # We expect sugar rings to consist mainly of carbon.
+            if atom.GetAtomicNum() != 6:
+                continue
             for nbr in atom.GetNeighbors():
+                # If the neighbor is not in this ring...
                 if nbr.GetIdx() in ring:
                     continue
+                # Check if neighboring oxygen is part of an –OH.
                 if nbr.GetAtomicNum() == 8:
-                    bond = molH.GetBondBetweenAtoms(atom.GetIdx(), nbr.GetIdx())
+                    bond = mol_with_H.GetBondBetweenAtoms(atom.GetIdx(), nbr.GetIdx())
                     if bond is not None and bond.GetBondType().name == "SINGLE":
-                        numHs = sum(1 for n in nbr.GetNeighbors() if n.GetAtomicNum() == 1)
-                        if numHs >= 1:
+                        # Further check: the oxygen should have at least one hydrogen.
+                        # (Counting explicit H atoms attached.)
+                        num_H = sum(1 for h in nbr.GetNeighbors() if h.GetAtomicNum() == 1)
+                        if num_H >= 1:
                             oh_count += 1
-        if oh_count < 1:
-            continue
-        # Check if at least one atom in the sugar ring is bonded to an atom in the steroid core.
-        attached = False
-        for idx in ring:
-            atom = mol.GetAtomWithIdx(idx)
-            for nbr in atom.GetNeighbors():
-                if nbr.GetIdx() in core_atoms:
-                    attached = True
-                    break
-            if attached:
-                break
-        if attached:
+        if oh_count >= 2:
             sugar_found = True
-            sugar_reason = ("Sugar ring found with ring oxygen count = 1, exocyclic -OH count = {}, "
-                            "attached to steroid core.".format(oh_count))
             break
 
     if not sugar_found:
-        return False, "No glycoside (sugar) ring attached directly to the steroid core found"
-
-    return True, ("Molecule classified as steroid saponin: steroid core detected ({}); sugar moiety detected ({})."
-                  .format(core_reason, sugar_reason))
+        return False, "No sugar ring (glycoside) found"
+    
+    return True, "Molecule contains a hydroxysteroid tetracyclic core with at least one sugar ring attached"
 
 # Example usage (for testing):
 if __name__ == "__main__":
