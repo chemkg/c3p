@@ -3,100 +3,119 @@ Classifies: CHEBI:17297 UDP-sugar
 """
 #!/usr/bin/env python
 """
-Classifies: UDP-sugar 
+Classifies: UDP-sugar
 Definition:
-    A pyrimidine nucleotide-sugar having UDP as the nucleotide component attached to an 
+    A pyrimidine nucleotide-sugar having UDP as the nucleotide component 
+    (a uracil attached to a ribose bearing a 5'-diphosphate group) linked to an 
     unspecified sugar via an anomeric diphosphate linkage.
     
 Our strategy:
-  1. Look for a UDP “core” fragment – that is, the uridine (uracil attached to a ribose)
-     in which the ribose’s 5′-position bears a diphosphate group.
-  2. Once the UDP core is found, require that the remainder of the molecule (i.e. 
-     the part not accounted for by the UDP fragment) has at least one additional sugar ring.
-     
-Note: The SMARTS for the UDP core fragment is a compromise. We require that the molecule 
-has a uracil ring attached to a ribose having a CH2–diphosphate substituent. The diphosphate 
-is defined with two phosphorous atoms (using P with double-bonded O’s and single O’s).
+  1. Look for a diphosphate fragment defined by the SMARTS "OP(O)(=O)OP(O)(=O)O".
+  2. Look for a uracil fragment defined by the SMARTS "n1c(=O)[nH]c(=O)n1".
+  3. Verify that a diphosphate atom and a uracil atom are connected by a short bond path.
+  4. Then, require that in addition to the UDP core (which includes the ribose),
+     there is at least one extra sugar ring (a 5- or 6-membered ring that contains oxygen)
+     outside of the UDP core.
 """
 
 from rdkit import Chem
+from rdkit.Chem import rdmolops
 
 def is_UDP_sugar(smiles: str):
     """
     Determines if a molecule is a UDP-sugar based on its SMILES string.
-    The method requires the presence of a UDP moiety – defined as a uracil attached to a ribose
-    with a 5'-diphosphate group – plus an additional sugar moiety indicated by at least one sugar ring 
-    (a ring of 5 or 6 atoms containing at least one oxygen) that is not part of the UDP core.
+    
+    The method requires the presence of a UDP moiety – defined here by:
+        a) a diphosphate fragment (OP(O)(=O)OP(O)(=O)O)
+        b) a uracil fragment (n1c(=O)[nH]c(=O)n1)
+    that are connected through a short bond‐path (≤6 bonds, taken as a proxy for the ribose)
+    and that the molecule contains at least one additional sugar ring (5- or 6-membered ring with an oxygen)
+    outside of the UDP core.
     
     Args:
         smiles (str): SMILES string of the molecule
         
     Returns:
-        bool: True if the molecule is classified as a UDP-sugar, False otherwise
-        str: A reason explaining the classification decision
+        bool: True if molecule is a UDP-sugar; False otherwise.
+        str: Explanation for the decision.
     """
-    
-    # Parse the input SMILES
+    # Parse the SMILES
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # ------------------------ 
-    # 1. Search for the UDP core fragment.
-    #
-    # In a UDP-sugar the uridine part is attached to a diphosphate on the 5' position.
-    # The following SMARTS attempts to capture the group: 
-    #   – A ribose ring (5-membered) with one exocyclic CH2 group
-    #   – The CH2 group carries a diphosphate comprising two phosphate units:
-    #         OP(O)(=O)OP(O)(=O)O
-    #   – The anomeric carbon of the ribose is attached to a uracil ring (pyrimidine with two carbonyls)
-    #
-    # This UDP core SMARTS does not cover all substitutions but is meant to improve our connectivity criteria.
-    udp_smarts = ("O[C@H]1OC(COP(O)(=O)OP(O)(=O)O)[C@@H](O)[C@@H]1"
-                  "n1ccc(=O)[nH]c1=O")
-    udp_core = Chem.MolFromSmarts(udp_smarts)
-    if udp_core is None:
-        return False, "Error creating the UDP SMARTS fragment"
+    # ---------- Step 1: Identify diphosphate fragment ----------
+    # SMARTS for a diphosphate fragment (note: many UDP sugars show exactly this connectivity)
+    dp_smarts = "OP(O)(=O)OP(O)(=O)O"
+    dp_mol = Chem.MolFromSmarts(dp_smarts)
+    if dp_mol is None:
+        return False, "Error creating diphosphate SMARTS fragment"
+    dp_matches = mol.GetSubstructMatches(dp_mol, useChirality=False)
+    if not dp_matches:
+        return False, "Diphosphate fragment not found"
     
-    udp_matches = mol.GetSubstructMatches(udp_core)
-    if not udp_matches:
-        return False, "UDP core fragment (uridine-diphosphate) not found"
+    # ---------- Step 2: Identify uracil fragment ----------
+    # SMARTS for the uracil moiety, without enforcing chirality.
+    uracil_smarts = "n1c(=O)[nH]c(=O)n1"
+    uracil_mol = Chem.MolFromSmarts(uracil_smarts)
+    if uracil_mol is None:
+        return False, "Error creating uracil SMARTS fragment"
+    uracil_matches = mol.GetSubstructMatches(uracil_mol, useChirality=False)
+    if not uracil_matches:
+        return False, "Uracil fragment not found"
     
-    # For our present approach we take the first matching UDP fragment.
-    udp_match_atoms = set(udp_matches[0])
+    # ---------- Step 3: Verify connectivity between diphosphate and uracil as UDP core ----------
+    # We want at least one diphosphate atom and one uracil atom to be connected by a short path.
+    # (This is our proxy for the ribose linking them.)
+    found_udp_core = False
+    udp_core_atoms = set()
+    cutoff = 6  # maximum bond distance allowed between a dp atom and a uracil atom
+    for dp_match in dp_matches:
+        for ur_match in uracil_matches:
+            # Check each pair of atoms from dp and uracil matches
+            for dp_atom in dp_match:
+                for ur_atom in ur_match:
+                    path = rdmolops.GetShortestPath(mol, dp_atom, ur_atom)
+                    if path and (len(path) - 1) <= cutoff:
+                        # Build a set of atoms that comprise the UDP core:
+                        # (the dp match, uracil match, and the atoms along the connecting path)
+                        udp_core_atoms.update(dp_match)
+                        udp_core_atoms.update(ur_match)
+                        udp_core_atoms.update(path)
+                        found_udp_core = True
+                        break
+                if found_udp_core:
+                    break
+            if found_udp_core:
+                break
+        if found_udp_core:
+            break
+    if not found_udp_core:
+        return False, "UDP core fragment (uridine-diphosphate) not found or not connected"
     
-    # ------------------------ 
-    # 2. Search for an additional sugar ring.
-    #
-    # We assume that a sugar ring is typically a 5- or 6-membered ring that has at least one oxygen.
+    # ---------- Step 4: Look for an additional sugar ring not part of the UDP core ----------
+    # Define a sugar ring as a 5- or 6-membered ring that contains at least one oxygen.
     ring_info = mol.GetRingInfo()
-    rings = ring_info.AtomRings()
-    
     sugar_ring_found = False
-    sugar_ring_count = 0
-    for ring in rings:
-        # Check if ring size is 5 or 6
+    for ring in ring_info.AtomRings():
         if len(ring) in (5, 6):
             # Count oxygen atoms in the ring.
             oxygens = [idx for idx in ring if mol.GetAtomWithIdx(idx).GetAtomicNum() == 8]
-            if len(oxygens) >= 1:
-                # We require that the sugar ring is not simply the ribose of the UDP core.
-                # If not all atoms of the ring are in the UDP fragment match, then we count it as the extra sugar.
-                if not set(ring).issubset(udp_match_atoms):
+            if oxygens:
+                # Ensure that this ring is not completely contained in the UDP core.
+                if not set(ring).issubset(udp_core_atoms):
                     sugar_ring_found = True
-                    sugar_ring_count += 1
+                    break
                     
     if not sugar_ring_found:
-        return False, "No additional sugar ring found outside of the UDP core fragment"
+        return False, "No additional sugar ring found outside of the UDP core"
     
-    # All criteria passed: UDP core is detected and an extra sugar ring exists.
-    return True, ("Contains a uridine-diphosphate (UDP) core and at least one additional sugar ring, "
-                  "consistent with a UDP-sugar (nucleotide attached via an anomeric diphosphate linkage)")
+    return True, ("Contains a UDP core (diphosphate linked to a uracil-bearing ribose) and an extra sugar ring, "
+                  "consistent with a UDP-sugar structure.")
 
-# For quick testing (can be removed or adapted in production)
+# For quick testing on one example (this section can be removed or modified for production)
 if __name__ == "__main__":
-    # Testing on a known UDP-sugar (UDP-D-glucose)
-    test_smiles = ("OC[C@H]1OC(COP(O)(=O)OP(O)(=O)O)[C@H](O)[C@@H](O)[C@@H]1n1ccc(=O)[nH]c1=O")
+    test_smiles = "OC[C@H]1OC(COP(O)(=O)OP(O)(=O)O)[C@H](O)[C@@H](O)[C@@H]1n1c(=O)[nH]c(=O)n1"
     result, reason = is_UDP_sugar(test_smiles)
     print("Test SMILES:", test_smiles)
     print("Result:", result)
