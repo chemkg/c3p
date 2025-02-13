@@ -1,121 +1,136 @@
 """
 Classifies: CHEBI:26208 polyunsaturated fatty acid
 """
+#!/usr/bin/env python
 """
 Classifies: Polyunsaturated fatty acid (PUFA)
-Definition: Any fatty acid containing more than one double bond.
+Definition: Any fatty acid containing more than one C=C double bond.
 Acids in this group are reported to have cardioprotective effects;
 and levels are lowered in chronic fatigue syndrome.
 
-This implementation first checks for a free (terminal) carboxyl group.
-We require that a carboxyl group is “free” – that is, the carboxyl carbon
-has exactly one carbon neighbor (the beginning of the aliphatic chain).
-Then we count carbon–carbon double bonds (ignoring the carbonyl C=O bond).
-We also check that the molecule is acyclic and has a sufficiently long carbon chain.
+This implementation first requires that the molecule is a single fragment
+(without salts) and that it contains at least one free (non‐esterified) carboxyl group.
+We then count the number of carbon–carbon double bonds (ignoring carbonyl C=O).
+Finally, we locate the “acyl chain” by following the neighbor of the carboxyl carbon
+(which should be a carbon) and computing the longest contiguous carbon chain length.
+We also require that the molecule has no rings.
 """
-
 from rdkit import Chem
 
 def is_polyunsaturated_fatty_acid(smiles: str):
     """
-    Determines if a molecule is a polyunsaturated fatty acid based on its SMILES string.
-    A polyunsaturated fatty acid (PUFA) must have a free carboxyl group (terminal acid),
-    contain at least 2 carbon-carbon double bonds, be acyclic, and feature an aliphatic chain
-    of sufficient length.
-
+    Determines if a molecule is a polyunsaturated fatty acid (PUFA) based on its SMILES string.
+    Criteria:
+      (1) Molecule parses and is a single fragment (to avoid salts or complexes)
+      (2) Contains at least one free (non‐esterified) carboxyl group (either protonated or deprotonated)
+          – we do not insist on a strict “terminal” pattern.
+      (3) Contains at least 2 carbon–carbon double bonds (ignoring C=O bonds in the acid group)
+      (4) Contains no rings (a typical fatty acid is acyclic)
+      (5) Has an acyl chain (the chain beginning as the neighbor of the acid carbon) of sufficient length.
+         (We compute the longest contiguous carbon path from that neighbor.)
+      (6) The elemental composition should be “fatty‐acid–like”, i.e. no extra atoms beyond C, O, H (except for a very few cases)
+    
     Args:
         smiles (str): SMILES string of the molecule
-
+        
     Returns:
-        bool: True if molecule is a polyunsaturated fatty acid, False otherwise
-        str: Explanation of the classification
+        bool: True if molecule is a PUFA, False otherwise.
+        str: Explanation of the classification decision.
     """
-    # Parse SMILES to an RDKit molecule object.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
+        
+    # Exclude molecules that come as salts/multiple fragments.
+    fragments = Chem.GetMolFrags(mol, asMols=True)
+    if len(fragments) != 1:
+        return False, "Molecule contains multiple fragments (possible salt or conjugate)"
     
-    # Define two SMARTS patterns for a free carboxyl group.
-    # (Some acids under physiological conditions are deprotonated.)
-    carboxyl_pattern1 = Chem.MolFromSmarts("[CX3](=O)[OX1H]")  # protonated acid
-    carboxyl_pattern2 = Chem.MolFromSmarts("[CX3](=O)[O-]")    # deprotonated acid
-
-    matches1 = mol.GetSubstructMatches(carboxyl_pattern1)
-    matches2 = mol.GetSubstructMatches(carboxyl_pattern2)
-    free_carboxyl_matches = matches1 + matches2
-
-    if not free_carboxyl_matches:
+    # Optional: Check that the molecule is mostly C, H, and O.
+    for atom in mol.GetAtoms():
+        atomic_num = atom.GetAtomicNum()
+        if atomic_num not in (1, 6, 8):
+            return False, f"Atom {atom.GetSymbol()} found; not a typical fatty acid (only C, H, O are allowed)"
+    
+    # Reject molecules with rings.
+    if mol.GetRingInfo().NumRings() > 0:
+        return False, "Molecule contains rings; not a typical free fatty acid"
+    
+    # Look for free carboxyl groups (the acid functionality, not part of an ester).
+    # We look for both protonated ([CX3](=O)[OX1H]) and deprotonated ([CX3](=O)[O-]) forms.
+    carboxyl_prot = Chem.MolFromSmarts("[CX3](=O)[OX1H]")
+    carboxyl_deprot = Chem.MolFromSmarts("[CX3](=O)[O-]")
+    matches = mol.GetSubstructMatches(carboxyl_prot) + mol.GetSubstructMatches(carboxyl_deprot)
+    if not matches:
         return False, "No free carboxyl group found"
-
-    # We require that the carboxyl group be terminal (i.e. the carboxyl carbon has exactly one carbon neighbor).
-    terminal_match = None
-    for match in free_carboxyl_matches:
-        # In our SMARTS the first atom is the carboxyl carbon.
-        carboxyl_c = mol.GetAtomWithIdx(match[0])
-        # Count the number of neighboring carbons (atomic num==6).
-        carbon_neighbors = [nbr for nbr in carboxyl_c.GetNeighbors() if nbr.GetAtomicNum() == 6]
-        if len(carbon_neighbors) == 1:
-            terminal_match = match
-            break
-    if terminal_match is None:
-        return False, "No terminal free carboxyl group found"
+        
+    # For PUFA we assume only one carboxyl group is present.
+    if len(matches) > 1:
+        return False, "Multiple free carboxyl groups found; not a typical free fatty acid"
     
-    # Identify the carbon neighbor that begins the fatty acid chain.
-    carboxyl_c = mol.GetAtomWithIdx(terminal_match[0])
+    # Identify the carboxyl carbon from the match.
+    # In our SMARTS the first atom is the carboxyl carbon.
+    carboxyl_match = matches[0]
+    acid_carbon = mol.GetAtomWithIdx(carboxyl_match[0])
+    
+    # Now, relax the “terminal” requirement: we simply look for a carbon neighbor that is not oxygen.
     chain_start = None
-    for nbr in carboxyl_c.GetNeighbors():
+    for nbr in acid_carbon.GetNeighbors():
         if nbr.GetAtomicNum() == 6:
             chain_start = nbr
             break
     if chain_start is None:
-        return False, "Carboxyl carbon does not connect to any alkyl chain"
-    
-    # Count the number of carbon-carbon double bonds (ignoring the acid C=O bond).
+        return False, "Carboxyl carbon does not connect to an alkyl chain"
+        
+    # Count the number of carbon–carbon double bonds (ignore non-C=C bonds, such as acid C=O).
     double_bond_count = 0
     for bond in mol.GetBonds():
-        # Check only for C=C bonds.
         if bond.GetBondType() == Chem.rdchem.BondType.DOUBLE:
-            a1 = bond.GetBeginAtom()
-            a2 = bond.GetEndAtom()
+            a1 = bond.GetBeginAtom(); a2 = bond.GetEndAtom()
+            # Count only C=C bonds.
             if a1.GetAtomicNum() == 6 and a2.GetAtomicNum() == 6:
                 double_bond_count += 1
     if double_bond_count < 2:
-        return False, f"Only {double_bond_count} carbon-carbon double bond(s) found; need at least 2"
-    
-    # Reject molecules that contain rings as most free fatty acids are acyclic.
-    if mol.GetRingInfo().NumRings() > 0:
-        return False, "Molecule contains rings; not a typical free fatty acid"
-    
-    # Define a helper function: perform DFS on carbon atoms (ignoring non-carbon atoms)
-    # to determine the longest contiguous carbon chain length.
-    def dfs(atom, visited):
-        max_length = 1
+        return False, f"Only {double_bond_count} carbon–carbon double bond(s) found; need at least 2"
+        
+    # Define a helper function to compute the longest simple path (in terms of number of C atoms)
+    # starting from a given carbon atom. Since PUFA chains are typically not very large,
+    # a recursive DFS is acceptable.
+    def longest_chain(atom, visited):
+        max_len = 1  # count current atom
         for nbr in atom.GetNeighbors():
             if nbr.GetAtomicNum() == 6 and nbr.GetIdx() not in visited:
                 visited.add(nbr.GetIdx())
-                length = 1 + dfs(nbr, visited)
+                length = 1 + longest_chain(nbr, visited)
                 visited.remove(nbr.GetIdx())
-                if length > max_length:
-                    max_length = length
-        return max_length
+                if length > max_len:
+                    max_len = length
+        return max_len
 
-    # Start the DFS from the chain_start. We count the chain length as the number of carbon atoms
-    # in the longest contiguous (acyclic) carbon path. (We do not count the carboxyl carbon.)
-    chain_length = dfs(chain_start, {chain_start.GetIdx()})
-    
-    # Require that the fatty acyl chain be long enough (threshold can be adjusted).
-    # Here we require at least 4 carbons beyond the carboxyl carbon.
+    # Calculate the acyl chain length starting from the chain_start atom.
+    # We do not count the acid carbon.
+    chain_length = longest_chain(chain_start, {chain_start.GetIdx()})
     if chain_length < 4:
-        return False, f"Aliphatic chain too short (only {chain_length} carbons found); not a fatty acid"
+        return False, f"Acyl chain too short (only {chain_length} carbons found); not a fatty acid"
     
-    return True, f"Contains terminal carboxyl group, {double_bond_count} carbon-carbon double bonds, and an aliphatic chain of {chain_length} carbons, meets PUFA criteria"
+    # (Optional) We could require that most carbon atoms in the molecule belong to the chain.
+    # Count total carbon atoms.
+    total_carbons = sum(1 for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6)
+    # The chain (plus acid carbon) should ideally be a high fraction of the carbons.
+    if (chain_length + 1) / total_carbons < 0.6:
+        return False, f"Acyl chain (with acid carbon) only accounts for {(chain_length+1)}/{total_carbons} carbons; unusual fatty acid structure"
+        
+    return True, (f"Contains a free carboxyl group, {double_bond_count} C=C bonds, and an acyl chain of "
+                  f"{chain_length+1} carbons (including acid carbon), meets PUFA criteria")
 
-# (Optional) simple tests; remove these lines if integrating into a larger package.
+# (Optional) simple tests; you can remove or modify these when integrating into a larger package.
 if __name__ == "__main__":
     test_smiles = [
         "CC(C)=CCCC(C)=CCCC(C)=CC(O)=O",  # farnesoic acid (should be True)
-        "CCCCCCCC/C=C/CCCCCCCC(=O)OC[C@H](COP([O-])(=O)OC[C@H]([NH3+])C([O-])=O)OC(=O)CCC/C=C/C/C=C/C/C=C/C/C=C/CCCCC", # phospholipid false positive
-        "OC(=O)CCCCCCC\\C=C\\C=C\\CCCCCC", # example with one double bond only (False)
+        "OC(=O)C\\C=C\\C=C/C=C=CC#CC#C",  # mycomycin (should be True)
+        "C(=C/CCCCC)\\C=C\\C(O)=O",       # (2E,4E)-deca-2,4-dienoic acid (should be True)
+        "OC(CCCCCCCC(O)=O)C=CC(O)C(O)CC=CCC",  # 9,12,13-Trihydroxyoctadeca-10,15-dienoic acid (should be True)
+        "CC\\C=C/C\\C=C/C\\C=C/C\\C=C/C\\C=C/CCCCCCCCCCC(O)=O",  # long chain PUFA (should be True)
     ]
     for smi in test_smiles:
         result, reason = is_polyunsaturated_fatty_acid(smi)
