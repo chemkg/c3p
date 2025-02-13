@@ -5,13 +5,23 @@ Classifies: CHEBI:20060 3-hydroxy fatty acyl-CoA
 Classifies: 3-hydroxy fatty acyl-CoA
 Definition: A hydroxy fatty acyl-CoA that results from the formal condensation 
             of the thiol group of coenzyme A with the carboxy group of any 3-hydroxy fatty acid.
-            
+
 A molecule in this class must contain:
- - A recognizable CoA moiety (here, a fragment typical in many CoA derivatives)
+ - A recognizable CoA moiety (the pantetheine fragment, e.g. SCCNC(=O)CCNC(=O) is typical)
  - A thioester group (C(=O)S) linking an acyl chain to CoA.
- - In the acyl chain attached via the thioester, when numbering the carbonyl carbon as C1,
-   the third carbon (C3) – that is, the β-carbon (two bonds away from the carbonyl carbon) – 
-   must carry a hydroxyl (-OH) substituent.
+ - In the acyl chain attached via the thioester, if one numbers the carbonyl carbon as C1,
+   then the beta carbon (C3) must bear a hydroxyl (-OH) substituent.
+   
+Our strategy:
+ 1. Parse the SMILES.
+ 2. Look for a CoA fragment using a SMARTS query.
+ 3. Look for thioester groups (C(=O)S).
+ 4. For each thioester, from the carbonyl carbon (C1) find all carbon neighbors (the α‐carbons, C2),
+    then from each α‐carbon find further carbon neighbors (the β‐carbons, C3). For each β,
+    check if it is substituted by –OH (by looking for an oxygen attached by a single bond that has at least one hydrogen).
+ 5. If at least one valid acyl chain is found, classify as 3-hydroxy fatty acyl-CoA.
+ 
+If parsing fails or if no match is found, the function returns False with a reason.
 """
 
 from rdkit import Chem
@@ -22,13 +32,15 @@ def is_3_hydroxy_fatty_acyl_CoA(smiles: str):
     
     The algorithm:
       1. Parses the SMILES string.
-      2. Checks for a Coenzyme A fragment (a typical substructure present in CoA derivatives)
-         by matching a characteristic SMARTS.
+      2. Checks for a Coenzyme A fragment by matching a characteristic SMARTS.
       3. Searches for thioester groups (C(=O)S) in the molecule.
-      4. For each thioester found, traverses the acyl chain: finds the alpha-carbon (the one 
-         attached to the carbonyl carbon excluding the carbonyl oxygen and the sulfur) and then 
-         its carbon neighbor (the beta carbon). The beta carbon in a 3-hydroxy fatty acyl should have an -OH.
-      5. If such a pattern is found, the molecule is classified as part of the 3-hydroxy fatty acyl-CoA class.
+      4. For each thioester found, it:
+           a. Identifies the carbonyl carbon (C1).
+           b. Finds candidate α‐carbons (neighbors of C1, excluding the oxygen in C=O and the sulfur).
+           c. For each α‐carbon, finds candidate β‐carbons (neighbors of α, excluding the path back to C1).
+           d. Checks if any β‐carbon carries an –OH substituent: that is, an oxygen attached via a single bond
+              and the oxygen atom has an implicit hydrogen (or total H > 0).
+      5. If such a pattern is found, the molecule is classified as a 3-hydroxy fatty acyl-CoA.
     
     Args:
         smiles (str): SMILES string of the molecule.
@@ -37,72 +49,89 @@ def is_3_hydroxy_fatty_acyl_CoA(smiles: str):
         bool: True if molecule is classified as 3-hydroxy fatty acyl-CoA, False otherwise.
         str: Reason for classification.
     """
-    
-    # Try to parse the SMILES string
+    # Parse the molecule from the SMILES string.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Check for Coenzyme A substructure.
-    # Many CoA derivatives include a fragment like "SCCNC(=O)CCNC(=O)" part of the pantetheine unit.
-    coa_smarts = "[S]CCNC(=O)CCNC(=O)"
-    coa_frag = Chem.MolFromSmarts(coa_smarts)
+    # Check presence of a Coenzyme A fragment.
+    # Here we use a fragment typical for many CoA derivatives – adjust if necessary.
+    cof_smarts = "SCCNC(=O)CCNC(=O)"
+    coa_frag = Chem.MolFromSmarts(cof_smarts)
     if not mol.HasSubstructMatch(coa_frag):
         return False, "Coenzyme A fragment missing"
     
-    # Look for thioester groups defined as "C(=O)S".
+    # Look for thioester groups with SMARTS "C(=O)S"
     thioester_smarts = "C(=O)S"
     thioester_frag = Chem.MolFromSmarts(thioester_smarts)
     thioester_matches = mol.GetSubstructMatches(thioester_frag)
     if not thioester_matches:
         return False, "No thioester group (acyl-CoA linkage) found"
     
-    # For each thioester, check if the acyl chain has a hydroxyl on the beta carbon (i.e. C3 of fatty acyl)
-    found_3hydroxy = False
+    # For each thioester group found, examine the acyl chain
+    # Each match returns a tuple: (carbonyl carbon, carbonyl oxygen, sulfur)
+    valid_acyl_found = False
     for match in thioester_matches:
-        # match returns a tuple of indices for atoms matching the pattern:
-        # match[0]: the carbonyl carbon (C1), match[1]: the carbonyl oxygen, match[2]: the sulfur.
-        c_co = mol.GetAtomWithIdx(match[0])
+        # Define the carbonyl carbon (C1) as the first atom in the match.
+        c1 = mol.GetAtomWithIdx(match[0])
         
-        # Identify the neighbor of the carbonyl carbon that is on the acyl chain.
-        # Exclude the oxygen (from the C=O double bond) and the sulfur.
-        acyl_neighbors = [nbr for nbr in c_co.GetNeighbors() if nbr.GetIdx() not in match[1:]]
-        if not acyl_neighbors:
-            continue
-        # Choose one neighbor that is a carbon (this should be the α‐carbon, C2)
-        alpha = None
-        for nbr in acyl_neighbors:
-            if nbr.GetAtomicNum() == 6:
-                alpha = nbr
+        # Get neighbors of C1 that are carbons and are not the oxygen (double-bonded) or sulfur.
+        alpha_candidates = []
+        for nbr in c1.GetNeighbors():
+            # Exclude if neighbor index is one of the oxygen or sulfur from the thioester pattern.
+            if nbr.GetIdx() in match[1:]:
+                continue
+            if nbr.GetAtomicNum() == 6:  # Carbon
+                alpha_candidates.append(nbr)
+        if not alpha_candidates:
+            continue  # No possible alpha carbon on this thioester
+        
+        # For each candidate alpha carbon (C2) try to find a beta carbon (C3) with an -OH.
+        for alpha in alpha_candidates:
+            # From alpha, get neighbors that are carbons and are not back to C1.
+            beta_candidates = []
+            for nbr in alpha.GetNeighbors():
+                if nbr.GetIdx() == c1.GetIdx():
+                    continue
+                if nbr.GetAtomicNum() == 6:  # keep carbons only
+                    beta_candidates.append(nbr)
+            if not beta_candidates:
+                continue
+            
+            # For each beta candidate, search for an –OH substituent.
+            for beta in beta_candidates:
+                # Look at all neighbors of the beta carbon.
+                for nbr in beta.GetNeighbors():
+                    # Check if the neighbor is oxygen.
+                    if nbr.GetAtomicNum() != 8:
+                        continue
+                    # Check that the bond is a single bond.
+                    bond = mol.GetBondBetweenAtoms(beta.GetIdx(), nbr.GetIdx())
+                    if bond is None or bond.GetBondTypeAsDouble() != 1:
+                        continue
+                    # Check if this oxygen has at least one hydrogen (the hydrogen count may be implicit).
+                    if nbr.GetTotalNumHs() > 0:
+                        valid_acyl_found = True
+                        break
+                if valid_acyl_found:
+                    break
+            if valid_acyl_found:
                 break
-        if alpha is None:
-            continue
-        
-        # From the alpha-carbon, get the next carbon along the acyl chain (β‐carbon, C3) 
-        alpha_neighbors = [nbr for nbr in alpha.GetNeighbors() if nbr.GetIdx() != c_co.GetIdx()]
-        if not alpha_neighbors:
-            continue
-        beta = None
-        for nbr in alpha_neighbors:
-            if nbr.GetAtomicNum() == 6:
-                beta = nbr
-                break
-        if beta is None:
-            continue
-        
-        # Check if the beta carbon has a hydroxyl (-OH) substituent.
-        hydroxyl_found = False
-        for nbr in beta.GetNeighbors():
-            # We expect an -OH group: oxygen, typically with only one connection (the hydrogen is implicit)
-            if nbr.GetAtomicNum() == 8 and nbr.GetDegree() == 1:
-                hydroxyl_found = True
-                break
-        
-        if hydroxyl_found:
-            found_3hydroxy = True
-            break  # We only need one valid acyl chain
-        
-    if not found_3hydroxy:
+        if valid_acyl_found:
+            break
+
+    if not valid_acyl_found:
         return False, "Thioester found but no acyl chain with a hydroxyl on the beta carbon (C3)"
     
-    return True, "Molecule contains a CoA moiety and a thioester group with a 3-hydroxy acyl chain"
+    return True, "Molecule contains a CoA moiety, a thioester group, and an acyl chain with an -OH on the beta carbon"
+
+# (Optional) For testing:
+if __name__ == '__main__':
+    # Example SMILES from the provided true positive list:
+    smiles_examples = [
+        "CC\\C=C/C\\C=C/C\\C=C/C\\C=C/C\\C=C/CCCCCCCCCCCCCCC[C@@H](O)CC(=O)SCCNC(=O)CCNC(=O)[C@H](O)C(C)(C)COP(O)(=O)OP(O)(=O)OC[C@H]1O[C@H]([C@H](O)[C@@H]1OP(O)(O)=O)n1cnc2c(N)ncnc12",
+        "CC(C)(COP(O)(=O)OP(O)(=O)OC[C@H]1O[C@H]([C@H](O)[C@@H]1OP(O)(O)=O)n1cnc2c(N)ncnc12)[C@@H](O)C(=O)NCCC(=O)NCCSC(=O)C1CCCCC1O"  # 2-hydroxycyclohexane-1-carbonyl-CoA (false negative previously)
+    ]
+    for s in smiles_examples:
+        result, reason = is_3_hydroxy_fatty_acyl_CoA(s)
+        print(result, reason)
