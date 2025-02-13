@@ -3,10 +3,10 @@ Classifies: CHEBI:26004 phenylpropanoid
 """
 """
 Classifies: phenylpropanoid compounds
-Definition: Any organic aromatic compound with a structure based on a
-phenylpropane (C6–C3) skeleton. This class includes naturally occurring
-phenylpropanoid esters, flavonoids, anthocyanins, coumarins and many small
-phenolic molecules as well as their semi-synthetic and synthetic analogues.
+Definition: Any organic aromatic compound with a structure based on a 
+phenylpropane (C6–C3) skeleton. This class includes naturally occurring 
+phenylpropanoid esters, flavonoids, anthocyanins, coumarins and many small 
+phenolic molecules as well as their semi‐synthetic and synthetic analogues.
 Phenylpropanoids are also precursors of lignin.
 """
 
@@ -17,67 +17,68 @@ def is_phenylpropanoid(smiles: str):
     """
     Determines if a molecule is a phenylpropanoid based on its SMILES string.
     
-    The heuristic checks:
-      - That a benzene ring is present.
-      - That it also contains a C6–C3 fragment via one of several SMARTS patterns:
-          · A saturated three‐carbon chain attached to a benzene ring.
-          · An unsaturated three‐carbon chain (cinnamic type) attached to benzene.
-          · A cinnamic acid fragment.
-          · A coumarin substructure.
-    
+    The heuristic implemented here requires:
+      - That the molecule contains a benzene ring.
+      - That one of several phenylpropanoid-characteristic substructures is present.
+        These include:
+          · Coumarin substructure
+          · A cinnamic acid–like fragment (benzene with a C=CC(=O)[O] fragment)
+          · Benzene attached to an unsaturated 3-carbon chain (cinnamyl type)
+          · Benzene attached to a saturated propyl chain
+          · A flavanone core
+          
     Args:
         smiles (str): SMILES string of the molecule.
     
     Returns:
-        bool: True if molecule is classified as a phenylpropanoid, False otherwise.
-        str: Reason for the classification decision.
+        bool: True if classified as a phenylpropanoid, False otherwise.
+        str: Explanation for the classification decision.
     """
-    # Parse SMILES string
+    # Parse the SMILES string
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-
-    # Sanitize molecule (computes aromaticity etc.)
+    
+    # Sanitize molecule (to compute aromaticity, assign bond orders, etc.)
     try:
         Chem.SanitizeMol(mol)
     except Exception as e:
         return False, f"Sanitization failed: {e}"
     
-    # Basic check: must contain at least one benzene ring.
+    # Basic filter: Check that at least one benzene ring is present
     benzene = Chem.MolFromSmarts("c1ccccc1")
     if not mol.HasSubstructMatch(benzene):
-        return False, "No benzene ring detected, hence not a phenylpropanoid"
-
-    # Define a list of (description, SMARTS) that represent common phenylpropanoid fragments.
+        return False, "No benzene ring detected, so not a phenylpropanoid"
+    
+    # List of SMARTS patterns along with human‐readable descriptions.
+    # These patterns have been refined to capture the C6–C3 scaffold in various contexts.
     patterns = [
-        ("Benzene with a saturated propyl chain (C6–C3)", "c1ccccc1CCC"),
-        ("Benzene with an unsaturated (allylic) chain (C6–C3)", "c1ccccc1C=CC"),
-        ("Cinnamic acid type fragment", "c1ccccc1C=CC(=O)[O-]"),  # note: acid may be deprotonated too
-        ("Coumarin structure", "O=C1Oc2ccccc2C1")
+        ("Coumarin structure", "O=C1Oc2ccccc2C1"),
+        # The cinnamic acid fragment: benzene attached to an unsaturated three-carbon chain bearing a carbonyl and an oxygen.
+        ("Cinnamic acid fragment", "c1ccccc1C=CC(=O)[O;H0,-1]"),
+        ("Benzene with unsaturated (cinnamyl) chain", "c1ccccc1C=CC"),
+        ("Benzene with saturated (propyl) chain", "c1ccccc1CCC"),
+        # A simple flavanone core represented by two aromatic rings linked via a heterocycle.
+        ("Flavanone core", "c1cc(c(cc1)O)C2=CC(=O)OC3=CC=CC=C23")
     ]
     
-    # Try each pattern and if any matches, we classify as phenylpropanoid.
+    # Check each pattern: if any match, then classify as a phenylpropanoid.
     for desc, smarts in patterns:
-        pattern = Chem.MolFromSmarts(smarts)
-        if pattern is None:
-            continue  # skip if SMARTS did not compile
-        if mol.HasSubstructMatch(pattern):
+        frag = Chem.MolFromSmarts(smarts)
+        if frag is None:
+            continue  # If a SMARTS pattern fails to compile, skip it.
+        if mol.HasSubstructMatch(frag):
             return True, f"Matches pattern: {desc}"
-    
-    # Optionally, check for a flavonoid-like core (C6–C3–C6) as an additional heuristic.
-    # A simple flavonoid core: two aromatic rings linked via a heterocycle.
-    flavonoid_pattern = Chem.MolFromSmarts("c1ccc2c(c1)OC(=O)[C@H]1c(O)ccc(O)c1C2") 
-    if flavonoid_pattern and mol.HasSubstructMatch(flavonoid_pattern):
-        return True, "Matches a flavonoid-type substructure (C6–C3–C6)"
     
     return False, "No phenylpropanoid-characteristic substructure found"
 
-# Example usage:
+# Example usage (for testing purposes):
 if __name__ == "__main__":
-    # A few test cases (the SMILES given in the prompt are complex, so here is a simpler one)
     test_smiles = [
-        "c1ccccc1CCC",  # benzene with a propyl chain (should be phenylpropanoid-like)
-        "CCO",         # ethanol (should not match)
+        "c1ccccc1CCC",  # benzene with a saturated propyl chain (expected phenylpropanoid-like)
+        "c1ccccc1C=CC", # benzene with an unsaturated chain (expected phenylpropanoid-like)
+        "OC(=Cc1ccccc1)C([O-])=O",  # enol-phenylpyruvate (should not be classified)
+        "CCO"  # ethanol (should not be classified)
     ]
     
     for sm in test_smiles:
