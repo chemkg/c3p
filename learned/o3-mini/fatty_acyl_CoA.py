@@ -4,24 +4,10 @@ Classifies: CHEBI:37554 fatty acyl-CoA
 """
 Classifies: fatty acyl-CoA
 Definition:
-  An acyl-CoA that results from the formal condensation of the thiol group 
-  of coenzyme A with the carboxy group of any fatty acid.
+  An acyl-CoA that results from the formal condensation of the thiol group of coenzyme A with the carboxy group of any fatty acid.
   
-Improved Strategy:
-  1. Parse the SMILES.
-  2. Look for a CoA fragment using a SMARTS pattern that targets a characteristic core 
-     (avoiding the variable phosphate substituents).
-  3. Look for a thioester bond (C(=O)S).
-  4. For each thioester match, from the carbonyl carbon, choose a neighbor that is:
-       • Not the carbonyl oxygen or bonded sulfur,
-       • Not part of the CoA fragment,
-       • And is a carbon atom.
-  5. Use a recursive search (DFS) to traverse only contiguous aliphatic (non‐aromatic) 
-     carbon atoms. This ensures that we only count the pure fatty acyl chain.
-  6. Accept the molecule if one finds an acyl chain of at least four carbons.
-     
-This aims both to recognize valid fatty acyl-CoAs (including short-chain ones) and to 
-reject acyl-CoAs whose “acyl” part contains extra heteroatoms or aromatic rings.
+The molecule must contain a CoA “tail” (we match a characteristic fragment found in most CoA derivatives)
+and a thioester bond (C(=O)S) linking an acyl chain.
 """
 
 from rdkit import Chem
@@ -30,85 +16,95 @@ def is_fatty_acyl_CoA(smiles: str):
     """
     Determines if a molecule is a fatty acyl-CoA based on its SMILES string.
     
+    The strategy is:
+      1. Parse the SMILES.
+      2. Look for a CoA fragment. In many acyl-CoA compounds the fragment
+         "SCCNC(=O)CCNC(=O)" is part of the CoA moiety.
+      3. Look for a thioester bond ("C(=O)S"). Then find the acyl chain 
+         attached to the carbonyl side of that group.
+      4. Do a simple graph search (DFS) starting from the neighbor carbon (not the S)
+         to count contiguous carbon atoms (ignoring atoms that are part of the CoA fragment).
+         If the acyl chain has at least 3 carbons, we consider it a fatty acid.
+    
     Args:
-        smiles (str): SMILES string of the molecule
+        smiles (str): SMILES string of the molecule.
         
     Returns:
-        bool: True if classified as fatty acyl-CoA, else False.
-        str: Explanation for the classification.
+        bool: True if the molecule is classified as a fatty acyl-CoA, else False.
+        str: Reason for classification.
     """
-    # Parse the input
+    # Parse SMILES
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Use a stricter SMARTS for a characteristic CoA core fragment.
-    # This pattern is chosen to capture a part of the CoA moiety that is common while avoiding the variable phosphate groups.
-    coa_pattern = Chem.MolFromSmarts("SCCNC(=O)CCNC(=O)[C;R0]")
+    # Define a SMARTS pattern for a characteristic CoA fragment.
+    # This pattern is not exhaustive but should be found in many acyl-CoA compounds.
+    coa_pattern = Chem.MolFromSmarts("SCCNC(=O)CCNC(=O)")
     coa_matches = mol.GetSubstructMatches(coa_pattern)
     if not coa_matches:
         return False, "Coenzyme A moiety not found"
     
-    # Gather atom indices that are part of any CoA fragment
-    coa_atom_indices = set()
-    for match in coa_matches:
-        coa_atom_indices.update(match)
-    
-    # Define SMARTS pattern for the thioester bond (carbonyl C(=O) bonded to an S)
+    # Define a SMARTS pattern for a thioester bond (C(=O)S)
     thioester_pattern = Chem.MolFromSmarts("C(=O)S")
     thioester_matches = mol.GetSubstructMatches(thioester_pattern)
     if not thioester_matches:
         return False, "Thioester bond (C(=O)S) not found; cannot be acyl-CoA"
     
-    # Define a helper function (DFS) to compute the longest contiguous chain of aliphatic (non-aromatic) carbons.
-    def longest_chain(atom, visited):
-        # Only count carbon atoms that are not aromatic.
-        if atom.GetAtomicNum() != 6 or atom.GetIsAromatic():
+    # Get the set of atom indices that are part of the CoA fragment (from any match)
+    coa_atom_indices = set()
+    for match in coa_matches:
+        for idx in match:
+            coa_atom_indices.add(idx)
+    
+    # We write a simple DFS function that, starting from a given carbon atom,
+    # walks through connected carbon atoms (ignoring any atoms that are in the CoA fragment)
+    # and returns the number of carbons in that connected acyl chain.
+    def dfs_count_carbons(atom, visited):
+        count = 0
+        # Only count if it is a carbon atom (atomic num 6)
+        if atom.GetAtomicNum() == 6:
+            count = 1
+        else:
             return 0
-        max_length = 1  # count current carbon
         visited.add(atom.GetIdx())
         for neighbor in atom.GetNeighbors():
             n_idx = neighbor.GetIdx()
-            # Skip if neighbor was visited or is part of the CoA core.
             if n_idx in visited or n_idx in coa_atom_indices:
                 continue
-            if neighbor.GetAtomicNum() == 6 and not neighbor.GetIsAromatic():
-                branch_length = 1 + longest_chain(neighbor, visited.copy())
-                if branch_length > max_length:
-                    max_length = branch_length
-        return max_length
-    
+            # Allow passage through carbon atoms (even if unsaturated)
+            if neighbor.GetAtomicNum() == 6:
+                count += dfs_count_carbons(neighbor, visited)
+        return count
+
+    # Now, among the thioester matches, we look for the acyl chain.
+    # A thioester SMARTS match gives a tuple like (c_idx, o_idx, s_idx)
     fatty_chain_found = False
     acyl_chain_length = 0
-    
-    # Iterate over each thioester fragment.
-    # Each match returns a tuple (carbonyl, oxygen, sulfur).
     for match in thioester_matches:
         carbonyl_idx, oxygen_idx, sulfur_idx = match
         carbonyl_atom = mol.GetAtomWithIdx(carbonyl_idx)
-        # From the carbonyl, choose neighbor(s) that are not the oxygen, not the sulfur, and not part of CoA.
+        # From the carbonyl atom, find the neighbor that is not the oxygen or sulfur.
         acyl_neighbors = []
         for neighbor in carbonyl_atom.GetNeighbors():
             n_idx = neighbor.GetIdx()
-            if n_idx in (oxygen_idx, sulfur_idx) or (n_idx in coa_atom_indices):
-                continue
-            if neighbor.GetAtomicNum() == 6:
+            if n_idx not in (oxygen_idx, sulfur_idx) and n_idx not in coa_atom_indices:
                 acyl_neighbors.append(neighbor)
         if not acyl_neighbors:
-            continue  # try the next thioester match
-        
-        # For simplicity, use the first eligible neighbor as the start of the fatty acyl chain.
+            continue  # This thioester match does not have an acyl chain (might be reversed)
+        # For simplicity, take the first acyl neighbor and count contiguous carbons.
         start_atom = acyl_neighbors[0]
-        chain_length = longest_chain(start_atom, set())
-        # Accept if chain length is at least 4 carbon atoms.
-        if chain_length >= 4:
+        count = dfs_count_carbons(start_atom, set())
+        # We require the acyl chain to have at least 3 carbons.
+        if count >= 3:
             fatty_chain_found = True
-            acyl_chain_length = chain_length
+            acyl_chain_length = count
             break
-    
+
     if not fatty_chain_found:
-        return (False, "No sufficiently long fatty acyl chain (>=4 contiguous carbon atoms) detected")
+        return False, "No sufficiently long fatty acyl chain (>=3 contiguous carbons) detected"
     
-    reason = (f"Contains a CoA moiety and a thioester bond linking an acyl chain "
-              f"with {acyl_chain_length} contiguous carbon atoms (fatty acyl chain).")
+    # Passed all checks, so classify as fatty acyl-CoA.
+    reason = (f"Contains a CoA moiety, a thioester bond linking an acyl chain "
+              f"with {acyl_chain_length} contiguous carbon(s) (fatty acyl chain).")
     return True, reason
