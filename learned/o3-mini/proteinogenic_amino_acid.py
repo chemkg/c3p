@@ -6,18 +6,16 @@ Classifies: Proteinogenic amino acids
 
 Definition:
   Proteinogenic amino acids are the 23 α–amino acids (20 coded by the nuclear genome plus selenocysteine,
-  pyrrolysine, and N-formylmethionine) that serve as protein precursors. Apart from glycine (which is achiral),
-  they have an L–configuration. 
+  pyrrolysine, and N-formylmethionine) that serve as precursors of proteins. (Glycine is achiral; the others are L‐amino acids).
 
-This implementation uses SMARTS patterns to search for the free amino acid backbone.
-In addition to matching the connectivity (an amino group, a chiral α–carbon, and a carboxylic acid or a formylated variant),
-we perform two extra filters:
-  • The molecule’s overall molecular weight must be consistent with a single amino acid (< 300 Da).
-  • The “free” amino group is checked to ensure that it is not modified into an amide (the backbone N should carry 
-    2 hydrogens for a primary amine – except in proline, where it is part of a cycle and carries 1 hydrogen).
+This implementation uses SMARTS patterns to search for a free amino acid backbone.
+In addition to matching the connectivity (a free amino group, a chiral α–carbon, and a carboxylic acid or formyl variant),
+we apply two extra filters:
+  • The molecule’s molecular weight must be consistent with a single amino acid (< 300 Da).
+  • The backbone amino nitrogen must have the expected number of hydrogen atoms attached (2 for free primary amines,
+    or 1 for proline where the amino group is part of a ring).
 
-For non–glycine amino acids (i.e. those with a sidechain), if stereochemistry (CIP) is available it must be “S”.
-If no CIP label is set, we allow the molecule but issue a relaxed result (assuming the L configuration).
+Note: Instead of using GetTotalNumHs, which may return 0 in some cases, we count explicit hydrogen neighbors.
 """
 
 from rdkit import Chem
@@ -27,93 +25,98 @@ def is_proteinogenic_amino_acid(smiles: str):
     """
     Determines if a molecule is a proteinogenic amino acid based on its SMILES string.
     
-    For free amino acids the backbone is typically:
-       N[C@@H](R)C(=O)O    or     N[C@H](R)C(=O)O    or      NC(C(=O)O)
-    plus formyl variants (e.g., O=CN[C@@H](R)C(=O)O).
-    For proline the backbone pattern (with the amino group in the ring) is
-       OC(=O)[C@@H]1CCCN1
+    For free amino acids, the backbone is typically:
+         N[C@@H](R)C(=O)O    or    N[C@H](R)C(=O)O    or     NC(C(=O)O)
+    plus some formyl variants (e.g., O=CN[C@@H](R)C(=O)O).
+    For proline the pattern appears as:
+         OC(=O)[C@@H]1CCCN1
 
-    In addition:
-      • For non–glycine amino acids the free amino group must be unmodified: it should have two hydrogens (or one for proline).
-      • The α–carbon: if it carries any non–hydrogen sidechain then (a) if it is chiral it must have CIP “S”; 
-        if chirality is not explicitly present we assume L configuration.
-      • The molecule must be small (MW < 300 Da) to avoid peptides.
+    Additional Filters:
+      - The molecule must be small (MW < 300 Da).
+      - The “free” backbone amino group must be unmodified (i.e. it should have two hydrogen atoms attached,
+        except in proline, which should have one).
+      - For non–glycine amino acids, if the α–carbon carries a sidechain then (if chiral) it must have configuration “S”.
+        If no stereochemistry is explicitly set we assume it is L.
     
     Args:
-        smiles (str): SMILES string of the molecule.
-        
+        smiles (str): SMILES string
+
     Returns:
-        bool: True if the molecule is classified as a (free) proteinogenic amino acid, False otherwise.
-        str: Explanation/reason for the classification decision.
+        bool: True if the molecule is classified as a proteinogenic amino acid, False otherwise.
+        str: Explanation for the classification decision.
     """
-    # Parse SMILES and add explicit hydrogens so that stereochemistry and H counts are available.
+    # Parse the SMILES and add explicit hydrogens so that hydrogen atoms and stereochemistry are available.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     mol = Chem.AddHs(mol)
     AllChem.AssignStereochemistry(mol, force=True, cleanIt=True)
     
-    # Filter out molecules too heavy to be single amino acids.
+    # Filter out molecules that are too heavy to be a single amino acid.
     mw = rdMolDescriptors.CalcExactMolWt(mol)
     if mw > 300:
         return False, f"Molecular weight ({mw:.1f} Da) too high for a free amino acid"
     
-    # Define SMARTS patterns with mapping for:
-    #    "alpha": index of α–carbon,
-    #    "amine": index of the backbone nitrogen,
-    #    "carboxyl": index of the carboxyl carbon.
-    # Note: The first six patterns cover the typical backbone (free amine),
-    # while the last one is for proline.
+    # Define SMARTS patterns and corresponding atom mappings.
+    # The mapping indicates the indices for:
+    #   "amine": backbone amino nitrogen,
+    #   "alpha": alpha carbon,
+    #   "carboxyl": carboxyl carbon.
+    # The first several patterns are for typical amino acid backbones;
+    # the last one is for proline.
     patterns = [
-        ("N[C@@H](*)C(=O)O", {"alpha": 1, "amine": 0, "carboxyl": 2}),
-        ("N[C@H](*)C(=O)O", {"alpha": 1, "amine": 0, "carboxyl": 2}),
-        ("NC(C(=O)O)", {"alpha": 1, "amine": 0, "carboxyl": 2}),
-        ("O=CN[C@@H](*)C(=O)O", {"alpha": 3, "amine": 2, "carboxyl": 4}),
-        ("O=CN[C@H](*)C(=O)O", {"alpha": 3, "amine": 2, "carboxyl": 4}),
-        ("O=CNC(C(=O)O)", {"alpha": 3, "amine": 2, "carboxyl": 4}),
-        # Proline: note that in proline the amino group is in a ring and typically has 1 hydrogen.
-        ("OC(=O)[C@@H]1CCCN1", {"alpha": 2, "amine": 6, "carboxyl": 1}),
+        ("N[C@@H](*)C(=O)O", {"amine": 0, "alpha": 1, "carboxyl": 2}),
+        ("N[C@H](*)C(=O)O",  {"amine": 0, "alpha": 1, "carboxyl": 2}),
+        ("NC(C(=O)O)",       {"amine": 0, "alpha": 1, "carboxyl": 2}),
+        ("O=CN[C@@H](*)C(=O)O", {"amine": 2, "alpha": 3, "carboxyl": 4}),
+        ("O=CN[C@H](*)C(=O)O",  {"amine": 2, "alpha": 3, "carboxyl": 4}),
+        ("O=CNC(C(=O)O)",       {"amine": 2, "alpha": 3, "carboxyl": 4}),
+        # Proline pattern – note in proline the amino group is part of the ring so it normally has one hydrogen.
+        ("OC(=O)[C@@H]1CCCN1", {"amine": 4, "alpha": 2, "carboxyl": 1}),
     ]
     
-    # Check each pattern for a substructure match.
+    # Loop over patterns to find a matching free amino acid backbone.
     for smarts, mapping in patterns:
         patt = Chem.MolFromSmarts(smarts)
         if patt is None:
-            continue  # skip if pattern is invalid (should not occur)
+            continue  # Skip invalid SMARTS pattern (should not occur)
         matches = mol.GetSubstructMatches(patt)
         if not matches:
-            continue  # try next pattern if no match
+            continue  # Try next pattern if no match found
         
-        # For each match (if multiple, we check until one appears that passes additional filters)
+        # Evaluate each match in turn.
         for match in matches:
-            # Make sure the match tuple is long enough.
             try:
-                alpha_atom = mol.GetAtomWithIdx(match[mapping["alpha"]])
                 amine_atom = mol.GetAtomWithIdx(match[mapping["amine"]])
+                alpha_atom = mol.GetAtomWithIdx(match[mapping["alpha"]])
                 carboxyl_atom = mol.GetAtomWithIdx(match[mapping["carboxyl"]])
             except IndexError:
-                continue
+                continue  # If match tuple is not as expected, try next match
             
-            # Check that the free amino (backbone) N is not amidated.
-            # For a free primary amine, after adding hydrogens,
-            # the number of hydrogens should be 2. (For proline, it should be 1.)
-            expected_h = 1 if "1" in smarts and "CCCN1" in smarts else 2
-            actual_h = amine_atom.GetTotalNumHs()
+            # Determine expected hydrogen count: proline (our only cycle pattern) should have 1,
+            # others should have 2 hydrogens attached to the backbone nitrogen.
+            is_proline = smarts == "OC(=O)[C@@H]1CCCN1"
+            expected_h = 1 if is_proline else 2
+            
+            # Instead of GetTotalNumHs(), count the explicit hydrogen atoms
+            # bonded to the backbone amine.
+            actual_h = sum(1 for nbr in amine_atom.GetNeighbors() if nbr.GetAtomicNum() == 1)
             if actual_h != expected_h:
                 return False, ("Backbone amino group appears modified (has "
                                f"{actual_h} hydrogen(s) instead of {expected_h}); "
                                "likely part of a peptide bond")
             
-            # Determine if the α–carbon is glycine (no heavy atom on the sidechain).
-            # Exclude neighbors that are already part of the backbone.
-            backbone_idxs = { match[mapping["amine"]], match[mapping["carboxyl"]] }
-            sidechain_neighbors = [nbr for nbr in alpha_atom.GetNeighbors()
-                                   if nbr.GetIdx() not in backbone_idxs and nbr.GetAtomicNum() > 1]
-            if not sidechain_neighbors:
-                # Glycine: lack of heavy-atom sidechain; chirality is not relevant.
-                return True, "Matches amino acid backbone (glycine identified: α–carbon is achiral)"
+            # Check the sidechain at the alpha carbon.
+            # Exclude backbone atoms (amine and carboxyl) to find sidechain heavy atoms.
+            backbone_ids = { match[mapping["amine"]], match[mapping["carboxyl"]] }
+            sidechain_atoms = [nbr for nbr in alpha_atom.GetNeighbors() 
+                               if nbr.GetIdx() not in backbone_ids and nbr.GetAtomicNum() > 1]
+            
+            # Glycine is the only amino acid with no heavy sidechain.
+            if not sidechain_atoms:
+                return True, "Matches amino acid backbone (glycine detected: no heavy sidechain at α–carbon)"
             else:
-                # For non-glycine, if the α–carbon carries any heavy-atom sidechain, it should be chiral.
+                # For non-glycine amino acids, check chirality if it is explicitly set.
                 if alpha_atom.HasProp('_CIPCode'):
                     cip = alpha_atom.GetProp('_CIPCode')
                     if cip != "S":
@@ -121,15 +124,14 @@ def is_proteinogenic_amino_acid(smiles: str):
                     else:
                         return True, "Matches amino acid backbone with correct (L) configuration"
                 else:
-                    # If stereochemistry is not explicitly set but the connectivity is correct,
-                    # we assume that the molecule is intended to be L.
+                    # If stereochemistry is not explicitly defined, assume L configuration.
                     return True, ("Matches amino acid backbone pattern but α–carbon chirality is "
                                   "not explicitly specified; assuming L configuration")
     
-    # If none of the patterns matched, the molecule does not present a free amino acid backbone.
+    # No matching amino acid backbone found
     return False, "Does not match proteinogenic amino acid backbone pattern"
 
-# Example usage testing some of the provided examples.
+# Example usage for testing some provided examples.
 if __name__ == "__main__":
     examples = [
         ("L-arginine", "N[C@@H](CCCNC(N)=N)C(O)=O"),
