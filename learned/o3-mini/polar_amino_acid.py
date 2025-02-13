@@ -5,9 +5,8 @@ Classifies: CHEBI:26167 polar amino acid
 Classifies: Polar Amino Acids (Free amino acids whose side chain is capable of hydrogen bonding)
 Definition: A free polar amino acid should have an unmodified amino acid backbone
 (with a free –NH2/–NH3+ and a free carboxyl group) and any substituent on the α–carbon
-(i.e. the side chain) must contain at least one polar heteroatom (N, O, or S).
-Glycine (which has a hydrogen for a side chain) is not considered polar.
-Additionally, the molecule’s overall size should be within the typical range for amino acids.
+(i.e., the side chain) must contain at least one polar heteroatom (N, O, or S). Glycine (which has a hydrogen 
+as its side chain) is not considered polar.
 """
 
 from rdkit import Chem
@@ -18,85 +17,56 @@ def is_polar_amino_acid(smiles: str):
     """
     Determines if a molecule is a free polar amino acid based on its SMILES string.
     It performs the following checks:
-      (1) The molecule must have a molecular weight and heavy atom count consistent with a free amino acid.
-      (2) It must have exactly one amino acid backbone pattern match.
-          The backbone is defined by N - α–C - C(=O)[O,OX1-],
-          allowing for either chirality at the alpha carbon.
-      (3) Once the alpha carbon is identified, its neighbors (other than the backbone atoms)
-          are taken as the side chain. That side chain must include at least one polar atom (N, O, or S).
-          (A side chain with no extra atoms, as in glycine, is not polar.)
+      (A) The molecule's molecular weight and heavy atom count are within typical amino acid ranges.
+      (B) There is exactly one match for the expected amino acid backbone pattern.
+          The backbone is defined as a free amine attached to a central (α–) carbon which is bonded to a carboxyl group.
+      (C) The side chain – defined as atoms attached to the α–carbon (other than the backbone amine and carboxyl group)
+          – is not empty (i.e. the molecule is not glycine) and contains at least one polar atom (N, O, or S).
+    
     Args:
       smiles (str): SMILES string of the molecule.
+      
     Returns:
-      bool: True if the molecule is a free polar amino acid, False otherwise.
+      bool: True if molecule is a free polar amino acid, False otherwise.
       str: Reason for the classification decision.
     """
     # Parse the SMILES string
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-    
+
     # (A) Check if molecular weight and heavy atom count are in a typical amino acid range.
     mw = Descriptors.ExactMolWt(mol)
     if not (75 <= mw <= 250):
-        return False, f"Molecular weight {mw:.1f} out of range for free amino acids"
+        return False, f"Molecular weight {mw:.1f} out of range for a free amino acid"
     
     heavy_atoms = mol.GetNumHeavyAtoms()
     if heavy_atoms > 25:
         return False, f"Too many heavy atoms ({heavy_atoms}); likely not a free amino acid"
 
     # (B) Identify the amino acid backbone.
-    # We allow for either chirality at the α–carbon so we use two patterns.
-    # The expected backbone: a nitrogen attached to a chiral alpha carbon then a carboxyl group.
-    backbone_smarts_list = [
-        "N[C@@H](*)C(=O)[O,OX1-]",  # alpha carbon chiral specification (S or R)
-        "N[C@H](*)C(=O)[O,OX1-]"
-    ]
-    
-    backbone_match = None
-    match_count = 0
-    for smarts in backbone_smarts_list:
-        patt = Chem.MolFromSmarts(smarts)
-        matches = mol.GetSubstructMatches(patt)
-        if matches:
-            match_count += len(matches)
-            # if more than one match is found, that's ambiguous
-            if len(matches) > 1:
-                return False, "Ambiguous backbone matches; molecule may be a peptide"
-            backbone_match = matches[0]
-            
-    if backbone_match is None or match_count == 0:
+    # The backbone is defined as: [NH2,NH3+]-C(-*)(C(=O)[O;H1,O-])
+    # This pattern allows for the free amine and free carboxylic acid functional groups 
+    # without enforcing chirality tags so that molecules with missing/chiral specifications (e.g. tyrosine) match.
+    backbone_smarts = "[NH2,NH3+]-C(-*)(C(=O)[O;H1,O-])"
+    backbone_patt = Chem.MolFromSmarts(backbone_smarts)
+    backbone_matches = mol.GetSubstructMatches(backbone_patt)
+    if not backbone_matches:
         return False, "Molecule does not match the expected amino acid backbone pattern"
+    if len(backbone_matches) > 1:
+        # More than one match may indicate a peptide or ambiguous structure
+        return False, "Ambiguous backbone matches; molecule may be part of a peptide"
     
-    # Backbone match ordering assumption:
-    # backbone_match[0] : Amino nitrogen
-    # backbone_match[1] : Alpha carbon (C*)
-    # backbone_match[2] : Carboxyl carbon (of -COOH)
-    # (Other atoms in the COOH group are not used to determine the side chain.)
-    amino_idx = backbone_match[0]
-    alpha_idx = backbone_match[1]
-    backbone_indices = set(backbone_match)  # Include backbone atoms from the match
-    
-    # (C) Check for peptide (amide) bonds beyond the expected backbone.
-    # A free amino acid should not have additional C(=O)N bonds.
-    # We look for any amide pattern anywhere in the molecule.
-    amide_patt = Chem.MolFromSmarts("C(=O)N")
-    # However, if the only amide match corresponds to the backbone pattern, that's acceptable.
-    all_amide_matches = mol.GetSubstructMatches(amide_patt)
-    if all_amide_matches:
-        # Count amide bonds not part of the backbone.
-        extra_amide = False
-        for match in all_amide_matches:
-            # If the carbon in the match is not the backbone carboxyl carbon, then flag as extra.
-            if match[0] not in backbone_indices:
-                extra_amide = True
-                break
-        if extra_amide:
-            return False, "Molecule appears to have extra amide (peptide) bonds; likely part of a peptide"
-    
-    # (D) Identify the side chain.
-    # The side chain is defined as the atoms (and all connected atoms) that are attached to the α–carbon,
-    # except for the backbone atoms (the amino nitrogen and the carboxyl group already identified).
+    # Assume the match corresponds to:
+    # match[0]: backbone amine atom,
+    # match[1]: the α–carbon,
+    # match[2]: the carboxyl carbon.
+    match = backbone_matches[0]
+    backbone_indices = set(match)
+    alpha_idx = match[1]  # α–carbon index
+
+    # (C) Identify the side chain.
+    # Side chain: all atoms connected to the α–carbon that are not part of the backbone.
     alpha_atom = mol.GetAtomWithIdx(alpha_idx)
     sidechain_start = []
     for nbr in alpha_atom.GetNeighbors():
@@ -106,24 +76,24 @@ def is_polar_amino_acid(smiles: str):
     if not sidechain_start:
         return False, "Glycine side chain (only hydrogen) is not polar"
     
-    # Use breadth-first search (BFS) to collect all atoms of the side chain.
+    # Use breadth-first search (BFS) to collect all atoms in the side chain.
     sidechain_atoms = set()
     queue = deque(sidechain_start)
     while queue:
-        current = queue.popleft()
-        if current in sidechain_atoms:
+        current_idx = queue.popleft()
+        if current_idx in sidechain_atoms:
             continue
-        sidechain_atoms.add(current)
-        atom = mol.GetAtomWithIdx(current)
-        for nbr in atom.GetNeighbors():
-            # Do not traverse back into the backbone (alpha atom)
+        sidechain_atoms.add(current_idx)
+        current_atom = mol.GetAtomWithIdx(current_idx)
+        for nbr in current_atom.GetNeighbors():
+            # Do not traverse back into the α–carbon to avoid looping back into the backbone.
             if nbr.GetIdx() == alpha_idx:
                 continue
             if nbr.GetIdx() not in sidechain_atoms:
                 queue.append(nbr.GetIdx())
-
-    # (E) Check if the side chain contains any polar atoms.
-    # Consider nitrogen (7), oxygen (8), and sulfur (16) as indicators of polarity.
+    
+    # (D) Check if the side chain contains at least one polar atom.
+    # Here, polar atoms are defined as nitrogen (7), oxygen (8), or sulfur (16).
     for idx in sidechain_atoms:
         atom = mol.GetAtomWithIdx(idx)
         if atom.GetAtomicNum() in (7, 8, 16):
@@ -134,7 +104,15 @@ def is_polar_amino_acid(smiles: str):
 
 # Example usage (for testing purposes)
 if __name__ == "__main__":
-    # Test with a known polar amino acid: L-serine
-    test_smiles = "N[C@@H](CO)C(O)=O"  # L-serine
-    result, reason = is_polar_amino_acid(test_smiles)
-    print("Result:", result, "| Reason:", reason)
+    # Testing with a few examples:
+    test_examples = {
+        "D-glutamine": "O=C(O)[C@H](N)CCC(=O)N",
+        "L-serine": "N[C@@H](CO)C(O)=O",
+        "L-glutamic acid": "N[C@@H](CCC(O)=O)C(O)=O",
+        "L-lysine": "NCCCC[C@@H](N)C(O)=O",
+        "tyrosine": "NC(Cc1ccc(O)cc1)C(O)=O",
+        "glycine (should fail)": "NCC(=O)O"
+    }
+    for name, smi in test_examples.items():
+        result, reason = is_polar_amino_acid(smi)
+        print(f"SMILES: {smi}\n NAME: {name}\n Result: {result}\n Reason: {reason}\n{'-'*50}")
