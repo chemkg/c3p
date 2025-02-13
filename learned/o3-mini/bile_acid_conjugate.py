@@ -2,29 +2,29 @@
 Classifies: CHEBI:36249 bile acid conjugate
 """
 """
-Classifies: Bile acid conjugate (any bile acid conjugated to a group that increases hydrophilicity/charge)
+Classifies: Bile acid conjugate – any bile acid (a molecule with a cholanic/steroid core)
+conjugated to a functional group that increases hydrophilicity or charge.
 Based on the definition:
   “Any bile acid conjugated to a functional group that gives additional hydrophilicity or charge to the molecule.
    Molecules used for conjugation are: glycine, taurine (and other amino acids); sulfuric acid (sulfate);
    glucuronic acid (glucuronate); glucose and other uncharged sugars; and coenzyme A.”
-Note: This implementation uses heuristic SMARTS patterns to first detect a steroid core (bile acid backbone)
-and then search for common conjugation moieties.
+This implementation uses heuristic SMARTS patterns to detect a steroid (cholanic) nucleus and then
+to detect common conjugation moieties.
 """
 from rdkit import Chem
 
 def is_bile_acid_conjugate(smiles: str):
     """
     Determines if a molecule (given as a SMILES string) is a bile acid conjugate.
-    The algorithm first looks for the typical steroid (cholanic) nucleus and then for
-    a conjugation functional group (such as an amide bond as in glycine/other amino acid conjugates,
-    taurine-like groups, sulfate, glucuronate, or a sugar moiety).
-
+    The algorithm uses a relaxed SMARTS pattern to identify a cholanic (steroid) nucleus,
+    and then looks for at least one conjugation group from a list of common patterns.
+    
     Args:
         smiles (str): SMILES string of the molecule
-
+        
     Returns:
-        bool: True if molecule is a bile acid conjugate, False otherwise
-        str: Reason for classification
+        bool: True if molecule is a bile acid conjugate, False otherwise.
+        str: Reason for the classification.
     """
     # Parse the SMILES string into an RDKit molecule
     mol = Chem.MolFromSmiles(smiles)
@@ -32,45 +32,55 @@ def is_bile_acid_conjugate(smiles: str):
         return False, "Invalid SMILES string"
     
     # --- Step 1. Check for a bile acid (steroid) core ---
-    # Here we use a simplified SMARTS pattern to represent a cholane-like core.
-    # Note: This pattern is heuristic and might not catch every bile acid variant.
-    steroid_smarts = "[C@]1(C)CC[C@H]2[C@@H]3CC[C@]4(C)[C@@H](CC[C@]43)[C@H]12"
+    # Previous attempt used a strict, chiral SMARTS pattern that missed many bile acids.
+    # Here we use a relaxed (achiral) SMARTS pattern for a fused tetracyclic system, 
+    # which is common in bile acid (cholanic) cores.
+    steroid_smarts = "C1CCC2C3CCC4C1C2C34"
     steroid_pattern = Chem.MolFromSmarts(steroid_smarts)
+    if steroid_pattern is None:
+        return False, "Error creating steroid SMARTS pattern"
+    
     if not mol.HasSubstructMatch(steroid_pattern):
         return False, "No steroid nucleus (cholanic acid core) detected"
     
     # --- Step 2. Check for conjugation groups ---
-    # We define a set of SMARTS representing groups used for conjugation.
-    # For example, an amide linkage (as seen with glycine or other amino acids),
-    # taurine conjugation (with a characteristic NCCS(=O)(=O)[O-] motif or neutral variant),
-    # sulfate groups, a glucuronate motif or a sugar moiety.
+    # Define several SMARTS patterns for conjugation groups.
+    # These include a generic amide (which may capture glycine and other amino acid conjugates),
+    # taurine conjugation (as either anionic or neutral form),
+    # sulfate groups, glucuronate pattern, sugar moieties, and others.
     conjugation_smarts = {
-        "amide bond (e.g. glycine conjugation)": "C(=O)N",  # very generic amide bond
+        "amide bond (e.g. amino acid conjugation)": "C(=O)N",  # generic amide bond
         "taurine conjugation (anionic)": "NCCS(=O)(=O)[O-]",
         "taurine conjugation (neutral)": "NCCS(=O)(=O)O",
         "sulfate conjugation": "S(=O)(=O)[O-]",
         "glucuronate": "O[C@@H]1[C@H](O)[C@@H](O)[C@H](O)[C@@H](O)C(=O)O1",
         "sugar (e.g. uncharged glucose)": "OC1OC(O)C(O)C(O)C1O"
-        # Additional patterns (e.g. for coenzyme A) could be added as needed.
+        # Additional patterns (e.g., coenzyme A) can be added here.
     }
     
-    # Check if at least one conjugation pattern matches.
-    conjugation_found = False
-    matched_conjugations = []
+    found_conjugation = False
+    matched_groups = []
     for desc, smarts in conjugation_smarts.items():
         pattern = Chem.MolFromSmarts(smarts)
         if pattern is not None and mol.HasSubstructMatch(pattern):
-            conjugation_found = True
-            matched_conjugations.append(desc)
-    
-    if not conjugation_found:
+            found_conjugation = True
+            matched_groups.append(desc)
+    if not found_conjugation:
         return False, "No recognized conjugation group detected"
     
-    # If both a steroid core and at least one conjugation group are detected, classify as a bile acid conjugate.
-    return True, ("Steroid nucleus detected with conjugation groups: " +
-                  ", ".join(matched_conjugations))
-    
-# Example usage (uncomment to test):
-# smiles_example = "S(O)(=O)(=O)CCNC(=O)[C@@H](CCC[C@H](C1[C@@]2(C(C3C([C@@]4([C@](CC3O)(C[C@H](O)CC4)[H])C)CC2)CC1)C)C)C"
-# result, reason = is_bile_acid_conjugate(smiles_example)
-# print(result, reason)
+    # If both a steroid nucleus and at least one conjugation group are found, classify as bile acid conjugate.
+    return True, "Steroid nucleus detected with conjugation group(s): " + ", ".join(matched_groups)
+
+# Example usage:
+if __name__ == "__main__":
+    # List of example SMILES strings (e.g., taurocholic acid, taurochenodeoxycholic acid, etc.)
+    smiles_examples = [
+        "[H][C@@]12C[C@H](O)CC[C@]1(C)[C@@]1([H])C[C@H](O)[C@]3(C)[C@]([H])(CC[C@@]3([H])[C@]1([H])[C@H](O)C2)[C@H](C)CCC(=O)NCCS(O)(=O)=O",  # taurocholic acid
+        "[C@]12([C@]([C@]3([C@]([C@@H]([C@@H](CCC(NCCS(=O)(=O)O)=O)C)CC3)(C)CC1)[H])([C@H]([C@H](O)[C@]4([C@@]2(CC[C@H](C4)O)C)[H])O)[H])[H]"  # tauro-omega-muricholic acid
+    ]
+    for s in smiles_examples:
+        result, reason = is_bile_acid_conjugate(s)
+        print("SMILES:", s)
+        print("Classification:", result)
+        print("Reason:", reason)
+        print("----------")
