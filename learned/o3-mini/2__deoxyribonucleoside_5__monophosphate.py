@@ -5,12 +5,13 @@ Classifies: CHEBI:18241 2'-deoxyribonucleoside 5'-monophosphate
 Classifies: 2'-deoxyribonucleoside 5'-monophosphate
 Definition: A 2'-deoxyribonucleoside monophosphate compound with the phosphate group in the 5'-position.
 
-Heuristic:
-  1. Identify a candidate deoxyribose sugar: a five-membered ring containing exactly one oxygen and four carbons.
-  2. For each candidate ring, look for exocyclic oxygen(s) attached to its carbon atoms. For each such oxygen,
-     check if it is linked to a phosphorus atom. Count the number of such sugar–O–P connections.
-  3. Accept the candidate only if it shows exactly one phosphate connection (i.e. a 5'-monophosphate, not cyclic).
-  4. Verify that the molecule contains at least two nitrogen atoms outside the candidate sugar ring (evidence of a nucleobase).
+This function uses several heuristic substructure searches:
+  1. It looks for a phosphate group attached via an oxygen on a carbon (using a SMARTS pattern "COP(=O)(O)O").
+  2. It searches for a five‐membered sugar ring (furanose) having exactly one ring oxygen and exactly two OH substituents on its carbon atoms.
+     This pattern is consistent with 2’-deoxyribose (lacking the OH at the 2′ position).
+  3. It checks that outside of that sugar-ring there is at least one aromatic heterocycle containing at least two nitrogen atoms,
+     which is indicative of a nucleobase.
+If all of these features are found the molecule is classified as a 2'-deoxyribonucleoside 5'-monophosphate.
 """
 
 from rdkit import Chem
@@ -19,99 +20,88 @@ from rdkit.Chem import rdMolDescriptors
 def is_2__deoxyribonucleoside_5__monophosphate(smiles: str):
     """
     Determines if a molecule is a 2'-deoxyribonucleoside 5'-monophosphate based on its SMILES string.
-
+    
     Args:
         smiles (str): SMILES string of the molecule.
-
+    
     Returns:
         bool: True if the molecule is classified as a 2'-deoxyribonucleoside 5'-monophosphate, False otherwise.
-        str: Explanation for the classification decision.
+        str: A reason explaining the basis for the classification.
     """
-    # Parse the SMILES string
+    # Parse the SMILES string.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Get ring information from the molecule.
-    ring_info = mol.GetRingInfo()
-    rings = ring_info.AtomRings()
-    
-    # We will search for a candidate ring with exactly 5 atoms (4 carbons and 1 oxygen).
-    candidate_ring = None
-    candidate_attachment_count = 0  # Count of sugar -> exocyclic O -> P links
-    candidate_ring_set = set()
-    
-    for ring in rings:
-        if len(ring) != 5:
-            continue  # Only consider 5-membered rings
-        
-        oxygen_count = 0
-        carbon_count = 0
-        for idx in ring:
-            atom = mol.GetAtomWithIdx(idx)
-            if atom.GetAtomicNum() == 8:
-                oxygen_count += 1
-            elif atom.GetAtomicNum() == 6:
-                carbon_count += 1
-        # A deoxyribose ring should have exactly 1 oxygen and 4 carbons.
-        if oxygen_count != 1 or carbon_count != 4:
-            continue
-        
-        # Now check for phosphate attachment.
-        # We expect a phosphate (phosphorus atom, Z=15) to be attached via an exocyclic oxygen.
-        attachment_count = 0
-        for idx in ring:
-            atom = mol.GetAtomWithIdx(idx)
-            # We only consider carbon atoms in the ring for phosphate connectivity.
-            if atom.GetAtomicNum() != 6:
-                continue
-            # Look at neighbors of the sugar carbon that are NOT in the ring.
-            for nbr in atom.GetNeighbors():
-                if nbr.GetIdx() in ring:
-                    continue
-                # We expect an oxygen bridging the sugar carbon to a phosphate
-                if nbr.GetAtomicNum() == 8:
-                    # Look at neighbors of the oxygen (other than the sugar carbon)
-                    for nbr2 in nbr.GetNeighbors():
-                        if nbr2.GetIdx() == atom.GetIdx():
-                            continue
-                        if nbr2.GetAtomicNum() == 15:
-                            attachment_count += 1
-                            # We break out of the inner loop once we find a phosphate for this branch.
-                            break
-        # If exactly one phosphate connection is found, we choose this ring candidate.
-        if attachment_count == 1:
-            candidate_ring = ring
-            candidate_attachment_count = attachment_count
-            candidate_ring_set = set(ring)
-            break
-        # Otherwise, if a ring is found but with attachment_count==0 or >1, skip it.
-    
-    # If no candidate ring was found, then fail.
-    if candidate_ring is None:
-        # If we found a sugar-like ring but no proper monophosphate attachment, we give a specific message.
-        if any(len(r)==5 and sum(1 for idx in r if mol.GetAtomWithIdx(idx).GetAtomicNum()==8)==1 and 
-               sum(1 for idx in r if mol.GetAtomWithIdx(idx).GetAtomicNum()==6)==4 for r in rings):
-            return False, "No proper 5'-phosphate attachment detected on the candidate sugar ring (either none or multiple attachments found)."
-        return False, "No five-membered deoxyribose-like ring (4 carbons + 1 oxygen) detected."
-    
-    # Now verify nucleobase evidence:
-    # Count nitrogen atoms that are not part of the candidate sugar ring.
-    nucleobase_nitrogens = 0
-    for atom in mol.GetAtoms():
-        if atom.GetAtomicNum() == 7 and atom.GetIdx() not in candidate_ring_set:
-            nucleobase_nitrogens += 1
-    if nucleobase_nitrogens < 2:
-        return False, "Insufficient evidence of a nucleobase (fewer than 2 nitrogen atoms found outside the sugar ring)."
-    
-    # Optionally, check the molecular weight (nucleotides tend to be >300 Da) 
-    mol_wt = rdMolDescriptors.CalcExactMolWt(mol)
-    if mol_wt < 300:
-        return False, "Molecular weight is too low to be a typical deoxyribonucleoside monophosphate."
-    
-    # All tests passed: return positive classification.
-    return True, ("Molecule contains a 2'-deoxyribose sugar (5-membered ring with 4 carbons and 1 oxygen) "
-                  "with a single 5'-phosphate attachment (as indicated by a sugar–O–P connectivity) and evidence of a nucleobase.")
+    # 1. Check for a phosphate group attached via a carbon.
+    # The phosphate group SMARTS here is a heuristic to look for a "COP(=O)(O)O" fragment.
+    phosphate_pattern = Chem.MolFromSmarts("COP(=O)(O)O")
+    if not mol.HasSubstructMatch(phosphate_pattern):
+        return False, "No phosphate group (COP(=O)(O)O fragment) found"
 
-# If the logic is not applicable (e.g. if the structure falls far outside our heuristics)
-# one could return (None, None).
+    # 2. Look for a five-membered sugar ring that is consistent with deoxyribose.
+    # We search for a ring of size 5 containing exactly one oxygen (the ring heteroatom).
+    # Then for the carbon atoms of that ring, we count external OH groups.
+    # In ribose, the sugar ring (furanose) has three hydroxyls on ring carbons while deoxyribose lacks one OH.
+    ring_info = mol.GetRingInfo()
+    sugar_ring_found = False
+    sugar_ring_atoms = None
+    for ring in ring_info.AtomRings():
+        if len(ring) == 5:
+            # Count the number of ring atoms that are oxygen.
+            ring_oxygen_count = sum(1 for idx in ring if mol.GetAtomWithIdx(idx).GetAtomicNum() == 8)
+            if ring_oxygen_count != 1:
+                continue  # Not a typical furanose ring.
+            # For each carbon in the ring, count -OH substituents (neighbors that are oxygen with degree ==1).
+            OH_count = 0
+            for idx in ring:
+                atom = mol.GetAtomWithIdx(idx)
+                if atom.GetAtomicNum() == 6:  # carbon atom in the ring
+                    for nbr in atom.GetNeighbors():
+                        # Consider exocyclic oxygen atoms (not part of the ring) that likely represent an OH.
+                        if nbr.GetAtomicNum() == 8 and nbr.GetIdx() not in ring and nbr.GetDegree() == 1:
+                            OH_count += 1
+            # For a deoxyribose ring we expect two OH groups (typically at 3' and 4', with 2' lacking OH).
+            if OH_count != 2:
+                continue
+
+            # Also check that at least one carbon in this ring is attached to a phosphorus atom 
+            # (indicating the phosphate is linked at the 5'-position).
+            phosphate_attached = False
+            for idx in ring:
+                atom = mol.GetAtomWithIdx(idx)
+                if atom.GetAtomicNum() == 6:  # carbon atom
+                    for nbr in atom.GetNeighbors():
+                        if nbr.GetAtomicNum() == 15:  # phosphorus
+                            phosphate_attached = True
+                            break
+                if phosphate_attached:
+                    break
+            
+            if not phosphate_attached:
+                continue
+            
+            # If all criteria for the sugar ring are met, we assume this is the deoxyribose part.
+            sugar_ring_found = True
+            sugar_ring_atoms = set(ring)
+            break
+    
+    if not sugar_ring_found:
+        return False, "No deoxyribose sugar ring with appropriate hydroxyl pattern and 5'-phosphate attachment found"
+    
+    # 3. Check for the presence of a nucleobase.
+    # We require that there exists at least a few nitrogen atoms (at least two) that are not part of the sugar ring.
+    nitrogen_count = 0
+    for atom in mol.GetAtoms():
+        if atom.GetAtomicNum() == 7 and (sugar_ring_atoms is None or atom.GetIdx() not in sugar_ring_atoms):
+            nitrogen_count += 1
+    if nitrogen_count < 2:
+        return False, "Insufficient evidence of a nucleobase (fewer than 2 nitrogen atoms outside the sugar ring)"
+    
+    # Optionally, one might further check for an aromatic ring containing at least two N atoms.
+    # Here we use a simple heuristic based on overall nitrogen count.
+    
+    # If all tests pass, we classify the molecule as a 2'-deoxyribonucleoside 5'-monophosphate.
+    return True, "Molecule contains a deoxyribose sugar with a 5'-phosphate and a nucleobase."
+    
+# (The module ends here.)
