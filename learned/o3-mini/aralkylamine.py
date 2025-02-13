@@ -5,10 +5,9 @@ Classifies: CHEBI:18000 aralkylamine
 """
 Classifies: aralkylamine
 Definition: An alkylamine in which at least one alkyl substituent (i.e. a chain of only sp3 carbons)
-leads (indirectly) to an aromatic ring. In other words, an aliphatic (non‐aromatic) amine N that is 
-connected via at least one “alkyl” (saturated carbon) bond to an aromatic ring.
-This excludes cases where the nitrogen is directly bonded to an aromatic ring (arylamines)
-or when it is in an amide context.
+leads (indirectly) to an aromatic ring. That is, the molecule contains a non‐aromatic (aliphatic) amine N,
+which is not directly bound to an aromatic ring and not part of an amide, and which is connected via at least
+one saturated carbon (alkyl) bond to an aromatic carbon.
 """
 
 from rdkit import Chem
@@ -16,86 +15,92 @@ from rdkit import Chem
 def is_aralkylamine(smiles: str):
     """
     Determines if a molecule is an aralkylamine based on its SMILES string.
-    An aralkylamine is defined as an alkylamine having an alkyl substituent (i.e. only sp3 carbons)
-    that eventually carries an aromatic ring. The amine nitrogen should not be directly bonded to an 
-    aromatic ring, and should not be part of an amide linkage.
+    
+    An aralkylamine is defined as an alkylamine having at least one alkyl (saturated, sp3 hybridized)
+    substituent that eventually leads to an aromatic ring. In this context the substitution must be via
+    at least one saturated carbon. Additionally, the nitrogen itself must not be directly bonded to an
+    aromatic ring (which would be an arylamine) and should not be involved in an amide linkage.
     
     Args:
         smiles (str): SMILES string of the molecule.
     
     Returns:
         (bool, str): Tuple where the boolean is True if the molecule contains at least one aralkylamine,
-        and the string is a reason for the classification.
+        and the string provides a reason for the classification.
     """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-
-    # Exclude non-relevant cases: e.g. if the molecule has no nitrogen:
+    
+    # If no nitrogen is present, this is not an aralkylamine.
     if not any(atom.GetAtomicNum() == 7 for atom in mol.GetAtoms()):
         return False, "No nitrogen atoms present"
-
-    # Recursive search: from a starting sp3 non‐aromatic carbon,
-    # traverse only along sp3 carbon atoms (i.e. pure alkyl chain) to look for an aromatic atom.
-    # We allow a chain length up to max_depth bonds.
-    def dfs_chain(atom, distance, max_depth, visited):
-        # For each neighbor, we only traverse if it is a pure (non‐aromatic) carbon.
-        for nbr in atom.GetNeighbors():
-            # If this neighbor is aromatic, then we have reached an aromatic substituent.
-            # We require that at least one bond has been traversed from the N (distance>=0 means starting carbon already)
-            if nbr.GetIsAromatic() and (distance + 1 >= 1):
-                return True
-            # Only continue if the neighbor is carbon, not aromatic, and sp3 hybridized.
-            if nbr.GetAtomicNum() == 6 and (not nbr.GetIsAromatic()):
-                # Check hybridization: we want only typical sp3 alkyl carbons.
-                if nbr.GetHybridization() != Chem.rdchem.HybridizationType.SP3:
+    
+    # Define a helper to check if a nitrogen is attached to a carbon that is double-bonded to oxygen
+    # (i.e. likely part of an amide or similar).
+    def in_amide_context(nitrogen):
+        for nbr in nitrogen.GetNeighbors():
+            if nbr.GetAtomicNum() == 6:  # candidate carbon
+                bond = mol.GetBondBetweenAtoms(nitrogen.GetIdx(), nbr.GetIdx())
+                if bond is None:
                     continue
-                # Avoid going backwards.
-                if nbr.GetIdx() in visited:
-                    continue
-                if distance + 1 < max_depth:
-                    visited.add(nbr.GetIdx())
-                    if dfs_chain(nbr, distance + 1, max_depth, visited):
-                        return True
+                # Check if the carbon has a double bond with oxygen (amide C=O)
+                for subnbr in nbr.GetNeighbors():
+                    if subnbr.GetAtomicNum() == 8:
+                        bond2 = mol.GetBondBetweenAtoms(nbr.GetIdx(), subnbr.GetIdx())
+                        if bond2 is not None and bond2.GetBondType() == Chem.BondType.DOUBLE:
+                            return True
         return False
 
-    # Now iterate over all candidate nitrogen atoms.
+    # DFS function:
+    # From a given carbon atom in the alkyl chain (already guaranteed to be sp3 and non-aromatic),
+    # we traverse along neighbors that are also sp3 carbons and non-aromatic.
+    # If we eventually encounter an aromatic carbon (which means the chain leads to an aromatic ring),
+    # we return True.
+    def dfs_chain(atom, current_depth, max_depth, visited):
+        # Traverse neighbors of the current atom
+        for nbr in atom.GetNeighbors():
+            # If neighbor is a carbon atom
+            if nbr.GetAtomicNum() == 6:
+                # If the neighbor is aromatic, we have reached an aromatic substituent.
+                if nbr.GetIsAromatic():
+                    # We allow a match if we have traversed at least one saturated alkyl carbon.
+                    if current_depth >= 1:
+                        return True
+                # Traverse if neighbor is saturated sp3 and non-aromatic.
+                elif nbr.GetHybridization() == Chem.rdchem.HybridizationType.SP3 and not nbr.GetIsAromatic():
+                    idx = nbr.GetIdx()
+                    if idx in visited:
+                        continue
+                    # Extend the chain if not too long.
+                    if current_depth < max_depth:
+                        visited.add(idx)
+                        if dfs_chain(nbr, current_depth + 1, max_depth, visited):
+                            return True
+        return False
+    
+    # Iterate over all candidate nitrogen atoms that are non-aromatic.
     for atom in mol.GetAtoms():
-        if atom.GetAtomicNum() == 7 and (not atom.GetIsAromatic()):
-            # Exclude N atoms that are part of an amide (or similar)
-            is_amide = False
+        if atom.GetAtomicNum() == 7 and not atom.GetIsAromatic():
+            # Skip if this nitrogen appears to be in an amide context.
+            if in_amide_context(atom):
+                continue
+            
+            # Check all neighbors of this nitrogen.
             for nbr in atom.GetNeighbors():
-                if nbr.GetAtomicNum() == 6:  # candidate carbon attached to N
-                    bond = mol.GetBondBetweenAtoms(atom.GetIdx(), nbr.GetIdx())
-                    if bond is None:
-                        continue
-                    # Check if that carbon is double-bonded to an oxygen (typical of amides)
-                    for nbr2 in nbr.GetNeighbors():
-                        if nbr2.GetAtomicNum() == 8:
-                            bond2 = mol.GetBondBetweenAtoms(nbr.GetIdx(), nbr2.GetIdx())
-                            if bond2 is not None and bond2.GetBondType() == Chem.BondType.DOUBLE:
-                                is_amide = True
-                                break
-                    if is_amide:
-                        break
-            if is_amide:
-                continue  # Skip candidate nitrogen in an amide context
-
-            # For each neighbor of candidate N: we require that it is a carbon and is not aromatic.
-            for nbr in atom.GetNeighbors():
-                if nbr.GetAtomicNum() == 6 and (not nbr.GetIsAromatic()):
-                    # Also, check that the neighbor is sp3. This ensures that the chain is an alkyl chain.
-                    if nbr.GetHybridization() != Chem.rdchem.HybridizationType.SP3:
-                        continue
-                    # We want to ensure that N is not directly bonded to an aromatic ring.
-                    found = dfs_chain(nbr, distance=0, max_depth=6, visited={nbr.GetIdx()})
-                    if found:
+                # We require that the substituent starts with a saturated, non-aromatic carbon.
+                if nbr.GetAtomicNum() == 6 and not nbr.GetIsAromatic() \
+                   and nbr.GetHybridization() == Chem.rdchem.HybridizationType.SP3:
+                    # Start DFS search from this carbon with initial depth = 1 (one bond from N).
+                    visited = set([nbr.GetIdx()])
+                    if dfs_chain(nbr, current_depth=1, max_depth=6, visited=visited):
                         return True, "Contains an aliphatic amine nitrogen with an alkyl substituent leading to an aromatic ring"
     return False, "No appropriate aralkyl substituent found on an aliphatic amine nitrogen"
 
-# For testing purposes, one can run some examples.
+
+# For testing purposes.
 if __name__ == "__main__":
-    # Simple benzylamine example: N attached to CH2 then aromatic ring.
+    # Example: benzylamine is an aralkylamine because N-CH2-c1ccccc1 (here the chain goes CH2 then aromatic)
     test_smiles = "NCc1ccccc1"
     result, reason = is_aralkylamine(test_smiles)
     print("SMILES:", test_smiles)
