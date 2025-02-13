@@ -4,131 +4,142 @@ Classifies: CHEBI:21575 N-acetyl-amino acid
 """
 Classifies: N-acetyl-amino acid
 Definition: An N-acyl-amino acid that has acetyl as the acyl group.
-The molecule must have an N-acetyl group – that is, a nitrogen bearing an acetyl fragment 
-(where the acyl carbon has a double-bonded oxygen and a connected methyl group) – and an amino 
-acid backbone where that nitrogen is directly attached to an alpha-carbon that in turn is bonded 
-to a carboxyl carbon (a carbon bonded to at least one double-bonded oxygen and one single-bonded oxygen).
+This program checks whether a molecule (given by its SMILES string) has
+1) at least one nitrogen that is acetylated – that is, the nitrogen is bonded
+   to a carbon that carries a carbonyl oxygen and a methyl group.
+2) such a nitrogen is “in the amino acid backbone”, meaning that there is a short (2–3 bond) path
+   from that N to a carboxyl group. Here the carboxyl group is defined as a carbon
+   that is double-bonded to an oxygen and that is singly bonded to an oxygen that is not further substituted by a carbon.
+The use of a distance check (via a shortest-path search) rather than simply insisting on a direct bond 
+(from nitrogen to an alpha–carbon) allows for both classical (α‑) amino acids as well as β‑amino acids.
 """
 from rdkit import Chem
+from rdkit.Chem import rdmolops
 
 def is_N_acetyl_amino_acid(smiles: str):
     """
     Determines if a molecule is an N-acetyl amino acid based on its SMILES string.
-
-    The method checks:
-    1. That at least one nitrogen atom in the molecule carries an acetyl group (i.e. is attached to 
-       a carbonyl carbon that is further attached to a methyl group).
-    2. That the same nitrogen is also bonded to an alpha-carbon which is further connected to a carboxyl carbon.
-       The carboxyl carbon is identified by having at least one oxygen bonded via a double bond (carbonyl) 
-       and at least one oxygen bonded via a single bond.
-
+    
+    Steps:
+      1. Parse the SMILES.
+      2. For every nitrogen atom in the molecule, check if it bears an acetyl group.
+         An acetyl group here is defined as a carbon neighbor that has at least one
+         double-bonded oxygen (i.e. a carbonyl) and also a methyl group (a carbon neighbor
+         with only one heavy-atom connection).
+      3. For each N-acetylated nitrogen, search for a carboxyl group in the molecule that
+         is “backbone-connected” – that is, the shortest path (in bonds) from the N to that carboxyl carbon is 2 or 3 bonds.
+         The carboxyl carbon is defined to have:
+             - at least one oxygen attached by a double bond
+             - at least one oxygen attached by a single bond that is not substituted by carbons 
+               (i.e. the oxygen’s only heavy neighbor is the carboxyl carbon).
+    If such a nitrogen is found, the function returns (True, <explanation>).
+    Otherwise, it returns (False, <reason>).
+    
     Args:
-        smiles (str): SMILES string of the molecule
-        
+        smiles (str): SMILES string representing the molecule.
+    
     Returns:
-        bool: True if the molecule is an N-acetyl amino acid, False otherwise.
-        str: Reason for the classification result.
+        bool: True if molecule qualifies, False otherwise.
+        str: A reason for the classification.
     """
-    # Parse the SMILES string into a molecule.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
+        
+    # helper function to test if a carbon is part of a free carboxyl group.
+    def is_carboxyl_carbon(carbon_atom):
+        # Ensure the atom is carbon.
+        if carbon_atom.GetAtomicNum() != 6:
+            return False
+        has_carbonyl = False
+        has_OH = False
+        # Loop over neighbors looking for oxygens.
+        for neigh in carbon_atom.GetNeighbors():
+            if neigh.GetAtomicNum() != 8:
+                continue
+            bond = mol.GetBondBetweenAtoms(carbon_atom.GetIdx(), neigh.GetIdx())
+            if bond is None:
+                continue
+            if bond.GetBondType() == Chem.rdchem.BondType.DOUBLE:
+                has_carbonyl = True
+            elif bond.GetBondType() == Chem.rdchem.BondType.SINGLE:
+                # In a free acid, the single-bonded oxygen should be –OH.
+                # We assume that if the oxygen is attached only to the carboxyl carbon (degree==1)
+                # then it is an –OH rather than an –OR.
+                if neigh.GetDegree() == 1:
+                    has_OH = True
+        return has_carbonyl and has_OH
 
-    # Iterate over all nitrogen atoms in the molecule.
+    # Iterate over nitrogen atoms
     for atom in mol.GetAtoms():
         if atom.GetAtomicNum() != 7:
-            continue  # Skip non-nitrogen atoms
-        
-        n_atom = atom  # candidate acetylated nitrogen
-        acyl_found = None
-
-        # Check neighbors of the nitrogen for an acetyl (acyl) carbon.
-        # The acyl carbon should be bonded to n_atom,
-        # have at least one double-bonded oxygen (carbonyl),
-        # and be attached to a methyl group.
+            continue  # skip non-nitrogen atoms
+        n_atom = atom
+        acetyl_found = False
+        acyl_neighbor = None  # the carbon of the acetyl group
+        # Look through neighbors of the nitrogen for an acetyl pattern:
         for nbr in n_atom.GetNeighbors():
             if nbr.GetAtomicNum() != 6:
-                continue  # Look for a carbon neighbor
-            acyl_carbon = nbr
-            # Skip if this carbon is not bonded to the nitrogen (it is, by construction)
+                continue  # must be carbon
+            acyl_candidate = nbr
             double_oxygen = False
             methyl_found = False
-            # Loop over neighbors of the acyl carbon (except the nitrogen)
-            for nbr2 in acyl_carbon.GetNeighbors():
-                if nbr2.GetIdx() == n_atom.GetIdx():
+            # Check neighbors of the acyl candidate (skip back the nitrogen)
+            for subnbr in acyl_candidate.GetNeighbors():
+                if subnbr.GetIdx() == n_atom.GetIdx():
                     continue
-                # Check for a double-bonded oxygen (the carbonyl oxygen)
-                bond = mol.GetBondBetweenAtoms(acyl_carbon.GetIdx(), nbr2.GetIdx())
-                if nbr2.GetAtomicNum() == 8 and bond.GetBondType() == Chem.rdchem.BondType.DOUBLE:
-                    double_oxygen = True
-                # Check for a methyl group: a carbon with only one heavy (non-hydrogen) neighbor.
-                if nbr2.GetAtomicNum() == 6:
-                    # We use GetDegree() which counts the number of heavy-atom neighbors.
-                    # A methyl carbon is usually only attached to one heavy atom (the acyl carbon)
-                    if nbr2.GetDegree() == 1:
+                if subnbr.GetAtomicNum() == 8:
+                    bond = mol.GetBondBetweenAtoms(acyl_candidate.GetIdx(), subnbr.GetIdx())
+                    if bond and bond.GetBondType() == Chem.rdchem.BondType.DOUBLE:
+                        double_oxygen = True
+                elif subnbr.GetAtomicNum() == 6:
+                    # A methyl carbon typically is only connected to this acyl candidate.
+                    if subnbr.GetDegree() == 1:
                         methyl_found = True
             if double_oxygen and methyl_found:
-                acyl_found = acyl_carbon
-                break  # Found an acetyl group on n_atom
-
-        if acyl_found is None:
-            # This nitrogen does not have an acetyl group; check the next nitrogen.
-            continue
-
-        # Now verify the amino acid backbone connectivity.
-        # The nitrogen should be attached to an alpha-carbon (other than the acyl carbon).
-        alpha_carbon = None
-        for nbr in n_atom.GetNeighbors():
-            if nbr.GetIdx() == acyl_found.GetIdx():
-                continue  # skip the acetyl group carbon
-            if nbr.GetAtomicNum() == 6:
-                alpha_carbon = nbr
+                acetyl_found = True
+                acyl_neighbor = acyl_candidate
                 break
-        if alpha_carbon is None:
-            continue  # No alpha-carbon attached to this nitrogen
+        if not acetyl_found:
+            continue  # this nitrogen is not acetylated; check next nitrogen
 
-        # Check that the alpha carbon has an attached carboxyl carbon.
-        # In an amino acid, the alpha carbon is bound to a carboxyl carbon.
+        # Now check for an amino acid backbone.
+        # Instead of demanding the N is directly attached to the alpha-carbon,
+        # we allow for either standard (α-) amino acids (path length=2) or β‑amino acids (path length=3).
+        # We look for any carboxyl carbon (c, as defined) for which the shortest bond path from
+        # the N (our acetylated N) is 2 or 3.
         carboxyl_found = False
-        for nbr in alpha_carbon.GetNeighbors():
-            # Skip the nitrogen that we already have.
-            if nbr.GetIdx() == n_atom.GetIdx():
+        for atom2 in mol.GetAtoms():
+            # Look at carbon atoms that can be carboxyl groups.
+            if atom2.GetAtomicNum() != 6:
                 continue
-            if nbr.GetAtomicNum() != 6:
+            if not is_carboxyl_carbon(atom2):
                 continue
-            carboxyl_carbon = nbr
-            # Evaluate carboxyl carbon: It should have at least one oxygen attached via a double bond 
-            # and at least one oxygen attached via a single bond.
-            double_count = 0
-            single_count = 0
-            for oxy in carboxyl_carbon.GetNeighbors():
-                if oxy.GetAtomicNum() != 8:
-                    continue
-                bond = mol.GetBondBetweenAtoms(carboxyl_carbon.GetIdx(), oxy.GetIdx())
-                if bond is None:
-                    continue
-                if bond.GetBondType() == Chem.rdchem.BondType.DOUBLE:
-                    double_count += 1
-                elif bond.GetBondType() == Chem.rdchem.BondType.SINGLE:
-                    single_count += 1
-            if double_count >= 1 and single_count >= 1:
+            # Find shortest path (list of atom indices) from our N to this carboxyl carbon.
+            path = rdmolops.GetShortestPath(mol, n_atom.GetIdx(), atom2.GetIdx())
+            # The number of bonds is len(path)-1; for backbone connectivity we allow 2 or 3 bonds.
+            if 2 <= (len(path) - 1) <= 3:
                 carboxyl_found = True
                 break
         if carboxyl_found:
-            return True, ("Found valid N-acetyl amino acid: N-atom has an acetyl group (with carbonyl and methyl) "
-                          "and is bonded to an alpha-carbon which in turn is connected to a carboxyl group.")
-    # If no nitrogen satisfied the connectivity requirements, return False.
-    return False, "No N-acetylated nitrogen with an amino acid backbone (alpha-carbon with attached carboxyl group) was found"
+            return True, ("Found valid N-acetyl amino acid: The nitrogen bears an acetyl group "
+                          "and a carboxyl group is connected via a short path (2–3 bonds) from that nitrogen.")
+    return False, "No N-acetylated nitrogen with a suitable amino acid backbone (free carboxyl group connected within 2–3 bonds) was found"
 
 
-# Example usage
+# Example usage:
 if __name__ == "__main__":
-    # We test with a few SMILES examples of N-acetyl amino acids.
-    test_examples = {
+    test_smiles = {
+        "grixazone A": "[H]C(=O)c1ccc2oc3cc(=O)c(N)c(SC[C@H](NC(C)=O)C(O)=O)c3nc2c1",
+        "N-acetylhistidine": "C(=O)(C(CC=1NC=NC1)NC(=O)C)O",
         "N-acetyl-L-aspartic acid": "CC(=O)N[C@@H](CC(O)=O)C(O)=O",
-        "N-acetylglycine": "CC(=O)NCC(O)=O",
-        "N-acetylhistidine": "C(=O)(C(CC=1NC=NC1)NC(=O)C)O"
+        "bisorcic": "C(CCNC(=O)C)[C@@H](C(O)=O)NC(=O)C",
+        "N-acetyl-D-methionine": "CSCC[C@@H](NC(C)=O)C(O)=O",
+        "N-acetyl-beta-alanine": "CC(=O)NCCC(O)=O",
+        "N(6)-acetyl-L-lysine": "CC(=O)NCCCC[C@H](N)C(O)=O",
+        "N-acetyl-L-proline": "CC(=O)N1CCC[C@H]1C(O)=O",
+        "N-acetyl-L-phenylalaninate": "CC(=O)N[C@@H](Cc1ccccc1)C([O-])=O",  # expected false positive
     }
-    for name, smiles in test_examples.items():
-        result, reason = is_N_acetyl_amino_acid(smiles)
-        print(f"Name: {name}\nSMILES: {smiles}\nResult: {result}\nReason: {reason}\n{'-'*60}")
+    for name, sm in test_smiles.items():
+        result, reason = is_N_acetyl_amino_acid(sm)
+        print(f"Name: {name}\nSMILES: {sm}\nResult: {result}\nReason: {reason}\n{'-'*60}")
