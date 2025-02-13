@@ -3,16 +3,20 @@ Classifies: CHEBI:47909 3-oxo-Delta(4) steroid
 """
 """
 Classifies: 3-oxo-Delta(4) steroid – a 3-oxo steroid with an alpha,beta-unsaturated ketone (enone)
-located on a fused steroid nucleus. The steroid nucleus must be built of a fused system with at least 4 rings,
-with a characteristic ring-size distribution (at least one five-membered ring and at least three six-membered rings).
+located on a fused steroid nucleus. The steroid nucleus is expected to be a contiguous fused ring system 
+composed mostly of carbons and, in classical steroids, comprises three six‐membered rings and one five‐membered ring.
+This implementation accepts candidate clusters that have at least three rings with at least one five‐membered ring 
+and at least two six‐membered rings, and where at least 80% of the atoms are carbon.
 """
+
 from rdkit import Chem
 
 def is_3_oxo_Delta_4__steroid(smiles: str):
     """
     Determines if a molecule is a 3-oxo-Delta(4) steroid based on its SMILES.
-    The molecule must have a steroid nucleus (fused rings with at least one 5-membered and three 6-membered rings)
-    as well as an enone motif (alpha,beta-unsaturated ketone) located on that nucleus.
+    The molecule must have a fused steroid nucleus (a fused ring system whose rings are mostly carbons and
+    resemble that of a steroid – ideally containing at least one 5-membered ring and at least two 6-membered rings)
+    as well as an enone motif (alpha,beta-unsaturated ketone) that is located on that nucleus.
     
     Args:
         smiles (str): SMILES string for the molecule.
@@ -29,19 +33,19 @@ def is_3_oxo_Delta_4__steroid(smiles: str):
         Chem.SanitizeMol(mol)
     except Exception as e:
         return False, f"Sanitization error: {str(e)}"
-        
-    # Get ring information from the molecule.
+    
+    # Get ring information.
     ring_info = mol.GetRingInfo()
     all_rings = ring_info.AtomRings()
     if not all_rings:
         return False, "No rings found in the molecule"
     
-    # Convert each ring (tuple of atom indices) to a set for easier intersection handling.
+    # Convert each ring (tuple of atom indices) to a set.
     rings = [set(r) for r in all_rings]
+    n = len(rings)
     
     # Use a union-find algorithm to group rings that are fused.
-    # Two rings are fused if they share at least 2 atoms.
-    n = len(rings)
+    # Two rings are considered fused if they share at least 2 atoms.
     parent = list(range(n))
     
     def find(i):
@@ -67,29 +71,39 @@ def is_3_oxo_Delta_4__steroid(smiles: str):
         root = find(i)
         groups.setdefault(root, []).append(i)
     
-    # Look for a fused cluster (group) that is likely to represent a steroid nucleus.
-    # For a typical steroid nucleus, we expect at least four rings, with three six-membered rings and one five-membered ring.
     candidate_cluster = None
+    candidate_reason = ""
+    # Loop over each fused cluster.
     for group in groups.values():
-        if len(group) >= 4:
-            # For the rings in this group, count the ring sizes.
+        # We now relax the requirement: accept clusters with >= 3 rings.
+        if len(group) >= 3:
+            # Count ring sizes in this group.
             ring_sizes = [len(rings[i]) for i in group]
             count_5 = sum(1 for s in ring_sizes if s == 5)
             count_6 = sum(1 for s in ring_sizes if s == 6)
-            if count_5 >= 1 and count_6 >= 3:
-                candidate_cluster = group
-                break
-    if candidate_cluster is None:
-        return False, "The molecule does not have a fused ring cluster with the steroid nucleus pattern (at least one five-membered and three six-membered rings)"
+            # Require at least one five-membered and two six-membered rings.
+            if count_5 >= 1 and count_6 >= 2:
+                # Compute union of atom indices for this cluster.
+                cluster_atoms = set()
+                for ring_index in group:
+                    cluster_atoms.update(rings[ring_index])
+                # Check that the candidate nucleus consists mostly of carbon.
+                n_carbons = sum(1 for idx in cluster_atoms if mol.GetAtomWithIdx(idx).GetAtomicNum() == 6)
+                if len(cluster_atoms) > 0 and (n_carbons / len(cluster_atoms)) >= 0.8:
+                    candidate_cluster = cluster_atoms
+                    break  # pick first acceptable cluster
+                else:
+                    candidate_reason = "Fused ring cluster found but does not consist mostly of carbons"
     
-    # Compute the union of atom indices from the candidate steroid cluster.
-    steroid_atoms = set()
-    for ring_index in candidate_cluster:
-        steroid_atoms.update(rings[ring_index])
+    if candidate_cluster is None:
+        # If none satisfy the nucleus pattern.
+        if candidate_reason:
+            return False, candidate_reason
+        return False, "The molecule does not have a fused ring cluster with a steroid nucleus pattern (>=3 fused rings with at least 1 five-membered and 2 six-membered rings, mostly carbon)"
     
     # Define a SMARTS pattern for the enone motif (alpha,beta-unsaturated ketone).
-    # The pattern looks for a ring carbon (in a ring) with a carbonyl (C(=O)) 
-    # attached to another ring carbon that is double-bonded to a third ring carbon.
+    # The pattern here requires a ring carbon (in a ring) bearing a carbonyl group,
+    # connected to a carbon-carbon double bond (with both atoms in rings).
     enone_pattern = Chem.MolFromSmarts("[#6;R](=O)[#6;R]=[#6;R]")
     if enone_pattern is None:
         return False, "Error in generating SMARTS pattern for enone motif"
@@ -98,23 +112,10 @@ def is_3_oxo_Delta_4__steroid(smiles: str):
     if not enone_matches:
         return False, "No alpha,beta-unsaturated ketone (enone) motif found in the molecule"
     
-    # Require that at least one enone is located within the candidate steroid nucleus.
-    # We use the location of the carbonyl atom (the first atom in the match).
+    # Check that at least one enone motif is within the candidate steroid nucleus.
     for match in enone_matches:
-        carbonyl_atom_idx = match[0]
-        if carbonyl_atom_idx in steroid_atoms:
-            return True, "Contains a fused steroid nucleus (with appropriate ring sizes) and an enone motif in it (3-oxo-Delta(4) steroid)"
+        # We check that the carbonyl atom (first atom in the match) is in the candidate nucleus.
+        if match[0] in candidate_cluster:
+            return True, "Contains a fused steroid nucleus (mostly carbons, with >=1 five-membered and >=2 six-membered rings) and an enone motif on it (3-oxo-Delta(4) steroid)"
     
     return False, "An enone motif was found but not located within the fused steroid nucleus"
-
-# Example (uncomment below to run tests):
-# test_smiles = [
-#     # True examples:
-#     "[H][C@@]12C[C@H](C)[C@](O)(C(=O)CO)[C@@]1(C)C[C@H](O)[C@@]1(F)[C@@]2([H])CCC2=CC(=O)C=C[C@]12C",  # betamethasone
-#     "C1C(C=C2[C@](C1)([C@@]3([C@@](CC2)([C@@]4([H])[C@@](CC3)(C)[C@H]([C@@H](C4)O)O)[H])[H])C)=O",  # 16alpha-hydroxytestosterone
-#     # False positive example (non-steroid with enone motif)
-#     "C[C@H]1O[C@H](C[C@@H](O)[C@@H]1O)c1ccc2C(=O)C3=C([C@H](O)C[C@]4(O)C[C@@](C)(O)CC(=O)[C@]34O)C(=O)c2c1O"
-# ]
-# for s in test_smiles:
-#     flag, reason = is_3_oxo_Delta_4__steroid(s)
-#     print(flag, reason)
