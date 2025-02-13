@@ -21,8 +21,7 @@ def is_medium_chain_fatty_acyl_CoA_4__(smiles: str):
         smiles (str): SMILES string of the molecule.
 
     Returns:
-        (bool, str): True and a reason message if the molecule is classified as a medium-chain fatty acyl-CoA(4-);
-                     otherwise False and a corresponding failure message.
+        (bool, str): Tuple with True and reason if molecule passes the criteria; else False and reason message.
     """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
@@ -33,37 +32,34 @@ def is_medium_chain_fatty_acyl_CoA_4__(smiles: str):
     if not mol.HasSubstructMatch(adenine_pattern):
         return False, "Missing adenine ring (CoA head group not detected)."
     
-    # Criterion 2: Count negative oxygens that are part of phosphate groups.
-    # They are defined as oxygen atoms (atomic num 8) with formal charge -1 that are bonded to a phosphorus atom.
+    # Criterion 2: Count negatively charged oxygen atoms bonded to phosphorus (phosphate oxygens).
     phosphate_oxygens = 0
     for atom in mol.GetAtoms():
         if atom.GetAtomicNum() == 8 and atom.GetFormalCharge() == -1:
-            # Check if any neighbor is phosphorus (atomic number 15)
+            # Check if any neighbor is phosphorus (atomic num 15)
             if any(nbr.GetAtomicNum() == 15 for nbr in atom.GetNeighbors()):
                 phosphate_oxygens += 1
     if phosphate_oxygens != 4:
         return False, f"Expected 4 negatively charged phosphate oxygens, found {phosphate_oxygens}."
     
-    # Criterion 3: Look for the thioester fragment.
-    # SMARTS: "S-C(=O)[#6]" matches a sulfur connected to a carbonyl carbon (double bonded to O) which is then bound to an alkyl carbon.
+    # Criterion 3: Identify the thioester fragment.
+    # SMARTS: "S-C(=O)[#6]" matches a sulfur connected to a carbonyl carbon (double bonded to an oxygen) 
+    # and then bonded to a carbon.
     thioester_pattern = Chem.MolFromSmarts("S-C(=O)[#6]")
     thioester_matches = mol.GetSubstructMatches(thioester_pattern)
     if not thioester_matches:
         return False, "No thioester (acyl-CoA) fragment found."
     
     # Use the first thioester match.
-    # The match returns a tuple of indices corresponding to (S, carbonyl C, carbonyl O, first acyl chain C).
+    # The match typically returns a tuple: (S_index, carbonyl_C_index, carbonyl_O_index, acyl_start_index)
     try:
         s_idx, carbonyl_idx, oxo_idx, acyl_start_idx = thioester_matches[0]
     except Exception as e:
         return False, f"Thioester matching error: {str(e)}"
     
-    # We now wish to measure the continuous length of the acyl chain backbone.
-    # By definition, the acyl chain backbone starts at the carbonyl carbon (which is part of the thioester group)
-    # and continues from the acyl_start atom (the alkyl group attached to the carbonyl C) in the longest path.
     carbonyl_atom = mol.GetAtomWithIdx(carbonyl_idx)
-    # In the thioester group, carbonyl is bonded to the S atom and to the acyl_start carbon.
-    # We want only the acyl chain branch (skip the sulfur branch).
+    
+    # Identify the acyl chain branch: the neighbor of the carbonyl that is a carbon and corresponds to acyl_start.
     acyl_branch = None
     for nbr in carbonyl_atom.GetNeighbors():
         if nbr.GetAtomicNum() == 6 and nbr.GetIdx() == acyl_start_idx:
@@ -72,33 +68,32 @@ def is_medium_chain_fatty_acyl_CoA_4__(smiles: str):
     if acyl_branch is None:
         return False, "Acyl chain branch not found from thioester fragment."
     
-    # We now compute the longest continuous (simple) path in the acyl chain starting from acyl_start.
-    # We define a recursive function that (given a current carbon atom and the atom index it came from) returns
-    # the length (number of carbon atoms) of the longest path from this atom.
-    def longest_chain_from(atom, parent_idx):
-        max_length = 1  # count this atom
+    # Define a recursive function to calculate the longest continuous acyl chain from a starting carbon atom.
+    # A visited set is used to avoid infinite recursion through cycles.
+    def longest_chain_from(atom, visited):
+        max_length = 0  # length from this atom in terms of number of carbons (not counting the current one)
         for nbr in atom.GetNeighbors():
-            # Only proceed if neighbor is carbon and is not the parent.
-            if nbr.GetIdx() == parent_idx:
+            if nbr.GetAtomicNum() != 6:  # only carbon atoms
                 continue
-            if nbr.GetAtomicNum() != 6:
+            if nbr.GetIdx() in visited:
                 continue
-            length = 1 + longest_chain_from(nbr, atom.GetIdx())
-            if length > max_length:
-                max_length = length
+            # Continue along this branch. Create a new visited set including the neighbor.
+            branch_length = 1 + longest_chain_from(nbr, visited | {nbr.GetIdx()})
+            if branch_length > max_length:
+                max_length = branch_length
         return max_length
 
-    # The overall acyl chain length includes the carbonyl carbon plus the longest chain starting at acyl_start.
-    backbone_length = 1 + longest_chain_from(acyl_branch, carbonyl_idx)
+    # Include the carbonyl carbon plus the chain starting at acyl_branch.
+    # We start visited with the carbonyl and acyl_start to avoid going back.
+    backbone_length = 1 + longest_chain_from(acyl_branch, {carbonyl_atom.GetIdx(), acyl_branch.GetIdx()})
     
-    # Check if the acyl chain backbone length is in the desired range.
     if not (6 <= backbone_length <= 12):
-        return False, f"Acyl chain has {backbone_length} carbons; expected between 6 and 12 for medium-chain."
+        return False, f"Acyl chain has {backbone_length} carbon atoms; expected between 6 and 12 for medium-chain."
     
     return True, f"Detected medium-chain fatty acyl-CoA(4-) with an acyl chain of {backbone_length} carbons and a valid CoA head group."
-
-# (Optional testing)
+    
+# Optional test cases (can be uncommented if running as a standalone script)
 # if __name__ == "__main__":
-#     test_smiles = "[C@@H]1(N2C3=C(C(=NC=N3)N)N=C2)O[C@H](COP(OP(OCC([C@H](C(NCCC(NCCSC(=O)/C=C/C=C\\CCCCC)=O)=O)O)(C)C)(=O)[O-])(=O)[O-])[C@H]([C@H]1O)OP([O-])([O-])=O"
+#     test_smiles = "[C@@H]1(N2C3=C(C(=NC=N3)N)N=C2)O[C@H](COP(OP(OCC(C)([C@H](C(NCCC(NCCSC(=O)/C=C/C=C\\CCCCC)=O)=O)O)(C)C)(=O)[O-])(=O)[O-])[C@H]([C@H]1O)OP([O-])([O-])=O"
 #     result, reason = is_medium_chain_fatty_acyl_CoA_4__(test_smiles)
 #     print(result, reason)
