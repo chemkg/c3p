@@ -4,19 +4,18 @@ Classifies: CHEBI:137419 secondary ammonium ion
 """
 Classifies: secondary ammonium ion
 Definition: An organic cation obtained by protonation of any secondary amino compound.
-A protonated secondary amine (R2NH) becomes R2NH2+, meaning that the nitrogen should have 2 organic substituents (heavy atoms)
-and 2 hydrogen atoms, a +1 charge, be sp3 hybridized, and ideally non‐aromatic.
+A protonated secondary amine (R2NH) becomes R2NH2+, meaning that the nitrogen
+should have 2 heavy (organic) substituents and 2 hydrogen atoms, and a +1 charge.
+While ideally the nitrogen is sp3 and non‐aromatic, the sp3 assignment may not be reliable,
+so we relax that constraint and explicitly check for the two heavy substituents and 2 hydrogens.
 """
 from rdkit import Chem
-from rdkit.Chem import rdchem
 
 def is_secondary_ammonium_ion(smiles: str):
     """
     Determines if a molecule (provided as a SMILES string) belongs to the class of secondary ammonium ions.
-    
-    After protonation of a secondary amine (R2NH → R2NH2+), the nitrogen should bind to two heavy (organic) substituents
-    and two hydrogen atoms. In addition, to avoid misclassifying aromatic or conjugated nitrogen atoms (e.g. imidazolium),
-    we also require the nitrogen to be sp3 and non-aromatic.
+    We are looking for at least one nitrogen atom with a formal charge +1 that has exactly two heavy (non-hydrogen)
+    neighbors and exactly two hydrogens attached. Aromatic nitrogens are skipped to avoid misclassifying conjugated systems.
     
     Args:
         smiles (str): SMILES string of the molecule.
@@ -25,7 +24,7 @@ def is_secondary_ammonium_ion(smiles: str):
         bool: True if a secondary ammonium ion is identified, False otherwise.
         str: A reason for the classification decision.
     """
-    # Parse the SMILES string
+    # Parse the SMILES string into a molecule
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
@@ -34,38 +33,36 @@ def is_secondary_ammonium_ion(smiles: str):
     if not any(atom.GetAtomicNum() == 6 for atom in mol.GetAtoms()):
         return False, "No carbon atoms found – not an organic molecule"
     
-    # Add explicit hydrogens to count hydrogens attached to atoms properly.
+    # Add explicit hydrogens so that hydrogen counts are accurate.
     mol = Chem.AddHs(mol)
     
-    # Loop over all atoms looking for nitrogen atoms that are protonated
+    # Loop over all atoms to identify candidate protonated amines.
     for atom in mol.GetAtoms():
+        # Look for nitrogen atoms carrying a positive formal charge.
         if atom.GetAtomicNum() == 7 and atom.GetFormalCharge() == 1:
-            # Ensure the nitrogen is sp3 hybridized (as expected for protonated aliphatic amines)
-            if atom.GetHybridization() != rdchem.HybridizationType.SP3:
-                continue
-            
-            # Skip aromatic nitrogen since these are typically part of oxo- or other conjugated systems.
+            # Skip aromatic nitrogens (likely part of conjugated systems).
             if atom.GetIsAromatic():
                 continue
             
-            # Count heavy neighbors (non-hydrogen atoms) and total attached hydrogens.
+            # Count heavy (non-hydrogen) neighbor atoms.
             heavy_neighbors = sum(1 for nbr in atom.GetNeighbors() if nbr.GetAtomicNum() != 1)
-            # GetTotalNumHs counts both implicit and explicit hydrogens attached to the atom.
+            # Count all attached hydrogens (explicit + implicit).
             h_count = atom.GetTotalNumHs()
             
-            # For a protonated secondary amine (R2NH2+), expect exactly two heavy neighbors and two hydrogens.
+            # For a protonated secondary amine (R2NH2+), we expect exactly two heavy neighbors and two hydrogens.
             if heavy_neighbors == 2 and h_count == 2:
-                return True, ("Found secondary ammonium ion: protonated secondary amine with "
-                              f"{heavy_neighbors} organic substituents and {h_count} hydrogens")
+                return True, (f"Found secondary ammonium ion: nitrogen with {heavy_neighbors} organic substituents "
+                              f"and {h_count} hydrogens (protonated secondary amine)")
     
     return False, "No protonated secondary amine (secondary ammonium ion) found"
-    
+
 # Example usage:
 if __name__ == "__main__":
-    # Test a few cases:
     test_smiles = [
         "C[NH2+]C",  # dimethylaminium should be a secondary ammonium ion.
-        "C(C[NH3+])CCC[NH2+]CC([C@@H](CO)O)=O"  # N-(D-erythrulosyl)-cadaverine: contains at least one candidate.
+        "C(C[NH3+])CCC[NH2+]CC([C@@H](CO)O)=O",  # N-(D-erythrulosyl)-cadaverine contains a candidate.
+        "[C@]12([C@]3([C@@]([C@@]4(C(C[C@@H](O)CC4)=CC3)C)(CC[C@]2(C)[C@]5([C@@H]([C@]6(O[C@]5(C1)[H])CC[C@@H](C)C[NH2+]6)C)[H])[H])[H])[H]",  # solasodine
+        "O=S(=O)(N1CCC[NH2+]CC1)C1=CC=CC2=C1C=CN=C2"  # fasudil
     ]
     for smi in test_smiles:
         result, reason = is_secondary_ammonium_ion(smi)
