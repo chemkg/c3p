@@ -3,10 +3,15 @@ Classifies: CHEBI:35358 sulfonamide
 """
 """
 Classifies: Sulfonamide
-Definition: An amide of a sulfonic acid RS(=O)2NR'2.
-This module attempts to verify if a molecule contains a sulfonamide functional group,
-i.e. a sulfonyl group (S double-bonded to two oxygens) connected via a single bond to a nitrogen,
-where that nitrogen is further bonded (one or two bonds to heavy atoms) as expected.
+Definition: An amide of a sulfonic acid, RS(=O)2NR'2.
+This module checks if a molecule contains a valid sulfonamide group.
+The approach is to first flag a candidate S(=O)(=O)-N motif via SMARTS,
+then verify that the sulfur atom has exactly two double-bonded oxygens,
+and an overall connectivity consistent with a sulfonamide:
+  • The sulfur normally has four bonds: one to R, two double bonds to O, 
+    and one single bond to N.
+This should help reduce false positives (where the moiety is embedded elsewhere)
+and false negatives.
 """
 
 from rdkit import Chem
@@ -14,17 +19,16 @@ from rdkit import Chem
 def is_sulfonamide(smiles: str):
     """
     Determines if a molecule is a sulfonamide based on its SMILES string.
-    A sulfonamide is defined as an amide of a sulfonic acid, with the general structure:
-      RS(=O)(=O)NR'2  (i.e. the sulfonyl group attached to a nitrogen that carries one or two substituents)
-
-    This function first uses a SMARTS pattern to locate a candidate sulfonamide moiety.
-    Then it inspects the matched nitrogen atom to make sure that aside 
-    from the bonded sulfur, it is attached to one or two heavy‐atoms (C, N, O, etc.)
-    as expected for a sulfonamide (this helps to avoid false positives).
-
+    A sulfonamide is defined as RS(=O)(=O)NR'2.
+    
+    The algorithm first finds a candidate group using a SMARTS pattern that matches a 
+    sulfur atom double-bonded to two oxygens and singly bonded to a nitrogen.
+    It then checks that the sulfur atom has exactly two double bonds to oxygen and 
+    an overall degree consistent with an RS(=O)(=O)NR'2 moiety.
+    
     Args:
         smiles (str): SMILES string of the molecule.
-
+    
     Returns:
         bool: True if the molecule is classified as a sulfonamide, False otherwise.
         str: Reason for the classification decision.
@@ -34,45 +38,55 @@ def is_sulfonamide(smiles: str):
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Define the SMARTS pattern for a sulfonamide group.
-    # This pattern requires a tetra-coordinated sulfur (atomic num 16) with two double-bonded oxygens,
-    # connected via a single bond to a nitrogen.
-    sulfonamide_pattern = Chem.MolFromSmarts("[#16X4](=[OX1])(=[OX1])[NX3]")
-    
-    # Find all substructure matches of the pattern.
-    matches = mol.GetSubstructMatches(sulfonamide_pattern)
+    # Define a SMARTS pattern to identify an S(=O)(=O)-N connection.
+    # (This flag is intentionally less restrictive so that subsequent checks can filter.)
+    sulfonamide_smarts = "[S](=O)(=O)-[N]"
+    pattern = Chem.MolFromSmarts(sulfonamide_smarts)
+    matches = mol.GetSubstructMatches(pattern)
     if not matches:
-        return False, "No sulfonamide group (S(=O)(=O)N) found in the molecule"
+        return False, "No sulfonamide group (S(=O)(=O)-N) found in the molecule"
     
-    # Loop through each match to filter out hits that are not valid sulfonamides.
-    # The assumed order in the pattern is: index 0 = S; index 1 and 2 = O; index 3 = N.
-    valid_match_found = False
+    # For every match, verify the connectivity and bond orders around the sulfur atom.
+    # We assume the pattern order: match[0] is the sulfur, match[1] is the nitrogen.
     for match in matches:
-        # In our SMARTS the first atom is the sulfur and the fourth is the nitrogen.
-        # (Note: this ordering is usually preserved by RDKit.)
         s_idx = match[0]
-        n_idx = match[3]
+        n_idx = match[1]
+        s_atom = mol.GetAtomWithIdx(s_idx)
+        # Count bonds from sulfur that are double bonds to oxygen.
+        dO_count = 0
+        for bond in s_atom.GetBonds():
+            # Check if neighbor is oxygen with a double bond.
+            neighbor = bond.GetOtherAtom(s_atom)
+            # Use bond.GetBondTypeAsDouble() which returns 2.0 if double.
+            if neighbor.GetAtomicNum() == 8 and bond.GetBondTypeAsDouble() == 2:
+                dO_count += 1
         
-        # Retrieve the nitrogen atom.
+        # In a typical sulfonamide RS(=O)(=O)NR'2, the sulfur should be tetravalent
+        # with exactly two double-bonded oxygens, one bond to nitrogen and one to an R substituent.
+        if dO_count != 2:
+            continue  # This match does not meet our S=O criteria.
+        
+        # To be extra sure, we check that sulfur's total degree is 4.
+        # (S is bonded to two O (double bonds count as one connection each),
+        # one N from the sulfonamide and one carbon or other substituent for R.)
+        if s_atom.GetDegree() != 4:
+            continue
+        
+        # At this stage the candidate S has two double-bonded oxygens.
+        # We also verify that the bonded nitrogen (n_idx) exists.
         n_atom = mol.GetAtomWithIdx(n_idx)
-        # Count heavy-atom neighbors (ignoring hydrogens) except the sulfur in this match.
-        heavy_neighbors = [nbr for nbr in n_atom.GetNeighbors() 
-                           if nbr.GetAtomicNum() > 1 and nbr.GetIdx() != s_idx]
-        # For a sulfonamide, the nitrogen is expected to have one (NH) or two (N-alkyl) heavy-atom neighbors.
-        if len(heavy_neighbors) in [1, 2]:
-            valid_match_found = True
-            break
-            
-    if valid_match_found:
+        # Do not enforce a rigid count on N neighbors here because the nitrogen in many
+        # sulfonamides can have additional bonds (e.g., aromatic rings or extra substituents).
+        # If we reached here, then the pattern and connectivity look like a sulfonamide.
         return True, "Molecule contains a sulfonamide group: RS(=O)(=O)NR'2"
-    else:
-        return False, "No valid sulfonamide group found in the molecule"
     
-# Example usage:
-# Uncomment the following lines to test a few examples:
+    # If no valid match is found after checking all candidates, then we fail.
+    return False, "No valid sulfonamide group found in the molecule"
+
+# Uncomment below to test a few SMILES examples.
 # test_smiles = [
-#     "Brc1ccc(c2ccccc12)S(=O)(=O)NCc1ccccn1",  # pyrabactin, expected true
-#     "CC1=CC=CC=C1S(=O)(=O)N2[C@@H]3CN4C(=O)C=CC=C4[C@H]2[C@H]([C@@H]3CO)C(=O)NCCOC",  # another example
+#     "Brc1ccc(c2ccccc12)S(=O)(=O)NCc1ccccn1",  # pyrabactin, expected True
+#     "CC1=CC=C(C=C1)S(=O)(=O)N2CC3(C2)CN([C@@H](C4=C3C5=C(N4)C=C(C=C5)OC)CO)CC6=CC=CC=C6",  # another example
 # ]
 # for sm in test_smiles:
 #     result, reason = is_sulfonamide(sm)
