@@ -3,19 +3,24 @@ Classifies: CHEBI:71543 rotenoid
 """
 """
 Classifies: Rotenoid – Members of the class of tetrahydrochromenochromene.
-Definition: Rotenoids consist of a cis‐fused tetrahydrochromeno[3,4-b]chromene skeleton and its substituted derivatives.
+Definition: Rotenoids consist of a cis‐fused tetrahydrochromenochromene skeleton and its substituted derivatives.
+Our improved approach uses a heuristic based on ring analysis. Instead of a very strict SMARTS pattern,
+we inspect the molecule’s ring systems and look for a pair of fused rings in which one ring is mostly
+aromatic (to represent the chromene, i.e. benzopyran part) and the other is partially saturated (the tetrahydro part).
+At least one of the rings should contain an oxygen atom.
 """
 
 from rdkit import Chem
-from rdkit.Chem import AllChem
 
 def is_rotenoid(smiles: str):
     """
-    Determines if a molecule is a rotenoid based on its SMILES string.
-    Our approach uses a substructure SMARTS pattern that attempts to capture the essential 
-    fused bicyclic (tetrahydrochromenochromene) skeleton common to rotenoids.
-    
-    Note: Due to the large substitution variability among rotenoids, this query is a heuristic.
+    Determines if a molecule is likely a rotenoid based on its SMILES string.
+    The method uses a heuristic based on ring system analysis:
+      1. It finds all rings in the molecule.
+      2. It searches for at least one pair of fused rings (i.e., rings that share at least one atom)
+         where one ring is predominantly aromatic (expected for a benzene ring in a chromene)
+         and the other is not fully aromatic (consistent with a tetrahydro – partially saturated – ring).
+      3. In addition, at least one of the fused rings must contain an oxygen atom.
     
     Args:
         smiles (str): SMILES string of the molecule.
@@ -24,33 +29,55 @@ def is_rotenoid(smiles: str):
         bool: True if the molecule likely belongs to the rotenoid class, False otherwise.
         str: Explanation of the classification result.
     """
-    # Parse the SMILES string into a molecule
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Define a SMARTS pattern for the core rotenoid scaffold.
-    # This pattern attempts to capture a cis-fused tetrahydrochromeno[3,4-b]chromene skeleton.
-    # The pattern: 
-    #  O1[C@@H]2CC[C@H]1c1ccc(O)cc1OC2
-    # – O1: an oxygen atom starting a ring;
-    # – [C@@H]2: a chiral carbon initiating a second ring;
-    # – CC[C@H]1: a short saturated chain that closes the first ring;
-    # – c1ccc(O)cc1: an aromatic ring bearing a hydroxyl substituent;
-    # – OC2: an oxygen that links back to the second ring closure.
-    rotenoid_pattern = Chem.MolFromSmarts("O1[C@@H]2CC[C@H]1c1ccc(O)cc1OC2")
-    if rotenoid_pattern is None:
-        # In the unlikely event an error occurs in SMARTS parsing.
-        return False, "Error in SMARTS pattern"
+    # Retrieve ring information: a list of tuples with atom indices for each ring
+    ring_info = mol.GetRingInfo()
+    rings = ring_info.AtomRings()
     
-    # Search for the substructure match in the molecule.
-    if mol.HasSubstructMatch(rotenoid_pattern):
-        return True, "Molecule contains the tetracyclic fused tetrahydrochromeno[3,4-b]chromene skeleton characteristic of rotenoids"
-    else:
-        return False, "Molecule does not contain the rotenoid core substructure"
+    # Check for at least one pair of fused rings with the desired properties
+    fused_found = False
+    for i in range(len(rings)):
+        for j in range(i+1, len(rings)):
+            # Check if rings are fused (share at least one atom)
+            if set(rings[i]).intersection(rings[j]):
+                # Get atoms in each ring
+                ring_i_atoms = [mol.GetAtomWithIdx(idx) for idx in rings[i]]
+                ring_j_atoms = [mol.GetAtomWithIdx(idx) for idx in rings[j]]
+                # Determine if a ring is “aromatic enough”
+                arom_i = sum(1 for atom in ring_i_atoms if atom.GetIsAromatic())
+                arom_j = sum(1 for atom in ring_j_atoms if atom.GetIsAromatic())
+                
+                # We require one ring to be mostly aromatic and the other not fully aromatic.
+                # For safety we allow a 1-atom difference in case of minor variations.
+                cond1 = (arom_i >= len(rings[i]) - 1 and arom_j < len(rings[j]))
+                cond2 = (arom_j >= len(rings[j]) - 1 and arom_i < len(rings[i]))
+                
+                if cond1 or cond2:
+                    # Check that at least one of the rings has an oxygen atom.
+                    oxy_i = any(atom.GetAtomicNum() == 8 for atom in ring_i_atoms)
+                    oxy_j = any(atom.GetAtomicNum() == 8 for atom in ring_j_atoms)
+                    if oxy_i or oxy_j:
+                        fused_found = True
+                        break
+        if fused_found:
+            break
 
-# If run as a script, you might include some test examples (commented out).
-# Example:
-# test_smiles = "O1C2C(O)(C=3C(OC2)=CC(OC)=C(OC)C3)C(=O)C4=C1C=C(OC)C=C4"  # 12α-Hydroxymunduserone from the example list
-# result, reason = is_rotenoid(test_smiles)
-# print(result, reason)
+    if fused_found:
+        return True, "Molecule contains a fused bicyclic system with one aromatic (chromene) ring and one partially saturated (tetrahydro) ring bearing oxygen, consistent with a rotenoid skeleton"
+    else:
+        return False, "Molecule does not contain the fused bicyclic system characteristic of rotenoids"
+
+# Example usage:
+if __name__ == "__main__":
+    # A selection of example SMILES strings for rotenoids:
+    test_examples = {
+        "Millettosin": "O1C2C(O)(C=3C(OC2)=CC=4OCOC4C3)C(=O)C5=C1C6=C(OC(C=C6)(C)C)C=C5",
+        "LSM-4404": "CC(C)C1CC2=C(O1)C=CC3=C2OC4=C(C3=O)C5=CC(=C(C=C5OC4)OC)OC",
+        "tephrosin": "[H][C@@]12COc3cc(OC)c(OC)cc3[C@]1(O)C(=O)c1ccc3OC(C)(C)C=Cc3c1O2"
+    }
+    for name, smi in test_examples.items():
+        result, reason = is_rotenoid(smi)
+        print(f"{name}: {result} -- {reason}")
