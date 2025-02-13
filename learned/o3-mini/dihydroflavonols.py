@@ -1,19 +1,10 @@
 """
 Classifies: CHEBI:48039 dihydroflavonols
 """
+#!/usr/bin/env python
 """
 Classifies: Dihydroflavonols
-Definition: Any hydroxyflavanone in which a hydroxy group is present at position 3
-of the heterocyclic (chroman-4-one) ring and where position 2 is substituted by an aromatic ring.
-The algorithm below first looks for a minimal (non‐chiral) dihydroflavonol core using a SMARTS pattern:
-    O[C:2]1[C:3](O)C(=O)C1
-This pattern represents the key “chroman-4-one” substructure with:
-  • an oxygen (of the pyran ring),
-  • a saturated carbon “C:2” (which in the full structure should bear an external aryl substituent),
-  • a saturated carbon “C:3” carrying a free –OH (position 3),
-  • followed by a carbonyl group.
-After a substructure match is found, we check that the atom with mapping number 2 (position 2) has
-an external aromatic substituent (i.e. at least one neighbor not part of the match that is aromatic).
+Definition: Any hydroxyflavanone in which a hydroxy group is present at position 3 of the heterocyclic ring.
 """
 
 from rdkit import Chem
@@ -21,77 +12,79 @@ from rdkit import Chem
 def is_dihydroflavonols(smiles: str):
     """
     Determines if a molecule is a dihydroflavonol based on its SMILES string.
-    
-    The algorithm first tries to identify a minimal dihydroflavonol core,
-    defined here by the substructure SMARTS "O[C:2]1[C:3](O)C(=O)C1". This pattern
-    picks out a chroman-4-one type scaffold in which the saturated carbon (mapped as atom 2)
-    is intended to bear an aromatic substituent (i.e. the B-ring). After finding a match,
-    we check that the atom with mapping number 2 indeed has at least one neighbor outside the core
-    that is aromatic.
-    
+    A dihydroflavonol must contain a flavanone (chroman-4-one) core with a free hydroxyl (–OH)
+    group at position 3 of the heterocyclic ring.
+
     Args:
-        smiles (str): SMILES string of the molecule.
-    
+        smiles (str): SMILES string of the molecule
+
     Returns:
-        bool: True if molecule is classified as a dihydroflavonol, False otherwise.
+        bool: True if the molecule is a dihydroflavonol, False otherwise.
         str: Explanation for the classification result.
     """
-    # Parse SMILES
+    # Parse the SMILES string into a molecule
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-    
-    # Define a SMARTS pattern that captures a minimal dihydroflavonol core.
-    # The pattern (ignoring stereochemistry) is meant to represent:
-    #   O[C:2]1[C:3](O)C(=O)C1
-    # where:
-    #   - The first atom (O) is the heterocyclic oxygen.
-    #   - Atom with map number 2 (first carbon in ring) is expected to have an aromatic substituent (B-ring).
-    #   - Atom with map number 3 is required to be substituted with a free hydroxyl (-OH).
-    core_smarts = "O[C:2]1[C:3](O)C(=O)C1"
+
+    # Define a SMARTS pattern for the flavanone core with atom-mapping:
+    #  • The pattern represents a chroman-4-one ring.
+    #  • [C;!a:2] and [C;!a:3] are the two saturated carbons.
+    #  • We expect that the carbon with map number 3 bears an –OH group.
+    core_smarts = "O=C1[C;!a:2][C;!a:3]Oc2ccccc12"
     core_pattern = Chem.MolFromSmarts(core_smarts)
     if core_pattern is None:
-        return False, "Internal error: could not build SMARTS pattern"
-    
-    # Try to find a substructure match (ignoring chirality)
-    matches = mol.GetSubstructMatches(core_pattern, useChirality=False)
-    if not matches:
-        return False, "Core scaffold (chroman-4-one with 2-aryl substitution and free OH at C3) not found."
-    
-    # We now check that in at least one match, the atom corresponding to map number 2 has an aryl substituent.
-    # To do this we need to know which query atom (by index) in core_pattern was given mapping number "2".
-    mapping_index_for_C2 = None
-    for i, atom in enumerate(core_pattern.GetAtoms()):
-        if atom.HasProp("molAtomMapNumber"):
-            if atom.GetProp("molAtomMapNumber") == "2":
-                mapping_index_for_C2 = i
-                break
-    if mapping_index_for_C2 is None:
-        return False, "Internal error: mapping for atom C2 not found in pattern."
-    
-    # Check each match to see if the candidate atom (from mol) corresponding to mapping "2" has an aromatic neighbor.
-    for match in matches:
-        # match is a tuple; the order corresponds to the query molecule atoms (in the order of core_pattern atoms)
-        atom_C2_index = match[mapping_index_for_C2]
-        atom_C2 = mol.GetAtomWithIdx(atom_C2_index)
-        
-        # Look for an external neighbor (not in the core match) that is aromatic.
-        has_aromatic_substituent = False
-        for nb in atom_C2.GetNeighbors():
-            # If the neighbor atom is not part of the core match, check if it is aromatic.
-            if nb.GetIdx() not in match and nb.GetIsAromatic():
-                has_aromatic_substituent = True
-                break
-        if has_aromatic_substituent:
-            return True, ("Found dihydroflavonol core: chroman-4-one scaffold with an aromatic substituent "
-                          "at position 2 and a free hydroxyl at position 3.")
-    
-    # If no match was found that has an aromatic substituent at the expected position:
-    return False, ("Core scaffold (chroman-4-one with 2-aryl substitution and free OH at C3) was found by SMARTS "
-                   "but the candidate atom at position 2 does not appear to be substituted by an aromatic ring.")
+        return False, "Internal error: unable to create SMARTS pattern"
 
-# Uncomment the following for local testing:
+    # Find substructure matches for the flavanone core.
+    matches = mol.GetSubstructMatches(core_pattern, useChirality=True)
+    if not matches:
+        return False, "Flavanone (chroman-4-one) core not found"
+
+    # Define a helper to check if an oxygen neighbor looks like a free hydroxyl:
+    def has_free_hydroxyl(candidate_atom):
+        # For each neighbor of the carbon, if the neighbor is oxygen and it is connected only
+        # to the candidate carbon (i.e. not part of the ring linkage which usually connects two heavy atoms),
+        # we consider that as a hydroxyl.
+        for neighbor in candidate_atom.GetNeighbors():
+            if neighbor.GetAtomicNum() == 8:
+                # Check if the bond is a single bond.
+                bond = mol.GetBondBetweenAtoms(candidate_atom.GetIdx(), neighbor.GetIdx())
+                if bond is None or bond.GetBondType() != Chem.rdchem.BondType.SINGLE:
+                    continue
+                # A hydroxyl oxygen usually is attached to only one heavy atom.
+                # (Note: implicit hydrogens are not counted in GetDegree)
+                if neighbor.GetDegree() == 1:
+                    return True
+        return False
+
+    # Check each occurrence of the core in the molecule
+    for match in matches:
+        # The match is a tuple of atom indices corresponding to the atoms in core_pattern.
+        # We need to extract the atom that corresponds to map 3.
+        # To do this, we iterate over the query atoms in core_pattern in order.
+        mapped_idx = None
+        for i, query_atom in enumerate(core_pattern.GetAtoms()):
+            if query_atom.HasProp("molAtomMapNumber"):
+                try:
+                    map_num = int(query_atom.GetProp("molAtomMapNumber"))
+                except ValueError:
+                    continue
+                if map_num == 3:
+                    mapped_idx = match[i]
+                    break
+        if mapped_idx is None:
+            continue  # Should not occur, but proceed safely
+
+        # Now check if the candidate atom (position 3) has a free hydroxyl group.
+        candidate_atom = mol.GetAtomWithIdx(mapped_idx)
+        if has_free_hydroxyl(candidate_atom):
+            return True, "Found flavanone core with a free hydroxyl group at position 3 (dihydroflavonol)."
+
+    return False, "Flavanone core present but no free hydroxyl group found at position 3 of the heterocyclic ring."
+
+# For debugging or unit tests you may add lines like:
 # if __name__ == "__main__":
-#     test_smiles = "O[C@H]1[C@@H](Oc2cc(O)cc(O)c2C1=O)c1ccc(O)c(O)c1"  # Example: (-)-taxifolin
+#     test_smiles = "OC1C(Oc2cc(O)cc(O)c2C1=O)c1ccc(O)c(O)c1"  # Example: (-)-taxifolin
 #     result, reason = is_dihydroflavonols(test_smiles)
 #     print(result, reason)
