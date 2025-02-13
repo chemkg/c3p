@@ -6,9 +6,9 @@ Classifies: 3-oxo-fatty acyl-CoA
 
 An oxo fatty acyl-CoA results from the condensation of the thiol group of coenzyme A
 with the carboxyl group of any 3-oxo fatty acid. A key motif is that the acyl chain
-contains two carbonyl groups (one from the acid end and one as the 3-oxo substituent)
-with a saturated (or branched) carbon in between, and it is attached via a thioester to
-the CoA moiety.
+contains two carbonyl groups (one at the acid end and one as the 3-oxo substituent)
+separated by one saturated (or branched) carbon, and it is attached via a thioester bond
+to the CoA moiety.
 """
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
@@ -17,54 +17,82 @@ def is_3_oxo_fatty_acyl_CoA(smiles: str):
     """
     Determines if a molecule is a 3-oxo-fatty acyl-CoA based on its SMILES string.
     
-    The function requires the molecule to have two characteristic fragments:
-      1. A Coenzyme A moiety (detected by a fragment typical of the CoA “tail”).
-      2. An acyl chain containing a thioester carbonyl linked to a 3-oxo group.
-         For standard (open‐chain) cases, the minimal motif is the sequence
-             –C(=O)–[CH2 or CH(R)]–C(=O)–S–
-         We also allow one cyclic variant observed in some compounds.
+    The method performs three main steps:
+      1. Check that the SMILES parses and the overall formal charge is zero.
+      2. Look for a CoA fragment (heuristically using the fragment "SCCNC(=O)CCNC(=O)").
+      3. Look for a 3-oxo acyl fragment in which a thioester bond connects a 
+         –C(=O)[CX4]C(=O)[S]– motif. In addition, we verify that the sulfur atom in
+         the acyl fragment is directly connected to an atom that is part of the CoA fragment.
     
     Args:
-        smiles (str): SMILES string of the molecule.
+        smiles (str): SMILES string of the molecule
         
     Returns:
-        (bool, str): Tuple. First element is True if molecule seems to be a 
-                     3-oxo-fatty acyl-CoA; otherwise False. The second element is 
-                     a brief text description of the reason.
+        (bool, str): Tuple. First element is True if the molecule is classified as a
+                     3-oxo-fatty acyl-CoA; otherwise False. The second element is a
+                     brief description of the reason.
     """
-    # Try to parse the SMILES string
+    # Parse SMILES
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-
-    # Check for the Coenzyme A moiety.
-    # Many CoA derivatives contain the fragment "SCCNC(=O)CCNC(=O)" (which is part of the
-    # pantetheine / adenosine portion). This is a heuristic and may not capture every case.
-    coa_pattern = Chem.MolFromSmarts("SCCNC(=O)CCNC(=O)")
-    if not mol.HasSubstructMatch(coa_pattern):
-        return False, "Coenzyme A moiety not found"
-
-    # Look for the 3-oxo fatty acyl fragment.
-    # For a standard 3-oxo acyl chain we expect a thioester with two carbonyl groups separated
-    # by a saturated (sp3) carbon. The following SMARTS pattern covers cases like acetoacetyl:
-    three_oxo_pattern = Chem.MolFromSmarts("C(=O)[CX4]C(=O)[S]")
-    # In some examples the acyl chain is cyclic; for example, a cyclohexanone derivative may appear as:
-    three_oxo_cyclic = Chem.MolFromSmarts("[S]C(=O)C1=CCCCC1=O")
-
-    # Check if at least one of the patterns is found in the molecule
-    has_three_oxo = mol.HasSubstructMatch(three_oxo_pattern) or mol.HasSubstructMatch(three_oxo_cyclic)
-    if not has_three_oxo:
-        return False, "3-oxo fatty acyl fragment not found"
-
-    # Optional: one may add further checks on the length of the acyl chain or unsaturation
-    # For example, many fatty acids should have a long alkyl chain; however, exceptions exist
-    # (e.g. acetoacetyl-CoA or 2-methylacetoacetyl-CoA).
     
-    # If all tests pass, classify as 3-oxo-fatty acyl-CoA
-    return True, "Contains CoA moiety and 3-oxo fatty acyl fragment"
+    # Ensure the molecule is neutral.
+    if mol.GetFormalCharge() != 0:
+        return False, "Molecule carries a non-zero formal charge"
+    
+    # Look for a Coenzyme A moiety.
+    # Here we use a fragment common to many CoA derivatives.
+    coa_pattern = Chem.MolFromSmarts("SCCNC(=O)CCNC(=O)")
+    coa_matches = mol.GetSubstructMatches(coa_pattern)
+    if not coa_matches:
+        return False, "Coenzyme A moiety not found"
+    # Create a set of all atom indices that are part of any CoA match
+    coa_atoms = set()
+    for match in coa_matches:
+        for idx in match:
+            coa_atoms.add(idx)
+    
+    # Define the standard 3-oxo pattern for an open-chain acyl fragment:
+    # This minimal motif covers –C(=O)–[CH2 or CH(R)]–C(=O)–S–
+    three_oxo_pattern = Chem.MolFromSmarts("C(=O)[CX4]C(=O)[S]")
+    # And allow also one cyclic variant (e.g. a cyclohexanone derivative attached via thioester)
+    three_oxo_cyclic = Chem.MolFromSmarts("[S]C(=O)C1=CCCCC1=O")
+    
+    # Check for the three_oxo matches (either standard or cyclic)
+    matches_standard = mol.GetSubstructMatches(three_oxo_pattern)
+    matches_cyclic = mol.GetSubstructMatches(three_oxo_cyclic)
+    all_three_oxo = list(matches_standard) + list(matches_cyclic)
+    
+    if not all_three_oxo:
+        return False, "3-oxo fatty acyl fragment not found"
+    
+    # Verify that at least one 3-oxo fragment is directly attached to the CoA moiety.
+    # We expect that the sulfur atom in the 3-oxo fragment (last atom in our SMARTS pattern)
+    # is connected to an atom from the CoA fragment.
+    attached = False
+    for match in all_three_oxo:
+        # For standard pattern, the S is the fourth atom; for the cyclic one, use the matched S (position may be 0)
+        # We check all atoms in the match: if any neighbor is in coa_atoms, assume proper connection.
+        for atom_idx in match:
+            atom = mol.GetAtomWithIdx(atom_idx)
+            for neighbor in atom.GetNeighbors():
+                if neighbor.GetIdx() in coa_atoms:
+                    attached = True
+                    break
+            if attached:
+                break
+        if attached:
+            break
 
-# Example usage (you can remove or comment these lines when using this as a module):
+    if not attached:
+        return False, "3-oxo acyl fragment found but not attached to the CoA moiety"
+
+    return True, "Contains CoA moiety and 3-oxo fatty acyl fragment attached via thioester bond"
+
+# Example usage:
 if __name__ == "__main__":
-    test_smiles = "CCCCCCCCCCCCCCCCCCCCCC(=O)CC(=O)SCCNC(=O)CCNC(=O)[C@H](O)C(C)(C)COP(O)(=O)OP(O)(=O)OC[C@H]1O[C@H]([C@H](O)[C@@H]1OP(O)(O)=O)n1cnc2c(N)ncnc12"
+    # Test one of the provided SMILES, e.g., (7Z)-3-oxohexadecenoyl-CoA
+    test_smiles = "[C@@H]1(N2C3=C(C(=NC=N3)N)N=C2)O[C@H](COP(OP(OCC([C@H](C(NCCC(NCCSC(=O)CC(CCC/C=C\\CCCCCCCC)=O)=O)=O)O)(C)C)(=O)O)(=O)O)[C@H]([C@H]1O)OP(O)(O)=O"
     result, reason = is_3_oxo_fatty_acyl_CoA(test_smiles)
     print(result, reason)
