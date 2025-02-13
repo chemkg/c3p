@@ -4,139 +4,82 @@ Classifies: CHEBI:26255 prenylquinone
 #!/usr/bin/env python
 """
 Classifies: Prenylquinone
-
-Definition:
-    A prenylquinone is a quinone moiety (often a p-benzoquinone, 1,4–naphthoquinone or fused variant)
-    substituted by one or more polyprenyl-derived side-chains.
-    
-    In this revised classifier:
-      1. We search for a quinone core using two SMARTS patterns (p-benzoquinone and an extended 1,4-naphthoquinone)
-         and, if necessary, a generic search scanning rings (size 6–10) for at least two carbonyl (C=O) groups.
-      2. We then look for prenyl side-chain fragments using two prenyl SMARTS patterns.
-         In addition, we require that at least one such prenyl fragment:
-           (a) is attached (via a carbon–carbon bond) directly to the quinone core,
-           (b) has some atoms not in any ring (i.e. extends outward).
-           
-Note:
-    The algorithm is still heuristic. Improvements included expanding the quinone SMARTS,
-    relaxing the aromaticity requirement in generic detection, and adding tests on the prenyl fragment.
+Definition: A quinone substituted by a polyprenyl‐derived side‐chain.
+The molecule must contain a quinone core (e.g. p‐benzoquinone or 1,4–naphthoquinone)
+and at least one prenyl (isoprene‐derived) side-chain (characterized here by the “C=C(C)” fragment)
+found outside of the quinone core.
 """
 
 from rdkit import Chem
-from rdkit.Chem import rdchem
 
 def is_prenylquinone(smiles: str):
     """
     Determines if a molecule is a prenylquinone based on its SMILES string.
-    
-    The molecule is considered a prenylquinone if:
-      - It contains a quinone core. This is established either by a strict match of one of two SMARTS patterns
-        or by scanning rings (of length 6–10) for at least 2 carbonyl (C=O) groups.
-      - It contains at least one prenyl (isoprene-derived) side-chain fragment that:
-            * is attached via a C–C bond to the quinone core, and
-            * extends outside of any ring.
-    
+    A prenylquinone must contain a quinone moiety and also a prenyl (isoprene-derived)
+    side-chain substituent (e.g. a C=C(C) fragment) that is not part of the quinone ring.
+
     Args:
-      smiles (str): SMILES string of the molecule.
-      
+        smiles (str): SMILES string of the molecule.
+
     Returns:
-      (bool, str): Tuple with True and a reason if classified as prenylquinone;
-                   else False and a reason describing the shortcoming.
+        bool: True if the molecule is classified as a prenylquinone, False otherwise.
+        str: Reason for the classification decision.
     """
-    # Parse the SMILES string.
+    # Parse SMILES into a molecule
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
+
+    # Define two quinone SMARTS patterns:
+    # Pattern 1: p-benzoquinone (a six-membered ring bearing two carbonyls in para positions)
+    quinone_smarts1 = "O=C1C=CC(=O)C=C1"
+    quinone_pat1 = Chem.MolFromSmarts(quinone_smarts1)
     
-    found_quinone = False
+    # Pattern 2: 1,4-naphthoquinone core (two fused aromatic rings with two carbonyls)
+    quinone_smarts2 = "O=C1C=CC2=C(C=CC(=O)C2=1)"
+    quinone_pat2 = Chem.MolFromSmarts(quinone_smarts2)
+
+    has_quinone = False
     quinone_atoms = set()
     
-    # Step 1: Look for the quinone core using established SMARTS patterns.
-    quinone_smarts_list = [
-        "O=C1C=CC(=O)C=C1",           # classical p-benzoquinone pattern
-        "O=C1C=CC2=C(C=CC(=O)C2)C1"     # extended 1,4-naphthoquinone fused pattern
-    ]
-    for q_smarts in quinone_smarts_list:
-        q_pat = Chem.MolFromSmarts(q_smarts)
-        match = mol.GetSubstructMatch(q_pat)
-        if match:
-            found_quinone = True
-            quinone_atoms = set(match)
-            break
-
-    # If strict patterns failed, try generic detection.
-    if not found_quinone:
-        ring_info = mol.GetRingInfo()
-        for ring in ring_info.AtomRings():
-            if not (6 <= len(ring) <= 10):
-                continue
-            # Count carbonyl groups (C=O double bonds) in the ring.
-            carbonyl_count = 0
-            for idx in ring:
-                atom = mol.GetAtomWithIdx(idx)
-                if atom.GetAtomicNum() == 6:  # consider only carbon atoms in the ring
-                    for bond in atom.GetBonds():
-                        # Check for a double bond to oxygen.
-                        if bond.GetBondType() == rdchem.BondType.DOUBLE:
-                            nbr = bond.GetOtherAtom(atom)
-                            if nbr.GetAtomicNum() == 8:
-                                carbonyl_count += 1
-                                break
-            if carbonyl_count >= 2:
-                found_quinone = True
-                quinone_atoms = set(ring)
-                break
-
-    if not found_quinone:
+    # Try the first quinone pattern
+    match1 = mol.GetSubstructMatch(quinone_pat1)
+    if match1:
+        has_quinone = True
+        quinone_atoms = set(match1)
+    else:
+        # Otherwise try the second pattern
+        match2 = mol.GetSubstructMatch(quinone_pat2)
+        if match2:
+            has_quinone = True
+            quinone_atoms = set(match2)
+    
+    if not has_quinone:
         return False, "No quinone motif found"
-    
-    # Step 2: Search for prenyl-derived side chains.
-    # We use two SMARTS patterns that capture isoprene-like fragments.
-    prenyl_smarts_list = [
-        "[C;!R]=[C;!R]([CH3])",  # basic isoprene unit (non-ring atoms)
-        "C/C=C(/C)C"             # extended stereochemical variant
-    ]
-    prenyl_found = False
-    for p_smarts in prenyl_smarts_list:
-        p_pat = Chem.MolFromSmarts(p_smarts)
-        prenyl_matches = mol.GetSubstructMatches(p_pat)
-        for match in prenyl_matches:
-            # Skip very short matches.
-            if len(match) < 3:
-                continue
-            
-            # Check that at least one atom in the prenyl match is directly bonded
-            # (via a C–C bond) to an atom in the quinone core.
-            attached_to_quinone = False
-            for idx in match:
-                atom = mol.GetAtomWithIdx(idx)
-                for nbr in atom.GetNeighbors():
-                    if nbr.GetIdx() in quinone_atoms:
-                        if atom.GetAtomicNum() == 6 and nbr.GetAtomicNum() == 6:
-                            attached_to_quinone = True
-                            break
-                if attached_to_quinone:
-                    break
-            if not attached_to_quinone:
-                continue
-            
-            # Require that the prenyl fragment extends outside any ring.
-            if all(mol.GetAtomWithIdx(idx).IsInRing() for idx in match):
-                continue
-            
-            prenyl_found = True
-            break
-        if prenyl_found:
-            break
 
-    if not prenyl_found:
-        return False, "Quinone core found, but no valid prenyl side-chain detected attached to it"
+    # Now search for a prenyl-derived side-chain.
+    # A typical isoprene-derived fragment has a substituted double bond.
+    # Here we look for the fragment "C=C(C)".
+    prenyl_smarts = "C=C(C)"
+    prenyl_pat = Chem.MolFromSmarts(prenyl_smarts)
+    prenyl_matches = mol.GetSubstructMatches(prenyl_pat)
     
+    # We require that at least one prenyl match is found that is not part of the quinone core.
+    external_prenyl = []
+    for match in prenyl_matches:
+        # If none of the atoms in the prenyl match are part of the quinone core, use it.
+        if quinone_atoms.isdisjoint(match):
+            external_prenyl.append(match)
+    
+    if not external_prenyl:
+        return False, "Quinone core found, but no prenyl side-chain detected outside the quinone ring"
+    
+    # If we reach this point, the molecule contains a quinone core and at least one prenyl fragment.
     return True, "Contains a quinone core with a prenyl-derived side-chain"
 
-# For basic testing purposes:
+# For simple testing, you can run:
 if __name__ == "__main__":
-    # Example test: Napyradiomycin CNQ525.538 (one of the real prenylquinones)
+    # Example SMILES from the provided list, e.g. Napyradiomycin CNQ525.538
     test_smiles = "Br[C@H]1C(O[C@]2(C(=O)C=3C=C(O)C(=C(C3C([C@]2(C1)Cl)=O)O)C)C/C=C(/CCC=C(C)C)\\C)(C)C"
     result, reason = is_prenylquinone(test_smiles)
     print("Result:", result)
