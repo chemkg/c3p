@@ -3,18 +3,21 @@ Classifies: CHEBI:78608 alpha-amino-acid zwitterion
 """
 """
 Classifies: alpha-amino-acid zwitterion
-Definition: An amino acid-zwitterion obtained by transfer of a proton from the carboxy to the amino group 
+Definition: An amino acid zwitterion obtained by transfer of a proton from the carboxyl to the amino group
 of any alpha-amino acid; major species at pH 7.3.
-In an idealized alpha amino acid zwitterion the carboxylate (–C(=O)[O–]) and the ammonium ([NH3+])
-originate from a neutral amino acid (NH2–CHR–COOH) so that the core is R–C(H)(NH3+)(C(=O)[O–]).
-This program attempts to detect such a motif by:
-  (1) Finding carboxylate groups (via SMARTS "[C](=O)[O-]") and ammonium groups (via SMARTS "[NH3+]").
-  (2) For each carboxylate/ammonium pair, computing the shortest path.
-  (3) Requiring that the carboxylate carbon and ammonium nitrogen are connected by either 2 bonds
-      (the canonical case, where both groups are directly attached to the same alpha carbon) or by 3 bonds
-      (e.g. in some di‐zwitterions) and that the intervening alpha carbon has at least one hydrogen.
-This additional connectivity check is intended to reduce false positives (molecules that have both an –COO– and [NH3+]
-but not arranged as a true amino acid) and false negatives.
+
+This program uses two main substructure queries:
+  - a carboxylate group – identified by the SMARTS "[C](=O)[O-]"
+  - an ammonium group – now defined more broadly as any nitrogen atom with a positive formal charge
+    and at least one hydrogen (to capture [NH3+], [NH2+], etc.).
+For every carboxylate/ammonium pair found in the molecule we calculate the shortest bond path.
+If that path has either 2 bonds (3 atoms in the path) or 3 bonds (4 atoms in the path) then the
+atom bridging the two charged groups is taken as the candidate “alpha–carbon.”
+For an idealized alpha–amino acid zwitterion this intermediate atom should be a carbon that (a) carries
+at least one hydrogen and (b) has the expected heavy-atom connectivity (typically 2 neighbors for glycine
+or 3 for substituted amino acids). These extra criteria were added in an attempt to eliminate cases
+where the two charged groups occur elsewhere and thereby reduce false classifications.
+If such a candidate core is identified the function returns True along with details of the match.
 """
 
 from rdkit import Chem
@@ -23,19 +26,23 @@ from rdkit.Chem import rdmolops
 def is_alpha_amino_acid_zwitterion(smiles: str):
     """
     Determines if a molecule is an alpha-amino-acid zwitterion based on its SMILES string.
-    It first checks that the molecule contains a carboxylate group (C(=O)[O-])
-    and a protonated ammonium (NH3+). Then it searches for a candidate “alpha‐carbon”
-    that bridges the carboxylate and ammonium groups. For a classical alpha-amino acid zwitterion,
-    the carboxylate carbon and the ammonium nitrogen will be connected by exactly two bonds
-    (i.e. via a central alpha-carbon) or in some cases three bonds.
+    
+    The algorithm:
+      1. Parse the SMILES.
+      2. Look for at least one carboxylate group using the SMARTS "[C](=O)[O-]".
+      3. Identify any nitrogen atoms that are protonated – i.e. those with formal charge > 0 and with >= 1 hydrogen.
+      4. For every carboxylate and ammonium candidate pair, compute the shortest bond path.
+         We accept a candidate if the number of bonds in the path is 2 or 3.
+      5. In that path the intermediate atom is the candidate alpha–carbon. It must be a carbon and should have
+         at least one attached hydrogen plus “typical” connectivity (i.e. 2 or 3 heavy neighbors).
     
     Args:
-        smiles (str): SMILES representation of the molecule.
+       smiles (str): SMILES representation of the molecule.
     
     Returns:
-        bool: True if the molecule is classified as containing an alpha-amino-acid zwitterion core,
-              otherwise False.
-        str: A message explaining the basis for the classification.
+       bool: True if the molecule is classified as containing an alpha-amino-acid zwitterion core,
+             otherwise False.
+       str: A message explaining the basis for the classification.
     """
     
     # Parse the SMILES string into an RDKit molecule.
@@ -43,66 +50,69 @@ def is_alpha_amino_acid_zwitterion(smiles: str):
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # First we check that the molecule contains a carboxylate group.
-    # This SMARTS identifies a carbon that is double-bonded to an oxygen and single-bonded to an O–.
+    # Query for carboxylate group: carbon bonded to a carbonyl oxygen and an anionic oxygen.
     carboxylate_smarts = "[C](=O)[O-]"
-    carboxylate_query = Chem.MolFromSmarts(carboxylate_smarts)
-    carbox_matches = mol.GetSubstructMatches(carboxylate_query)
+    carbox_query = Chem.MolFromSmarts(carboxylate_smarts)
+    carbox_matches = mol.GetSubstructMatches(carbox_query)
     if not carbox_matches:
         return False, "No carboxylate group [C](=O)[O-] found"
     
-    # Next check for a protonated amino group.
-    ammonium_smarts = "[NH3+]"
-    ammonium_query = Chem.MolFromSmarts(ammonium_smarts)
-    ammonium_matches = mol.GetSubstructMatches(ammonium_query)
-    if not ammonium_matches:
-        return False, "No protonated ammonium group [NH3+] found"
+    # Identify candidate ammonium groups.
+    ammonium_indices = []
+    for atom in mol.GetAtoms():
+        # Select nitrogen atoms with positive charge and with at least one hydrogen
+        if atom.GetAtomicNum() == 7 and atom.GetFormalCharge() > 0 and atom.GetTotalNumHs() >= 1:
+            ammonium_indices.append(atom.GetIdx())
+    if not ammonium_indices:
+        return False, "No protonated amine (N with positive charge and at least one hydrogen) found"
     
-    # For each found carboxylate group, use its carbon atom as candidate donor.
-    # For each found ammonium, compute the shortest bond path between the carboxylate carbon and ammonium nitrogen.
+    # Now loop over all pairs (carboxylate, ammonium) and check the connectivity.
+    # Each carboxylate match: we assume the first atom (index 0 in the tuple) is the carboxylate carbon.
     for carbox_match in carbox_matches:
-        carbox_idx = carbox_match[0]  # the carbon index in the carboxylate
-        for ammonium_match in ammonium_matches:
-            ammonium_idx = ammonium_match[0]
-            # Compute the shortest path (list of atom indices) between the two atoms.
+        carbox_idx = carbox_match[0]
+        for ammonium_idx in ammonium_indices:
+            # Compute the shortest bond path between the carboxylate carbon and the ammonium nitrogen.
             path = rdmolops.GetShortestPath(mol, carbox_idx, ammonium_idx)
-            # For a proper amino acid, the carboxylate and ammonium should be connected through the alpha-carbon.
-            # In the canonical case the path should be: carboxylate C -- alpha C -- ammonium N (3 atoms, 2 bonds).
-            # In some zwitterions a one-atom spacer might be inserted so that the number of bonds is 3.
+            if not path:
+                continue  # no connection found
             num_bonds = len(path) - 1
+            # Accept cases where path has 2 or 3 bonds only.
             if num_bonds == 2 or num_bonds == 3:
-                # Identify the candidate alpha carbon.
-                # If num_bonds==2 then the atom common to both groups is the alpha carbon;
-                # if num_bonds==3 then the middle atom (path[1]) is our candidate.
-                if num_bonds == 2:
-                    alpha_idx = path[1]
-                else:
-                    alpha_idx = path[1]  # for a 3-bond path, we take the first intermediate atom as the candidate
-                
-                alpha_atom = mol.GetAtomWithIdx(alpha_idx)
-                # Check that the candidate alpha atom is indeed a carbon
+                # For both cases, take the first intermediate atom as the candidate alpha–carbon.
+                # For a 2-bond (3-atom) path, path[1] is directly between the two.
+                candidate_alpha_idx = path[1]
+                alpha_atom = mol.GetAtomWithIdx(candidate_alpha_idx)
+                # The candidate must be a carbon.
                 if alpha_atom.GetSymbol() != "C":
                     continue
-                # And that it has at least one hydrogen (often alpha carbons contain one H).
+                # Must have at least one hydrogen.
                 if alpha_atom.GetTotalNumHs() < 1:
                     continue
-                    
-                # If we reach here, we have a candidate alpha carbon bridging a carboxylate and ammonium.
-                # Return True with a message including the bond path found.
-                return True, f"Found zwitterionic core: carboxylate C (idx {carbox_idx}) - alpha C (idx {alpha_idx}) - ammonium N (idx {ammonium_idx}); path length: {num_bonds} bonds."
+                # Check the heavy atom connectivity: in a typical alpha amino acid,
+                # the alpha–carbon is attached to either 2 (glycine case) or 3 heavy atoms.
+                heavy_neighbors = [nbr for nbr in alpha_atom.GetNeighbors() if nbr.GetAtomicNum() > 1]
+                if len(heavy_neighbors) not in (2, 3):
+                    continue
+                # We have a candidate core. Provide details.
+                return True, (
+                    f"Found zwitterionic core: carboxylate C (idx {carbox_idx}) - "
+                    f"alpha C (idx {candidate_alpha_idx}) - ammonium N (idx {ammonium_idx}); "
+                    f"path length: {num_bonds} bonds."
+                )
     
-    # If no bridged connection is found, the molecule fails the classifier.
-    return False, "Alpha-amino-acid zwitterion core not found"
-
+    # If none of the pairs provided a valid alpha–carbon bridging the groups, then this is not a match.
+    return False, "Alpha–amino-acid zwitterion core not found"
 
 # (Optional) Testing examples:
 if __name__ == "__main__":
-    # Examples from the provided list:
+    # A few examples from the provided list. (More comprehensive testing is needed to balance false positives/negatives.)
     examples = {
         "(R)-2-amino-4-oxopentanoic acid zwitterion": "[C@@H](CC(C)=O)(C(=O)[O-])[NH3+]",
         "L-valine zwitterion": "CC(C)[C@H]([NH3+])C([O-])=O",
         "(2S,3S)-diazaniumylbutanoate zwitterion": "O=C([O-])[C@@H](N)[C@H](C)[NH3+]",
-        "N-methyl-aminoisobutyrate zwitterion": "[O-]C(=O)C([NH2+]C)(C)C"
+        "N-methyl-aminoisobutyrate zwitterion": "[O-]C(=O)C([NH2+]C)(C)C",
+        "thioproline zwitterion": "C(C1[NH2+]CSC1)(=O)[O-]",
+        "N-methylproline zwitterion": "[C@H]1(CCC[NH+]1C)C([O-])=O"
     }
     
     for name, smi in examples.items():
