@@ -4,90 +4,110 @@ Classifies: CHEBI:132155 hydroxynaphthoquinone
 """
 Classifies: Hydroxynaphthoquinone
 Definition: Any naphthoquinone in which the naphthoquinone moiety is substituted by at least one hydroxy group.
-
-The approach:
-1. Parse the SMILES string.
-2. Look for a naphthalene ring system (fused bicyclic aromatic system) using the SMARTS "c1ccc2ccccc2c1".
-3. For atoms in the naphthalene core select those that are aromatic carbon atoms carrying a carbonyl – (C(=O)) group.
-   We require at least two such carbonyls on the naphthalene core to designate it as a quinone.
-4. Check that at least one atom of the naphthalene core carries an –OH substituent.
-5. If these conditions are met, return True along with a reason; otherwise, return False with a detailed explanation.
-
-Note: This approach uses substructure searches and is one possible interpretation.
+The approach is to:
+  1. Parse the SMILES and add explicit hydrogens.
+  2. Use the molecule’s ring system (via GetRingInfo) to find aromatic 6-membered rings.
+  3. Identify candidate naphthalene cores by finding pairs of aromatic 6-membered rings that share at least 2 atoms.
+  4. For each candidate core, count the number of carbonyl groups attached (i.e. an aromatic carbon that is double‐bonded
+     to an oxygen that is not itself part of the fused ring) and count hydroxy substituents on atoms of the fused system.
+  5. Qualify it as a hydroxynaphthoquinone if the candidate core shows at least two carbonyl groups and at least one –OH substituent.
 """
 
 from rdkit import Chem
 
 def is_hydroxynaphthoquinone(smiles: str):
     """
-    Determines if a molecule is a hydroxynaphthoquinone based on its SMILES string.
-    
-    A hydroxynaphthoquinone is defined as a compound that has a naphthoquinone core (a naphthalene
-    ring system having at least two carbonyl groups as part of the ring) and at least one hydroxy group 
-    attached to that core.
-    
+    Determines whether a molecule is a hydroxynaphthoquinone based on its SMILES string.
+
+    A hydroxynaphthoquinone is defined as a naphthoquinone (a fused bicyclic aromatic system that has at least
+    two carbonyl groups incorporated into the ring) in which at least one carbon of the fused system is substituted by a hydroxy (-OH) group.
+
     Args:
-        smiles (str): SMILES string of the molecule.
-        
+        smiles (str): SMILES string of the molecule
+
     Returns:
-        bool: True if the molecule qualifies, False otherwise.
-        str: Reason for classification.
+        bool: True if molecule qualifies as hydroxynaphthoquinone, otherwise False.
+        str: Detailed explanation for the classification.
     """
-    # Parse the SMILES
+    # Parse the SMILES string.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
+
+    # Add explicit hydrogens so that -OH groups become explicit.
+    mol = Chem.AddHs(mol)
+
+    ring_info = mol.GetRingInfo()
+    if not ring_info:
+        return False, "No ring information found in the molecule"
+
+    atom_rings = ring_info.AtomRings()
+    # Filter rings: we want 6-membered aromatic rings.
+    aromatic_rings = []
+    for ring in atom_rings:
+        if len(ring) == 6:
+            # check if all atoms in the ring are aromatic (and are carbons)
+            if all(mol.GetAtomWithIdx(idx).GetIsAromatic() for idx in ring):
+                aromatic_rings.append(set(ring))
     
-    # Define SMARTS for a naphthalene core.
-    # This pattern looks for two fused benzene rings.
-    naphthalene_smarts = "c1ccc2ccccc2c1"
-    naphthalene_query = Chem.MolFromSmarts(naphthalene_smarts)
-    naph_matches = mol.GetSubstructMatches(naphthalene_query)
-    if not naph_matches:
-        return False, "No naphthalene (fused aromatic) core found"
+    if not aromatic_rings:
+        return False, "No aromatic 6-membered rings found; naphthalene core missing"
+
+    candidate_cores = []  # each candidate is a set of atom indices representing a fused pair
+    # Look for pairs of aromatic rings that are fused (share at least 2 atoms).
+    for i in range(len(aromatic_rings)):
+        for j in range(i+1, len(aromatic_rings)):
+            intersec = aromatic_rings[i] & aromatic_rings[j]
+            if len(intersec) >= 2:
+                # The union of the two rings forms a candidate naphthalene core.
+                candidate_cores.append(aromatic_rings[i] | aromatic_rings[j])
     
-    # Define SMARTS for an aromatic carbonyl. It matches an aromatic carbon (in a ring)
-    # directly double-bonded to oxygen.
-    carbonyl_smarts = "[c;R]=[O]"
-    carbonyl_query = Chem.MolFromSmarts(carbonyl_smarts)
-    
-    # Define SMARTS for an aromatic hydroxy substituent, i.e. an –OH attached to an aromatic carbon in a ring.
-    hydroxyl_smarts = "[c;R][OH]"
-    hydroxyl_query = Chem.MolFromSmarts(hydroxyl_smarts)
-    
-    # We now iterate over each found naphthalene core (each match is a tuple of atom indices).
-    # For each candidate, count how many atoms on the core are part of a carbonyl and how many have a hydroxy group.
-    for core in naph_matches:
-        core_set = set(core)
-        # Count carbonyl groups on the core:
-        carbonyl_hits = 0
-        carbonyl_matches = mol.GetSubstructMatches(carbonyl_query)
-        for match in carbonyl_matches:
-            # 'match' is a tuple of indices for the carbonyl pattern.
-            # We require that the aromatic C (first atom in the match) belongs to the naphthalene core.
-            if match[0] in core_set:
-                carbonyl_hits += 1
-        if carbonyl_hits < 2:
-            # This core does not have the required two carbonyls to be considered a quinone
-            continue  # try next naphthalene core if any
-        
-        # Count hydroxy substituents on the core:
-        hydroxyl_hits = 0
-        hydroxyl_matches = mol.GetSubstructMatches(hydroxyl_query)
-        for match in hydroxyl_matches:
-            # In the pattern, the aromatic atom is first.
-            if match[0] in core_set:
-                hydroxyl_hits += 1
-        
-        if hydroxyl_hits < 1:
-            # even if we have a quinone core, we need a hydroxy substituent on the naphthalene
-            return False, "Found naphthoquinone core (>=2 aromatic carbonyls) but no hydroxy substituent on it"
-        
-        # If we get here, this naphthalene core qualifies as hydroxynaphthoquinone.
-        return True, "Found naphthoquinone core (>=2 carbonyls) with at least one hydroxy substituent on the core"
-    
-    # If none of the naphthalene cores in the molecule have at least two carbonyl groups, then:
-    return False, "No naphthoquinone moiety detected (naphthalene core lacks at least 2 aromatic carbonyl groups)"
-    
+    if not candidate_cores:
+        return False, "No fused aromatic ring system (naphthalene core) found"
+
+    # For each candidate naphthalene core, assess for quinone and hydroxy substituents.
+    for core in candidate_cores:
+        carbonyl_count = 0
+        hydroxy_count = 0
+        # For each atom in the core
+        for idx in core:
+            atom = mol.GetAtomWithIdx(idx)
+            # Only consider aromatic carbons from the core.
+            if atom.GetAtomicNum() != 6 or not atom.GetIsAromatic():
+                continue
+
+            # Check bonds of the atom. We consider a bond from an aromatic carbon to an oxygen (outside the core) that is a double bond as a carbonyl.
+            for bond in atom.GetBonds():
+                # Look for double bonds to oxygen.
+                if bond.GetBondTypeAsDouble() == 2.0:
+                    nbr = bond.GetOtherAtom(atom)
+                    # Ensure the neighbor is O and is not part of the fused core.
+                    if nbr.GetAtomicNum() == 8 and nbr.GetIdx() not in core:
+                        carbonyl_count += 1
+                        break  # count each core carbon only once
+            # Check for hydroxy substituent. Look at neighbors for an -OH group.
+            for nbr in atom.GetNeighbors():
+                if nbr.GetAtomicNum() == 8 and nbr.GetIdx() not in core:
+                    # Check if this oxygen is bonded to at least one hydrogen.
+                    # (Since we added H, the explicit hydrogen count should be available)
+                    if nbr.GetTotalNumHs() > 0:
+                        hydroxy_count += 1
+                        break  # count each core carbon only once
+
+        # Now decide based on counts.
+        if carbonyl_count < 2:
+            # Candidate core does not show a naphthoquinone pattern.
+            continue  # try the next candidate core
+        if hydroxy_count < 1:
+            return False, ("Fused aromatic core with sufficient carbonyl groups detected ({} carbonyl(s)) "
+                           "but no hydroxy substituent on the core".format(carbonyl_count))
+        # If criteria are met:
+        return True, ("Found fused aromatic core (naphthalene-like) with {} carbonyl group(s) and "
+                      "{} hydroxy substituent(s) on the core".format(carbonyl_count, hydroxy_count))
+
+    # If none of the candidate cores met the combined criteria:
+    return False, "Fused aromatic core found but it does not have both the required quinone (>=2 carbonyls) and hydroxy substituent(s)"
+
 # (The module can be tested by calling the function with one or more SMILES strings)
-# Example: print(is_hydroxynaphthoquinone("OC1=CC(=O)c2ccccc2C1=O"))
+# Example:
+# print(is_hydroxynaphthoquinone("OC1=CC(=O)c2ccccc2C1=O"))
