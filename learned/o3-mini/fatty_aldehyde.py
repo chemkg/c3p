@@ -3,111 +3,105 @@ Classifies: CHEBI:35746 fatty aldehyde
 """
 """
 Classifies: Fatty Aldehydes
-Definition: “An aldehyde formally arising from reduction of the carboxylic acid group 
-of its corresponding fatty acid, having a carbonyl group at one end of the carbon chain.”
-This improved routine uses additional heuristics:
-  - The molecule must be successfully parsed.
-  - It must contain only atoms typical for a fatty aldehyde (C, H, O) and no rings.
-  - It must have a minimum number of carbons and a minimum molecular weight.
-  - There must be at least one aldehyde group ([CX3H1](=O)),
-    and that aldehyde must be terminal – meaning that its carbonyl carbon is attached 
-    to exactly one carbon atom. Further, if we “walk” from that neighbor along carbon–carbon 
-    bonds (ignoring double/triple bond differences) we require a linear segment of a certain length.
+Definition: An aldehyde formally arising from reduction of the carboxylic acid group of its corresponding fatty acid, 
+having a carbonyl group at one end of the carbon chain.
+This improved classifier uses multiple heuristics:
+  - The molecule must be parsed and be acyclic.
+  - It must have a minimum number of carbons and a low oxygen content relative to carbons.
+  - It must contain at least one aldehyde group ([CX3H1](=O)) where the carbonyl carbon is attached to exactly one carbon.
+  - From that carbon neighbor (“alpha carbon”), we compute the longest contiguous carbon chain (even if some branching occurs)
+    and require that it meet a minimum length.
 """
+
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
 
 def is_fatty_aldehyde(smiles: str):
     """
     Determines if a molecule is a fatty aldehyde based on its SMILES string.
-    A fatty aldehyde is defined as arising from a fatty acid reduction and
-    should feature a terminal aldehyde group attached to a long, unbranched (or nearly unbranched)
-    aliphatic chain.
-
+    A fatty aldehyde should originate from a fatty acid reduction and has a terminal aldehyde group
+    attached to a long aliphatic (or nearly linear) chain.
+    
     Args:
         smiles (str): SMILES string of the molecule.
     
     Returns:
-        bool: True if the molecule meets the criteria, False otherwise.
-        str: Explanation of the decision.
+        bool: True if the molecule meets all criteria, False otherwise.
+        str: Explanation for the decision.
     """
-    # Try parsing the SMILES string.
+    
+    # Parse molecule and ensure it is valid.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-
-    # Heuristic 1: Molecule should contain only C, H, and O.
-    allowed_atoms = {1, 6, 8}  # H, C, O
-    for atom in mol.GetAtoms():
-        if atom.GetAtomicNum() not in allowed_atoms:
-            return False, ("Contains atoms other than C, H, and O "
-                           "(e.g. heteroatoms, metals or others) which is not typical for a fatty aldehyde")
-
-    # Heuristic 2: Fatty aldehydes originate from fatty acids, typically acyclic. 
-    # Reject molecules with rings.
-    if mol.GetRingInfo().NumRings() > 0:
-        return False, "Molecule contains rings which is not typical for a fatty aldehyde"
     
-    # Heuristic 3: Check that the molecule has a minimum number of carbon atoms 
-    # and a minimum molecular weight (exclude small aldehydes not derived from fatty acids).
+    # Reject molecules with rings (fatty aldehydes are typically acyclic).
+    if mol.GetRingInfo().NumRings() > 0:
+        return False, "Molecule contains rings, which is not typical for a fatty aldehyde"
+    
+    # Heuristic: require a minimum number of carbon atoms.
     c_count = sum(1 for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6)
     if c_count < 6:
         return False, f"Not enough carbon atoms ({c_count}) for a fatty aldehyde"
+    
+    # Heuristic: require a minimum molecular weight.
     mol_wt = rdMolDescriptors.CalcExactMolWt(mol)
     if mol_wt < 100:
         return False, f"Molecular weight too low ({mol_wt:.2f} Da) for a fatty aldehyde"
     
-    # Heuristic 4: Look for an aldehyde group with the SMARTS pattern [CX3H1](=O)
+    # Additional check: fatty compounds are relatively nonpolar.
+    # We use the ratio of carbons to oxygens to help filter out highly oxidized molecules (like sugar acids).
+    o_count = sum(1 for atom in mol.GetAtoms() if atom.GetAtomicNum() == 8)
+    # If there are oxygens, require at least 2x more carbons than oxygens.
+    if o_count > 0 and (c_count / o_count) < 2:
+        return False, f"Carbon-to-oxygen ratio too low (C:{c_count} O:{o_count}) for a fatty aldehyde"
+    
+    # Look for aldehyde groups with SMARTS pattern.
     aldehyde_pattern = Chem.MolFromSmarts("[CX3H1](=O)")
     matches = mol.GetSubstructMatches(aldehyde_pattern)
     if not matches:
         return False, "No aldehyde group found"
+    
+    # Define minimum required carboxylic chain length beyond the aldehyde.
+    # This is the number of carbon atoms in the longest path starting from the carbon attached to the aldehyde.
+    MIN_CHAIN_CARBONS = 4
+    
+    # Build a simple helper to compute longest simple path (in terms of number of carbons) 
+    # in the carbon-only subgraph. The molecule is acyclic so this DFS is safe.
+    def dfs_longest_chain(curr_idx, visited):
+        curr_atom = mol.GetAtomWithIdx(curr_idx)
+        max_length = 1  # count current atom
+        for nbr in curr_atom.GetNeighbors():
+            # Consider only carbon neighbors that have not been visited.
+            if nbr.GetAtomicNum() == 6 and nbr.GetIdx() not in visited:
+                length = 1 + dfs_longest_chain(nbr.GetIdx(), visited | {nbr.GetIdx()})
+                if length > max_length:
+                    max_length = length
+        return max_length
 
-    # We require that at least one aldehyde group be terminal.
-    # For a terminal aldehyde, the carbonyl carbon should have exactly one neighboring carbon.
-    # Then, starting from that neighbor, we “walk” along the chain (only through carbons)
-    # and require a minimal linear chain length.
-    # (This helps to discriminate simple aldehydes and complex molecules with extraneous groups.)
-    
-    # Set the minimum contiguous carbon chain length (starting from the neighbor of the aldehyde)
-    # that we will accept as representing a 'fatty' chain.
-    MIN_CHAIN_LENGTH = 3  # adjust as needed (e.g. nonanal has an 8-carbon chain overall, but even 3 in a contiguous chain may be acceptable if MW filter is met)
-    
+    # Now check each aldehyde candidate to see if it is terminal.
     terminal_aldehyde_found = False
     for match in matches:
-        # match[0] is the carbonyl carbon in the aldehyde group.
+        # In the SMARTS [CX3H1](=O), the match returns the carbonyl carbon first.
         aldehyde_c = mol.GetAtomWithIdx(match[0])
-        # Count neighboring carbons (ignoring oxygen neighbors)
+        # Identify the carbon neighbor(s) (ignore oxygen neighbors)
         neighbor_carbons = [nbr for nbr in aldehyde_c.GetNeighbors() if nbr.GetAtomicNum() == 6]
+        # For a terminal aldehyde group, the carbonyl carbon should have exactly one carbon neighbor.
         if len(neighbor_carbons) != 1:
-            # Not terminal if the carbonyl C has more than one carbon neighbor.
             continue
-        # Starting from the only carbon neighbor, try to count a contiguous linear chain.
-        chain_length = 1
-        prev_atom = aldehyde_c
-        current = neighbor_carbons[0]
-        # We iterate along the chain while there is exactly one continuation.
-        # (If a branching occurs, this walk stops.)
-        while True:
-            # Find carbon neighbors of 'current', excluding the one we came from.
-            cont_neighbors = [nbr for nbr in current.GetNeighbors() if nbr.GetAtomicNum() == 6 and nbr.GetIdx() != prev_atom.GetIdx()]
-            if len(cont_neighbors) == 1:
-                chain_length += 1
-                prev_atom = current
-                current = cont_neighbors[0]
-            else:
-                break
-        # Check if this chain length meets our threshold.
-        if chain_length >= MIN_CHAIN_LENGTH:
+        alpha = neighbor_carbons[0]
+        # Compute the longest carbon chain starting from the alpha carbon.
+        chain_length = dfs_longest_chain(alpha.GetIdx(), {alpha.GetIdx()})
+        # We require that the chain (starting from the alpha carbon) be long enough.
+        if chain_length >= MIN_CHAIN_CARBONS:
             terminal_aldehyde_found = True
             break
 
     if not terminal_aldehyde_found:
-        return (False, "Aldehyde group is present but does not appear terminal "
-                       "or is attached to an insufficiently long unbranched aliphatic chain")
+        return (False, "Aldehyde group is present but does not appear terminal or is attached to an insufficiently long aliphatic chain")
     
-    return True, "Contains a terminal aldehyde group attached to a long, unbranched aliphatic chain and qualifies as a fatty aldehyde"
+    return True, "Contains a terminal aldehyde group attached to a long aliphatic chain and qualifies as a fatty aldehyde"
 
-# Example usage (uncomment for testing):
+# Example usage (uncomment to test):
 # test_smiles = "O=CCCCCCCCCC/C=C/CC"  # 11E-Tetradecenal
 # print(is_fatty_aldehyde(test_smiles))
