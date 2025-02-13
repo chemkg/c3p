@@ -2,58 +2,45 @@
 Classifies: CHEBI:33303 chalcogen
 """
 """
-Classifies: Any p-block element belonging to the group 16 family of the periodic table.
-Group 16 elements: oxygen (8), sulfur (16), selenium (34), tellurium (52), polonium (84)
-A valid free chalcogen should be represented as a single heavy atom with no bonds.
-This improved version checks the original connectivity: after removing hydrogens,
-the molecule must consist of exactly one atom and no bonds.
+Classifies: Any p-block element belonging to group 16 (chalcogens)
+Group 16 elements: O (8), S (16), Se (34), Te (52), Po (84)
 """
 
 from rdkit import Chem
 
 def is_chalcogen(smiles: str):
     """
-    Determines if a chemical entity is a free chalcogen element based on its SMILES string.
-    A valid free chalcogen is defined as a single heavy atom (i.e. not hydrogen) with no bonds,
-    ensuring that the representation is not part of a larger compound.
+    Determines if a molecule is a chalcogen element based on its SMILES string.
+    A chalcogen is any p-block element belonging to group 16 of the periodic table:
+    oxygen (O), sulfur (S), selenium (Se), tellurium (Te), or polonium (Po).
 
     Args:
-        smiles (str): SMILES string of the chemical entity.
-        
+        smiles (str): SMILES string of the chemical entity (typically an atom)
+
     Returns:
-        bool: True if the entity is a free chalcogen element, False otherwise.
-        str: Reason for the classification.
+        bool: True if the entity is a chalcogen element, False otherwise.
+        str: Description/reason for the classification.
     """
-    # Parse the SMILES string into an RDKit molecule.
+    # Parse the SMILES string
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-    
-    # Remove explicit hydrogens to focus on the heavy atom connectivity.
-    mol_noHs = Chem.RemoveHs(mol)
-    
-    # A free element, after hydrogen removal, must have exactly one atom and no bonds.
-    if mol_noHs.GetNumAtoms() != 1:
-        return False, "More than one heavy atom found after removing hydrogens; not a free element."
-    
-    if mol_noHs.GetNumBonds() != 0:
-        return False, "Heavy atom shows bonding; not a free atom."
-    
-    # Get the single heavy atom.
-    atom = mol_noHs.GetAtomWithIdx(0)
+
+    # Expect the molecule to be a single atom.
+    if mol.GetNumAtoms() != 1:
+        return False, "SMILES does not represent a single atom; it may be a molecule."
+
+    # Get the single atom and its atomic number.
+    atom = mol.GetAtomWithIdx(0)
     atomic_num = atom.GetAtomicNum()
-    
-    # Check that the heavy atom is not hydrogen.
-    if atomic_num == 1:
-        return False, "The only atom present is hydrogen, not a chalcogen."
-    
-    # Define the set of chalcogen atomic numbers.
+
+    # Define atomic numbers for group 16 elements (chalcogens)
     chalcogens = {8, 16, 34, 52, 84}
     if atomic_num in chalcogens:
         return True, f"Element with atomic number {atomic_num} is a chalcogen."
     else:
         return False, f"Element with atomic number {atomic_num} is not a chalcogen."
 
-# Example usage (for testing, uncomment the following lines):
-# print(is_chalcogen("[Te]"))         # Expected: True, tellurium is a chalcogen.
-# print(is_chalcogen("[H][Te-][H]"))   # Expected: False, because the SMILES represents a bonded species.
+# Example usage (uncomment for testing):
+# print(is_chalcogen("[S]"))         # Expected: (True, "Element with atomic number 16 is a chalcogen.")
+# print(is_chalcogen("[C]"))         # Expected: (False, "Element with atomic number 6 is not a chalcogen.")
