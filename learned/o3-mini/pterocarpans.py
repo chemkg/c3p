@@ -7,57 +7,70 @@ Definition:
   Members of the class of benzofurochromene with a 6a,11a-dihydro skeleton 
   (i.e. the 3,4-dihydro derivatives of coumestans) and its substituted derivatives.
   
-  New approach: Instead of our previous simplified SMARTS, we now search for a core 
-  pattern representing a fused tricyclic system where an aromatic ring (ring 1) is 
-  fused to a second ring (central, containing two saturated carbons) that is in turn 
-  fused (via an oxygen linkage) to a third aromatic ring. The SMARTS is a heuristic intended to 
-  capture the dihydrobenzofurochromene framework observed in pterocarpans.
+  Our approach tries two SMARTS patterns:
+    • Pattern 1 (pattern1) looks for an aromatic ring fused to two non‐aromatic (sp³) carbons,
+      then an oxygen and a second aromatic ring. (This is similar to our first attempt.)
+    • Pattern 2 (pattern2) relaxes the beginning of the SMARTS to allow the molecule to start with
+      a tetrahedral (C;X4) center.
+  If either pattern is found as a substructure, we classify the molecule as a (likely) pterocarpan.
+  
+  Note: This heuristic may not capture every pterocarpan and may give false negatives for some structures.
 """
 from rdkit import Chem
 
 def is_pterocarpans(smiles: str):
     """
     Determines if a molecule belongs to the pterocarpan class based on its SMILES string.
-    Pterocarpans have a fused, tricyclic dihydrobenzofurochromene core. In our approach,
-    we use a SMARTS query that looks for an aromatic ring (ring 1) fused to a central ring
-    that contains two saturated (non-aromatic) carbons and an oxygen, and then fused to a
-    second aromatic ring. This pattern is given below.
-
-    SMARTS used: "c1ccc2[C;!a][C;!a]Oc3ccccc3O2c1"
+    The approach looks for a fused, tricyclic dihydrobenzofurochromene (pterocarpan) core.
+    
+    To maximize success we test for two similar substructure patterns:
+      pattern1: "c1ccc2[C;!a][C;!a]Oc3ccccc3O2c1"
+      pattern2: "[C;X4]1[C;X4]Oc2ccccc2O1"
     
     Args:
         smiles (str): SMILES string of the molecule
         
     Returns:
         bool: True if the molecule is (likely) a pterocarpan, else False.
-        str : Explanation for the classification result.
+        str : Explanation for the result.
     """
     # Parse the SMILES into an RDKit molecule
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Define an improved SMARTS pattern for the pterocarpan core.
-    # This pattern looks for a fused tricyclic system:
-    #  - "c1ccc2"           : an aromatic ring (ring 1) fused to ring 2.
-    #  - "[C;!a][C;!a]"      : two saturated (non-aromatic) carbons (the dihydro centers, e.g. 6a and 11a).
-    #  - "O"                 : an oxygen atom in the central ring.
-    #  - "c3ccccc3"         : a fully aromatic ring (ring 3) fused to the central ring.
-    #  - "O2" and "c1"       : closure of the fused rings.
-    pattern_smarts = "c1ccc2[C;!a][C;!a]Oc3ccccc3O2c1"
-    core = Chem.MolFromSmarts(pattern_smarts)
-    if core is None:
-        return None, None  # Unable to parse our SMARTS query
+    # Define two SMARTS patterns for the pterocarpan core.
+    # Pattern 1 attempts to match a dihydrobenzofurochromene starting from an aromatic fragment.
+    pattern_smarts1 = "c1ccc2[C;!a][C;!a]Oc3ccccc3O2c1"
+    core1 = Chem.MolFromSmarts(pattern_smarts1)
+    if core1 is None:
+        return None, None  # Problem parsing SMARTS
     
-    # Check if the molecule contains the pterocarpan core scaffold.
-    if not mol.HasSubstructMatch(core):
-        return False, "Pterocarpan core structure not found"
+    # Pattern 2 is an alternative, starting with a tetrahedral (sp3) carbon.
+    pattern_smarts2 = "[C;X4]1[C;X4]Oc2ccccc2O1"
+    core2 = Chem.MolFromSmarts(pattern_smarts2)
+    if core2 is None:
+        return None, None  # Problem parsing SMARTS
     
-    return True, "Contains the pterocarpan core structure (dihydrobenzofurochromene skeleton)"
+    # Check if molecule contains at least one of the core scaffolds.
+    if mol.HasSubstructMatch(core1):
+        return True, "Contains the pterocarpan core structure (matched pattern1: dihydrobenzofurochromene with aromatic starter)"
+    if mol.HasSubstructMatch(core2):
+        return True, "Contains the pterocarpan core structure (matched pattern2: alternative tetrahedral starting atom)"
+    
+    return False, "Pterocarpan core structure not found"
 
-# Example usage (for testing purposes):
+# Example usage (for testing):
 if __name__ == "__main__":
-    # Example: (-)-medicarpin simplified (remove stereochemistry for matching)
-    test_smiles = "[H]C12COc3cc(O)ccc3C1Oc1cc(OC)ccc2"  
-    result, reason = is_pterocarpans(test_smiles)
-    print(result, reason)
+    test_smiles_list = [
+        # Test a few pterocarpan examples (stereochemistry removed for matching ease)
+        "[H]C12COc3cc(O)c(CC=C(C)C)cc3C1Oc1c(CC=C(C)C)c(OC)c(O)cc21",  # lespeflorin G2
+        "O1C2C(COC3=C2C=CC=4OC(C=CC34)(C)C)C5=C1C=C(O)C=C5",           # (-)-Shinpterocarpin
+        "[H]C12COc3cc(O)ccc3C1Oc1cc3OCOc3cc21",                         # maackiain
+        "COc1ccc2C3COc4cc(O)ccc4C3Oc2c1"                                  # medicarpin (simplified)
+    ]
+    for smi in test_smiles_list:
+        res, reason = is_pterocarpans(smi)
+        print(smi)
+        print("Result:", res, "|", reason)
+        print("-" * 60)
