@@ -4,14 +4,9 @@ Classifies: CHEBI:25106 macrolide
 """
 Classifies: A macrolide
 Definition: A macrolide is a macrocyclic lactone with a ring of twelve or more atoms (derived from a polyketide).
-Our approach is:
-  1. Parse the molecule from its SMILES.
-  2. Retrieve the ring information (SSSR rings).
-  3. Identify “macrocyclic” rings with ≥12 atoms.
-  4. Use an improved SMARTS pattern "[C;R](=O)[O;R]" so that both the carbonyl carbon and the ester oxygen are required to be in a ring.
-  5. For each lactone candidate, check whether it is fully embedded in one of the macrocyclic rings.
-  
-Note: This scheme may still fail for highly fused or complex macrocycles, but it should improve over the previous attempt.
+Our strategy has been improved by merging SSSR rings that share atoms into larger macrocyclic candidates.
+We then check if a lactone group (defined via SMARTS "[C;R](=O)[O;R]") is fully embedded in one of those macrocycles.
+Note: The “derived from a polyketide” aspect is not explicitly tested.
 """
 
 from rdkit import Chem
@@ -19,72 +14,107 @@ from rdkit import Chem
 def is_macrolide(smiles: str):
     """
     Determines if a molecule is a macrolide based on its SMILES string.
-    A macrolide is defined as a macrocyclic lactone with a ring of 12 or more atoms.
-    (The “derived from a polyketide” aspect is not explicitly tested.)
-
-    The steps are:
-      1. Parse the SMILES into a molecule.
-      2. Identify all rings from the molecule (using SSSR information).
-      3. From these, pick out rings with 12 or more atoms.
-      4. Define a SMARTS for a lactone group that requires both the carbonyl carbon and the ester oxygen to be in a ring.
-      5. Check if at least one match of this pattern is fully contained within a macrocyclic ring.
+    A macrolide is defined as a macrocyclic lactone with a cycle of 12 or more atoms.
     
+    Steps:
+      1. Parse the SMILES into a molecule.
+      2. Retrieve SSSR ring information.
+      3. Merge rings that share atoms into larger cycles (to account for fused rings).
+      4. Select macrocycle candidates that have at least 12 atoms.
+      5. Define a lactone SMARTS pattern "[C;R](=O)[O;R]" (cyclic ester, 
+         requiring both the carbonyl carbon and the ester oxygen to be in a ring).
+      6. Check if at least one lactone group is fully embedded in one of the macrocycle candidates.
+
     Args:
         smiles (str): SMILES string of the molecule.
     
     Returns:
         bool: True if the molecule is classified as a macrolide, False otherwise.
-        str: A text string providing the reason for the classification decision.
+        str: Explanation of the classification decision.
     """
-    # Parse the molecule from SMILES
+    # Parse the molecule from the SMILES string
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-
-    # Retrieve the SSSR ring information (as a list of tuples of atom indices)
-    ring_info = mol.GetRingInfo()
-    atom_rings = ring_info.AtomRings()
     
-    # Identify macrocyclic rings (those with 12 or more atoms)
-    macrocycle_rings = [set(ring) for ring in atom_rings if len(ring) >= 12]
-    if not macrocycle_rings:
+    # Retrieve SSSR ring information: each ring is a tuple of atom indices.
+    ring_info = mol.GetRingInfo()
+    simple_rings = list(ring_info.AtomRings())
+    if not simple_rings:
+        return False, "No rings found in molecule"
+    
+    # Convert each ring into a set of atom indices
+    ring_sets = [set(ring) for ring in simple_rings]
+    
+    # Merge rings that share at least one atom; use a union-find like approach.
+    n = len(ring_sets)
+    parent = list(range(n))
+    
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+    
+    def union(i, j):
+        ri = find(i)
+        rj = find(j)
+        if ri != rj:
+            parent[rj] = ri
+            
+    # For every pair of rings, if they share atoms, union their components.
+    for i in range(n):
+        for j in range(i+1, n):
+            if ring_sets[i].intersection(ring_sets[j]):
+                union(i, j)
+    
+    # Group rings by their representative, and form the union of rings in each component.
+    comp_dict = {}
+    for i in range(n):
+        root = find(i)
+        if root not in comp_dict:
+            comp_dict[root] = set()
+        comp_dict[root].update(ring_sets[i])
+    
+    # Filter the unioned cycles to macrocycle candidates with 12 or more atoms.
+    macrocycle_candidates = [atoms for atoms in comp_dict.values() if len(atoms) >= 12]
+    if not macrocycle_candidates:
         return False, "No macrocyclic ring (12 or more atoms) found"
-
-    # Define a SMARTS pattern for a lactone group.
-    # By using "[C;R](=O)[O;R]", we require that both the carbonyl carbon (C;R) and the oxygen (O;R)
-    # are themselves part of some ring. This helps focus on cyclic esters (lactones).
+    
+    # Define a SMARTS pattern for a lactone group:
+    # "[C;R](=O)[O;R]" means the carbonyl carbon and the ester oxygen must both be in a ring.
     lactone_pattern = Chem.MolFromSmarts("[C;R](=O)[O;R]")
     if lactone_pattern is None:
-        return False, "Error in creating lactone SMARTS pattern"
+        return False, "Error creating lactone SMARTS pattern"
     
-    # Find all substructure matches for the lactone pattern.
+    # Find all lactone group matches (each is a tuple of atom indices, usually (carbon, oxygen))
     lactone_matches = mol.GetSubstructMatches(lactone_pattern)
     if not lactone_matches:
         return False, "No lactone (cyclic ester) group found"
-
-    # For each lactone candidate, check if its atoms are contained in any of the macrocyclic rings.
-    for match in lactone_matches:
-        match_set = set(match)  # Typically contains (carbonyl carbon, oxygen)
-        for ring in macrocycle_rings:
-            if match_set.issubset(ring):
-                return True, ("Found a macrolide: a macrocyclic ring (12+ atoms) contains "
-                              "a lactone group ([C;R](=O)[O;R]).")
     
-    # If lactone groups are found but none lie within a macrocycle
-    return False, ("Found lactone group(s) but none are embedded in a macrocyclic (12 or more atoms) ring.")
+    # For each lactone match, check if it is fully embedded in a macrocyclic candidate.
+    for match in lactone_matches:
+        match_set = set(match)
+        for macro_atoms in macrocycle_candidates:
+            if match_set.issubset(macro_atoms):
+                return True, ("Macrolide confirmed: found a lactone group that is embedded "
+                              "within a macrocyclic ring containing {} atoms.".format(len(macro_atoms)))
+    
+    # If lactone groups are found but not contained entirely in any macrocycle candidate:
+    return False, "Found lactone group(s) but none are embedded in a macrocyclic (12+ atoms) ring."
 
-# (Optional) Testing section:
+# (Optional) Example testing section:
 if __name__ == "__main__":
-    # Test examples: one expected to be a macrolide and one not.
-    test_smiles_list = [
-        # Paecilomycin K (should be a macrolide)
-        "O=C1O[C@H](CC=C[C@@H](O)[C@@H]2O[C@H]([C@@H](C=3C1=C(O)C=C(OC)C3)O)CC2)C",
-        # A small cyclic ester that is not a macrolide (ring size 4)
-        "O=C1OC(C)C1"
+    test_cases = [
+        # Paecilomycin K (expected to be a macrolide)
+        ("O=C1O[C@H](CC=C[C@@H](O)[C@@H]2O[C@H]([C@@H](C=3C1=C(O)C=C(OC)C3)O)CC2)C", True),
+        # A small cyclic ester (not a macrolide, ring size too small)
+        ("O=C1OC(C)C1", False)
     ]
-    for smi in test_smiles_list:
+    
+    for smi, expected in test_cases:
         result, reason = is_macrolide(smi)
         print("SMILES:", smi)
-        print("Result:", result)
+        print("Expected:", expected, "Got:", result)
         print("Reason:", reason)
-        print("---")
+        print("-----")
