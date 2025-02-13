@@ -4,11 +4,11 @@ Classifies: CHEBI:31998 N-acylphytosphingosine
 """
 Classifies: N-acylphytosphingosine
 Definition: A ceramide that is phytosphingosine having a fatty acyl group attached to the nitrogen.
-The code uses a SMARTS pattern able to capture the motif:
-    acyl carbonyl – C(=O) attached to N
-    which is attached to a sphingosine head of the form N–C(CO)–C(O)–C(O)
-In addition the acyl fragment and the sphingoid chain (beyond the head) are required to be sufficiently long.
-Note: The classification is based on heuristic substructure patterns.
+The heuristic looks for a core substructure that is roughly:
+     –R–C(=O)–N–C(CO)–C(O)–C(O)–
+with the expectation that the acyl portion (to the left of the carbonyl)
+and the sphingoid chain (attached to the terminal head carbon) each are long aliphatic chains.
+Extra checks ensure that each “head” carbon carries a hydroxyl group.
 """
 
 from rdkit import Chem
@@ -17,118 +17,138 @@ from rdkit.Chem import rdMolDescriptors
 def is_N_acylphytosphingosine(smiles: str):
     """
     Determines if a molecule is an N-acylphytosphingosine based on its SMILES string.
-    A N-acylphytosphingosine is defined as a ceramide where phytosphingosine is acylated at the nitrogen.
     
-    The expected substructure is roughly:
-       –[R]-C(=O)–N–C(CO)–C(O)–C(O)–[tail]
-    where the acyl (fatty acyl) group (to the left of C(=O)) and the sphingoid tail
-    (to the right of the three–carbon head) are long aliphatic chains.
+    A N-acylphytosphingosine is (roughly) defined as:
+         R–C(=O)–N–C(CO)–C(O)–C(O)–[tail]
+    where the acyl (fatty acyl) chain (R–) and the sphingoid tail (attached to the third
+    head carbon) are long (here at least 8 carbon atoms long) and the three carbon head bears hydroxyl groups.
     
     Args:
-        smiles (str): SMILES string of the molecule.
+       smiles (str): SMILES string of the molecule.
     
     Returns:
-        bool: True if molecule is N-acylphytosphingosine, False otherwise.
-        str: Reason for classification.
+       bool: True if molecule is N-acylphytosphingosine, False otherwise.
+       str: Reason for classification.
     """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-        
-    # Define a SMARTS pattern for the core. This pattern looks for:
-    #   [C](=O)[N][C](CO)[C](O)[C](O)
-    # It encodes an acyl carbonyl (which should have a double bond O) bound to an amide N,
-    # then the phosphingosine head made of three carbons, where the first carries "CO" (a CH2OH),
-    # followed by two carbons with OH groups.
+    
+    # Define the core SMARTS.
+    # It looks for an acyl carbonyl [C](=O) attached to an amide N, which in turn is bound to three carbons:
+    #   first carbon with a -CO group (typically CH2OH), then two carbons (each with an -OH).
     core_smarts = "[C](=O)[N][C](CO)[C](O)[C](O)"
     core_pattern = Chem.MolFromSmarts(core_smarts)
     if core_pattern is None:
-        # In case SMARTS did not compile (should not happen)
-        return None, None
-
+        return None, None  # Should not happen
+    
     matches = mol.GetSubstructMatches(core_pattern)
     if not matches:
-        return False, "Core motif [C](=O)[N][C](CO)[C](O)[C](O) not found: not an N-acylphytosphingosine"
+        return False, f"Core motif {core_smarts} not found: not an N-acylphytosphingosine"
+    
+    # Helper: check whether an atom has an -OH substituent (an oxygen attached by a single bond)
+    def has_hydroxyl(atom, core_atoms):
+        for nbr in atom.GetNeighbors():
+            # Only count noncore substituents
+            if nbr.GetIdx() in core_atoms:
+                continue
+            if nbr.GetAtomicNum() == 8:
+                bond = mol.GetBondBetweenAtoms(atom.GetIdx(), nbr.GetIdx())
+                if bond.GetBondType() == Chem.rdchem.BondType.SINGLE:
+                    return True
+        return False
 
-    # At this point, we have one or more candidate matches.
-    # We require that at least one match passes further tests.
+    # Helper DFS that returns the longest contiguous chain length (number of carbon atoms)
+    # Only traverses atoms that are carbon, not in core_atoms, and only through single bonds.
+    def longest_C_chain(atom, visited, core_atoms):
+        if atom.GetSymbol() != 'C':
+            return 0
+        max_len = 1
+        for nbr in atom.GetNeighbors():
+            if nbr.GetIdx() in visited or nbr.GetIdx() in core_atoms:
+                continue
+            bond = mol.GetBondBetweenAtoms(atom.GetIdx(), nbr.GetIdx())
+            if bond.GetBondType() != Chem.rdchem.BondType.SINGLE:
+                continue
+            if nbr.GetSymbol() != 'C':
+                continue
+            new_visited = visited.copy()
+            new_visited.add(nbr.GetIdx())
+            chain_len = 1 + longest_C_chain(nbr, new_visited, core_atoms)
+            if chain_len > max_len:
+                max_len = chain_len
+        return max_len
+
+    # We require the acyl chain and sphingoid tail to have at least this many carbon atoms.
+    MIN_CHAIN_LENGTH = 8
+
+    # For each candidate core match check the further criteria:
     for match in matches:
         # match is a tuple of 5 atom indices corresponding to:
         #   idx0: acyl carbon (carbonyl carbon)
         #   idx1: amide nitrogen
-        #   idx2: first carbon of sphingosine head (should have a CH2OH substituent)
-        #   idx3: second carbon (with OH)
-        #   idx4: third carbon (with OH) that typically connects to the sphingoid tail.
+        #   idx2: first head carbon (should be CH2OH)
+        #   idx3: second head carbon (with OH)
+        #   idx4: third head carbon (with OH; tail attaches here)
         acylC = mol.GetAtomWithIdx(match[0])
         amideN = mol.GetAtomWithIdx(match[1])
         head1 = mol.GetAtomWithIdx(match[2])
         head2 = mol.GetAtomWithIdx(match[3])
         head3 = mol.GetAtomWithIdx(match[4])
         
-        # Verify that the acyl carbon (idx0) has an oxygen connected by a double bond.
-        # That oxygen should be the carbonyl oxygen.
-        has_carbonyl_ox = False
-        for nb in acylC.GetNeighbors():
-            bond = mol.GetBondBetweenAtoms(acylC.GetIdx(), nb.GetIdx())
-            if nb.GetAtomicNum() == 8 and bond.GetBondType() == Chem.rdchem.BondType.DOUBLE:
-                has_carbonyl_ox = True
-                break
-        if not has_carbonyl_ox:
+        core_atoms = set(match)
+        
+        # Verify that the acyl carbon (idx0) has a carbonyl oxygen (O=)
+        has_carbonyl = False
+        for nbr in acylC.GetNeighbors():
+            if nbr.GetAtomicNum() == 8:
+                bond = mol.GetBondBetweenAtoms(acylC.GetIdx(), nbr.GetIdx())
+                if bond.GetBondType() == Chem.rdchem.BondType.DOUBLE:
+                    has_carbonyl = True
+                    break
+        if not has_carbonyl:
             continue  # try next match
         
-        # Check that the acyl group is sufficiently "fatty" (e.g., at least 6 carbons in the acyl chain)
-        # We do a DFS from the acyl carbon. For this purpose we do not go into the amide (amideN) because
-        # that leads into the sphingosine core.
-        def dfs_count_carbons(atom, visited):
-            count = 0
-            if atom.GetAtomicNum() == 6:
-                count = 1
-            for nb in atom.GetNeighbors():
-                if nb.GetIdx() in visited:
-                    continue
-                # Do not go into the amide nitrogen (or its nearby atoms that are part of the core)
-                if nb.GetIdx() in core_match_set:
-                    continue
-                # Only traverse through bonds that are single; this restricts to the aliphatic chain.
-                bond = mol.GetBondBetweenAtoms(atom.GetIdx(), nb.GetIdx())
-                if bond.GetBondType() != Chem.rdchem.BondType.SINGLE:
-                    continue
-                visited.add(nb.GetIdx())
-                count += dfs_count_carbons(nb, visited)
-            return count
-
-        # Create a set of indices that belong to the core match so we do not traverse back:
-        core_match_set = set(match)
-        # For acyl chain, start from the acyl carbon and follow neighbors except the amide nitrogen.
-        acyl_chain_count = 0
-        for nb in acylC.GetNeighbors():
-            if nb.GetIdx() == amideN.GetIdx():
+        # Check that the head atoms have the expected hydroxyl groups.
+        if not has_hydroxyl(head1, core_atoms):
+            continue
+        if not has_hydroxyl(head2, core_atoms):
+            continue
+        if not has_hydroxyl(head3, core_atoms):
+            continue
+        
+        # Evaluate the fatty acyl chain.
+        # From acylC, follow all neighbors except the amide nitrogen.
+        acyl_chain_max = 0
+        for nbr in acylC.GetNeighbors():
+            if nbr.GetIdx() == amideN.GetIdx():
                 continue
-            # Traverse from this neighbor
-            visited = set([acylC.GetIdx()])
-            acyl_chain_count = max(acyl_chain_count, dfs_count_carbons(nb, visited))
-        if acyl_chain_count < 6:
-            # too short to be a fatty acyl chain
-            continue  # try next match
+            visited = {acylC.GetIdx()}
+            chain_len = longest_C_chain(nbr, visited, core_atoms)
+            if chain_len > acyl_chain_max:
+                acyl_chain_max = chain_len
+        if acyl_chain_max < MIN_CHAIN_LENGTH:
+            continue  # too short acyl chain
 
-        # Now check that the sphingoid tail (the chain attached to the third head carbon) is sufficiently long.
-        # Note that head3 (match[4]) is expected to have an alkyl tail.
-        tail_chain_count = 0
-        for nb in head3.GetNeighbors():
-            # Avoid going back to the core head (head2) by checking membership in the core
-            if nb.GetIdx() in core_match_set:
+        # Evaluate the sphingoid tail.
+        # From head3 (the third head carbon) follow neighbors that are not part of the core.
+        tail_chain_max = 0
+        for nbr in head3.GetNeighbors():
+            if nbr.GetIdx() in core_atoms:
                 continue
-            visited = set([head3.GetIdx()])
-            tail_chain_count = max(tail_chain_count, dfs_count_carbons(nb, visited))
-        if tail_chain_count < 6:
+            visited = {head3.GetIdx()}
+            chain_len = longest_C_chain(nbr, visited, core_atoms)
+            if chain_len > tail_chain_max:
+                tail_chain_max = chain_len
+        if tail_chain_max < MIN_CHAIN_LENGTH:
             continue  # too short sphingoid tail
-
-        # If we have reached this point for one candidate match then we believe the structure to be N-acylphytosphingosine.
+        
+        # If we pass all tests for this candidate, we classify as an N-acylphytosphingosine.
         return True, "Molecule contains an acylated phytosphingosine core with sufficiently long fatty acyl and sphingoid chains"
     
-    # If none of the candidate matches passed the further checks, then return false
+    # If no candidate passed, choose an appropriate message.
     return False, "Matches found for the core motif but did not meet acyl or sphingoid chain criteria"
 
-# For informal testing uncomment below lines:
+# For informal testing, you can uncomment the lines below:
 # test_smiles = "CCCCCCCCCCCCCCCCCCCCCCCCCCCCC(=O)N[C@@H](CO)[C@H](O)[C@H](O)CCCCCCCCCCCCCC"
 # print(is_N_acylphytosphingosine(test_smiles))
