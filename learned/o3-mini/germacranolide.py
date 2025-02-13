@@ -3,98 +3,88 @@ Classifies: CHEBI:73011 germacranolide
 """
 """
 Classifies: Germacranolide – A sesquiterpene lactone based on a germacrane skeleton.
-This approach checks for a 5‐membered γ‐lactone ring and for a 10‐membered carbocycle 
-that is (or is fused to) the lactone ring. For a candidate 10‐membered ring we require that
-at least 8 of its atoms are carbons. Also, a minimal molecular weight cut‐off is applied.
+This updated approach first checks for the presence of a 5‐membered lactone ring 
+(γ‐lactone) using a SMARTS pattern. Then the Bemis–Murcko scaffold is computed to isolate 
+the core of the molecule. Within that scaffold, we search for a 10‐membered ring that is 
+predominantly carbons (heuristic: at least 8 of 10 atoms are carbons) and ensure that the 
+scaffold contains roughly 15 carbon atoms (sesquiterpene tropism). These additional criteria 
+help resolve some of the formerly misclassified cases.
 """
 
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
+from rdkit.Chem.Scaffolds import MurckoScaffold
 
 def is_germacranolide(smiles: str):
     """
     Determines if a molecule is a germacranolide based on its SMILES string.
     A germacranolide is a sesquiterpene lactone based on a germacrane skeleton.
     
-    The classification uses the following heuristic criteria:
-      1. The molecule must contain a 5‐membered lactone ring (γ‐lactone), detected using
-         the SMARTS "[CX3](=O)[OX2r5]".
-      2. The molecule must also have a 10‐membered ring that is composed predominantly of carbons 
-         (i.e. at least 8 out of 10 atoms are carbons).
-      3. To strengthen the assignment, the lactone must be fused to or adjacent to that 10‐membered ring.
-      4. The overall molecular weight should be above 200 Da.
-    
+    The classification now uses the following heuristic criteria:
+      1. The molecule must contain a 5‐membered lactone ring (γ‐lactone), detected using the SMARTS "[CX3](=O)[OX2r5]".
+      2. The molecule’s core scaffold (Bemis–Murcko scaffold) should contain a 10‐membered ring 
+         (with at least 8 carbons) suggesting a germacrane skeleton.
+      3. The scaffold should also have a carbon count roughly characteristic of a sesquiterpene (≈15 ± a few).
+      4. The molecular weight must be above a minimum threshold for sesquiterpene lactones.
+      
     Args:
         smiles (str): SMILES string of the molecule.
         
     Returns:
-        bool: True if the molecule is likely a germacranolide, False otherwise.
-        str: Explanation of the classification.
+        bool: True if the molecule is likely a germacranolide.
+        str: Reason for classification or error.
     """
-    # Parse the input SMILES.
+    # Parse SMILES
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string."
     
-    # Criterion 1: Check for a 5-membered γ-lactone using a SMARTS pattern.
+    # --- Criterion 1: Check for a 5-membered γ-lactone ring ---
+    # The SMARTS pattern below looks for a carbonyl group attached to an oxygen that is in a 5-membered ring.
     lactone_smarts = "[CX3](=O)[OX2r5]"
     lactone_pat = Chem.MolFromSmarts(lactone_smarts)
-    lactone_matches = mol.GetSubstructMatches(lactone_pat)
-    if not lactone_matches:
+    if not mol.HasSubstructMatch(lactone_pat):
         return False, "No 5-membered γ-lactone group (ring ester) found."
     
-    # Criterion 2: Identify candidate 10-membered rings in the full molecule.
-    ring_info = mol.GetRingInfo()
-    all_rings = ring_info.AtomRings() if ring_info is not None else []
-    candidate_10_rings = []
-    for ring in all_rings:
+    # --- Criterion 2: Evaluate the core scaffold via Bemis–Murcko ---
+    try:
+        scaffold = MurckoScaffold.GetScaffoldForMol(mol)
+    except Exception as e:
+        return False, f"Error obtaining scaffold: {e}"
+        
+    if scaffold is None:
+        return False, "Could not obtain a Bemis–Murcko scaffold."
+    
+    scaffold_ring_info = scaffold.GetRingInfo()
+    scaffold_rings = scaffold_ring_info.AtomRings() if scaffold_ring_info is not None else []
+    
+    has_10_membered = False
+    # Look through rings in the scaffold
+    for ring in scaffold_rings:
         if len(ring) == 10:
-            # Count number of carbon atoms in the ring.
-            carbon_count = sum(1 for idx in ring if mol.GetAtomWithIdx(idx).GetAtomicNum() == 6)
-            if carbon_count >= 8:
-                candidate_10_rings.append(set(ring))
-    
-    if not candidate_10_rings:
-        return False, "No suitable 10-membered carbocycle (germacrane skeleton) found."
-    
-    # Criterion 3: Check connectivity between the lactone and the candidate 10-membered ring.
-    # For each lactone match from the SMARTS, check if its atoms (or neighbors thereof)
-    # are part of one of the candidate 10-membered rings.
-    fused_found = False
-    for lactone in lactone_matches:
-        lactone_set = set(lactone)
-        for ring in candidate_10_rings:
-            # If the lactone match overlaps with a candidate ring, they are fused.
-            if lactone_set.intersection(ring):
-                fused_found = True
+            carbon_count_ring = sum(1 for idx in ring if scaffold.GetAtomWithIdx(idx).GetAtomicNum() == 6)
+            if carbon_count_ring >= 8:
+                has_10_membered = True
                 break
-            # Else, check if any lactone atom is bonded to any atom in the ring.
-            for atom_idx in lactone_set:
-                atom = mol.GetAtomWithIdx(atom_idx)
-                neighbors = [n.GetIdx() for n in atom.GetNeighbors()]
-                if set(neighbors).intersection(ring):
-                    fused_found = True
-                    break
-                # End inner loop for a given lactone atom.
-            if fused_found:
-                break
-        if fused_found:
-            break
-    if not fused_found:
-        return False, "No 10-membered germacrane skeleton fused with a 5-membered lactone found."
+    if not has_10_membered:
+        return False, "No suitable 10-membered carbocycle (germacrane skeleton) found in scaffold."
     
-    # Criterion 4: Check the overall molecular weight.
-    mw = rdMolDescriptors.CalcExactMolWt(mol)
-    if mw < 200:
-        return False, "Molecular weight too low to be a sesquiterpene lactone."
+    # --- Criterion 3: Check the carbon count in the scaffold (expect about 15 carbons for sesquiterpenes) ---
+    scaffold_atoms = scaffold.GetAtoms()
+    scaffold_carbon_count = sum(1 for atom in scaffold_atoms if atom.GetAtomicNum() == 6)
+    # Allow a tolerance (e.g., 12 to 18 carbons) because substituents might add extra atoms.
+    if not (12 <= scaffold_carbon_count <= 18):
+        return False, f"Scaffold carbon count ({scaffold_carbon_count}) is not in the expected range for a sesquiterpene."
     
-    # If all criteria are met, classify as a germacranolide.
-    return True, ("Contains a fused 10-membered germacrane skeleton and a 5-membered γ-lactone, "
-                  "with a molecular weight and carbon count consistent with sesquiterpene lactones.")
+    # --- Criterion 4: Check molecular weight to be above a lower limit, e.g. 200 Da ---
+    mol_wt = rdMolDescriptors.CalcExactMolWt(mol)
+    if mol_wt < 200:
+        return False, "Molecular weight is too low to be a sesquiterpene lactone."
+    
+    return True, "Contains a 10-membered germacrane skeleton (in the core scaffold), a 5-membered γ-lactone, and appropriate carbon count typical of germacranolides."
 
-# Example usage:
+# Example use:
 if __name__ == "__main__":
-    # Example with Molephantinin SMILES:
-    example_smiles = r"C\C=C(/C)C(=O)O[C@H]1C\C(C)=C\C(=O)\C=C(C)/[C@H](O)[C@H]2OC(=O)C(=C)[C@H]12"
+    example_smiles = "C\\C=C(/C)C(=O)O[C@H]1C\\C(C)=C\\C(=O)\\C=C(C)/[C@H](O)[C@H]2OC(=O)C(=C)[C@H]12"  # Molephantinin
     result, reason = is_germacranolide(example_smiles)
     print(result, reason)
