@@ -4,23 +4,52 @@ Classifies: CHEBI:52603 1-acyl-sn-glycero-3-phosphoserine
 """
 Classifies: 1-acyl-sn-glycero-3-phosphoserine
 Definition: An sn-glycerophosphoserine compound having an acyl substituent at the 1-hydroxy position.
-The criteria in this improved algorithm are:
-  1. The presence of a serine headgroup fragment (approximated here by OCC(N)C(=O)O).
-  2. The presence of an acylated glycerol fragment (approximated by OCC(O)COC(=O)[#6]).
-  3. The bridging oxygen of the serine fragment and the bridging oxygen of the glycerol fragment must be attached to the same phosphorus atom.
+The algorithm requires:
+  1. The presence of a serine headgroup fragment (approximated as an alcohol attached to a CH(N)C(=O)O unit).
+  2. The presence of an acylated glycerol fragment (approximated as an alcohol linked to a -CH2CH(OH)COC(=O)[#6] group).
+  3. That the oxygen that bridges these fragments is attached to the same phosphorus atom.
+  4. That the acyl chain (extending from the carbonyl carbon) is “long” enough (we require at least 4 contiguous carbons).
 """
 
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
 
+def count_contiguous_carbon_chain(mol, start_idx, exclude_idx):
+    """
+    Simple DFS to count the number of carbon atoms connected to start_idx,
+    excluding a given neighbor (for instance the carbonyl carbon) to avoid
+    backtracking. Returns the maximum chain length.
+    """
+    visited = set()
+    def dfs(atom_idx, parent):
+        visited.add(atom_idx)
+        max_length = 1  # count current carbon
+        atom = mol.GetAtomWithIdx(atom_idx)
+        for nbr in atom.GetNeighbors():
+            nid = nbr.GetIdx()
+            if nid == parent or nid == exclude_idx or nid in visited:
+                continue
+            if nbr.GetAtomicNum() == 6:  # carbon
+                length = 1 + dfs(nid, atom_idx)
+                if length > max_length:
+                    max_length = length
+        return max_length
+    return dfs(start_idx, exclude_idx)
+
 def is_1_acyl_sn_glycero_3_phosphoserine(smiles: str):
     """
     Determines if a molecule is 1-acyl-sn-glycero-3-phosphoserine based on its SMILES string.
-    It requires that the molecule has both:
-      - A serine headgroup fragment (defined here as OCC(N)C(=O)O)
-      - An acylated glycerol fragment (defined here as OCC(O)COC(=O)[#6])
-    And that the oxygen that bridges the phosphate to the serine fragment and the oxygen that bridges the phosphate to the glycerol fragment
-    are attached to the same phosphorus atom.
+    
+    The procedure is:
+      - Look for exactly one serine headgroup fragment.
+         (SMARTS pattern: OCC(N)C(=O)O)
+      - Look for exactly one acylated glycerol fragment at sn-1.
+         (SMARTS pattern: OCC(O)COC(=O)[#6])
+      - For each, obtain the bridging oxygen (assumed to be the first atom in the pattern) and verify that
+        it is directly attached to a phosphorus atom.
+      - Ensure that the same phosphorus atom is bridging both fragments.
+      - Additionally, follow the acyl chain (from the carbon attached to the carbonyl group)
+        and ensure that it contains at least 4 contiguous carbons.
     
     Args:
         smiles (str): SMILES string of the molecule.
@@ -29,69 +58,72 @@ def is_1_acyl_sn_glycero_3_phosphoserine(smiles: str):
         bool: True if the molecule fits the 1-acyl-sn-glycero-3-phosphoserine class, False otherwise.
         str: Reason for the classification decision.
     """
-    # Parse SMILES. If parsing fails, return error.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Define SMARTS for the serine headgroup fragment.
-    # This pattern captures a serine-like substructure: an alcohol bound to a carbon with NH2 and a carboxyl.
+    # Define SMARTS patterns for the two key fragments.
+    # We do not include stereochemistry in the SMARTS to allow for variant representations.
     serine_pattern = Chem.MolFromSmarts("OCC(N)C(=O)O")
-    # Define SMARTS for the acylated glycerol fragment at the sn-1 position.
-    # This pattern captures a glycerol fragment portion which is esterified (via COC(=O)[#6]) at one end.
-    glycerol_acyl_pattern = Chem.MolFromSmarts("OCC(O)COC(=O)[#6]")
+    glycerol_pattern = Chem.MolFromSmarts("OCC(O)COC(=O)[#6]")
     
-    # Find substructure matches.
     serine_matches = mol.GetSubstructMatches(serine_pattern)
-    glycerol_matches = mol.GetSubstructMatches(glycerol_acyl_pattern)
+    glycerol_matches = mol.GetSubstructMatches(glycerol_pattern)
     
     if not serine_matches:
         return False, "Serine headgroup fragment (OCC(N)C(=O)O) not found"
     if not glycerol_matches:
         return False, "Acylated glycerol fragment (OCC(O)COC(=O)[#6]) not found"
     
-    # For each serine match, record the bridging oxygen (we assume index 0 in the serine pattern, the oxygen on the phosphate side)
-    serine_bridge_phos = []
-    for match in serine_matches:
-        o_idx = match[0]
-        atom_o = mol.GetAtomWithIdx(o_idx)
-        # Collect phosphorus neighbors (atomic number 15)
-        p_neighbors = {nbr.GetIdx() for nbr in atom_o.GetNeighbors() if nbr.GetAtomicNum() == 15}
-        if p_neighbors:
-            serine_bridge_phos.append(p_neighbors)
-    if not serine_bridge_phos:
+    # For clarity we require exactly one match for each fragment.
+    if len(serine_matches) > 1:
+        return False, f"Ambiguous serine fragment: {len(serine_matches)} matches found"
+    if len(glycerol_matches) > 1:
+        return False, f"Ambiguous acylated glycerol fragment: {len(glycerol_matches)} matches found"
+    
+    # For each match, assume the first atom in the match is the bridging oxygen that should be attached to phosphorus.
+    serine_bridge_idx = serine_matches[0][0]
+    glycerol_bridge_idx = glycerol_matches[0][0]
+    
+    # Obtain phosphorus neighbors attached to these bridging oxygens.
+    serine_p_set = {nbr.GetIdx() for nbr in mol.GetAtomWithIdx(serine_bridge_idx).GetNeighbors() if nbr.GetAtomicNum() == 15}
+    if not serine_p_set:
         return False, "Serine fragment found but its bridging oxygen is not attached to any phosphorus atom"
     
-    # Similarly, for each glycerol match record the bridging oxygen (assumed index 0 in the glycerol pattern)
-    glycerol_bridge_phos = []
-    for match in glycerol_matches:
-        o_idx = match[0]
-        atom_o = mol.GetAtomWithIdx(o_idx)
-        p_neighbors = {nbr.GetIdx() for nbr in atom_o.GetNeighbors() if nbr.GetAtomicNum() == 15}
-        if p_neighbors:
-            glycerol_bridge_phos.append(p_neighbors)
-    if not glycerol_bridge_phos:
+    glycerol_p_set = {nbr.GetIdx() for nbr in mol.GetAtomWithIdx(glycerol_bridge_idx).GetNeighbors() if nbr.GetAtomicNum() == 15}
+    if not glycerol_p_set:
         return False, "Acylated glycerol fragment found but its bridging oxygen is not attached to any phosphorus atom"
     
-    # Now require that at least one serine bridging oxygen and one glycerol bridging oxygen share the same phosphorus atom.
-    common_found = False
-    for s_set in serine_bridge_phos:
-        for g_set in glycerol_bridge_phos:
-            if s_set.intersection(g_set):
-                common_found = True
-                break
-        if common_found:
-            break
-            
-    if not common_found:
+    # Check that there is at least one phosphorus atom common to both sets.
+    common_p = serine_p_set.intersection(glycerol_p_set)
+    if not common_p:
         return False, "Bridging oxygens from the serine and glycerol fragments are not attached to the same phosphorus atom"
     
-    # (Optionally, one could add additional checks here, for example verifying that the acyl chain is of sufficient length.)
+    # Optionally, check that the acyl chain is of sufficient length.
+    # In the glycerol pattern "OCC(O)COC(=O)[#6]", the last atom ([#6]) is the start of the acyl chain.
+    # We will attempt to count contiguous carbon atoms beyond that atom.
+    glycerol_match = glycerol_matches[0]
+    if len(glycerol_match) < 6:
+        return False, "Acylated glycerol fragment match is incomplete"
+    acyl_start_idx = glycerol_match[5]  # index of the first carbon of the acyl chain
+    # We exclude the carbonyl carbon (which is the previous atom in the pattern, index 4).
+    carbonyl_idx = glycerol_match[4]
+    chain_length = count_contiguous_carbon_chain(mol, acyl_start_idx, carbonyl_idx)
+    if chain_length < 4:
+        return False, f"Acyl chain too short (chain length {chain_length})"
+    
     return True, "Contains a phosphoserine headgroup with an acylated glycerol fragment at the sn-1 position"
 
-# For manual testing you could run:
+# For manual testing:
 if __name__ == "__main__":
-    # Example test: one of the provided correct SMILES
-    smiles_example = "P(OC[C@H](O)COC(=O)CCCCCCC/C=C\\CCCCCCC)(OC[C@H](N)C(O)=O)(O)=O"
-    result, reason = is_1_acyl_sn_glycero_3_phosphoserine(smiles_example)
-    print(result, reason)
+    # Example correct SMILES:
+    test_smiles = [
+        "P(OC[C@H](O)COC(=O)CCCCCCC/C=C\\CCCCCCC)(OC[C@H](N)C(O)=O)(O)=O",  # PS(17:1(9Z)/0:0)
+        "P(OC[C@H](O)COC(=O)CCCCCCCCCCCCCCC)(OC[C@H](N)C(O)=O)(O)=O",         # PS(16:0/0:0)
+        "P(OCC(O)COC(=O)CCCCCCCCCCCCCCCCC)(OCC(N)C(O)=O)(O)=O",                 # 1-Stearoylglycerophosphoserine
+    ]
+    for smi in test_smiles:
+        result, reason = is_1_acyl_sn_glycero_3_phosphoserine(smi)
+        print("SMILES:", smi)
+        print("Result:", result, "|", reason)
+        print("------------------------------------------------")
