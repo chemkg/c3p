@@ -5,116 +5,118 @@ Classifies: CHEBI:33704 alpha-amino acid
 Classifies: Alpha-Amino Acid
 Definition: An amino acid in which the amino group is located on the carbon atom 
 at the position alpha to the carboxy group.
-
-This function uses a two‐step strategy:
-  1. Identify one or more free carboxyl groups (using a SMARTS pattern that captures both protonated and deprotonated forms).
-  2. For each free carboxyl group, examine its neighboring carbon (candidate “alpha carbon”). A valid alpha–carbon is expected to have:
-       • A total heavy-atom degree plus implicit H count equal to 4 (covering both CH (e.g. alanine) and CH2 (e.g. glycine)).
-       • One additional neighbor (aside from the carboxyl carbon) that is a “free” nitrogen (i.e. not involved in an amide bond).
-       
-Finally, if exactly one such alpha center is found in the molecule we return True. If none or more than one are found (as in the case of peptides)
-we return False with an appropriate reason.
+This improved function searches for a free carboxyl group (C(=O)[O;H1,-]) and then:
+  1. Identifies a neighboring alpha carbon.
+  2. Checks that the alpha carbon has a nitrogen substituent.
+  3. Verifies that this nitrogen does NOT appear to participate in a peptide bond 
+     (i.e. it is not also attached to an additional carbonyl group that would indicate 
+     it is part of an amide linkage between amino acid residues).
+If these criteria are met, the molecule is classified as an alpha–amino acid.
 """
+
 from rdkit import Chem
 
 def is_alpha_amino_acid(smiles: str):
     """
-    Determines if a molecule is an alpha–amino acid based on its SMILES string.
-
+    Determines if a molecule is an alpha-amino acid based on its SMILES string.
+    The procedure is as follows:
+      1. Parse the SMILES string.
+      2. Look for a free carboxyl group using the SMARTS "C(=O)[O;H1,-]".
+         (This will match carboxy groups not involved in peptide bonds.)
+      3. For each free carboxyl group, get its carbon atom (carboxyl carbon) and find
+         its carbon neighbor(s) (candidate alpha carbons).
+      4. For each alpha candidate, look for a bound amine (nitrogen) substituent.
+         Then check that the nitrogen is “free” – meaning that besides the connection 
+         to the alpha carbon, it is not attached to another carbonyl carbon (which would 
+         indicate an amide/peptide bond).
+      5. If such an alpha carbon is found, we classify the molecule as an alpha-amino acid.
+      
     Args:
-        smiles (str): SMILES string of the molecule
-
+        smiles (str): SMILES string of the molecule.
+        
     Returns:
-        bool: True if the molecule is classified as a free, monomeric alpha–amino acid.
-        str: A reason for the classification decision.
+        bool: True if the molecule is classified as an alpha-amino acid, False otherwise.
+        str: A reason message for the classification decision.
     """
+    # Parse the SMILES string
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Define a SMARTS pattern for a free carboxyl group.
-    # This should match both the acid (COOH) and deprotonated (COO-) forms.
-    pattern_carboxyl = Chem.MolFromSmarts("C(=O)[O;H1,-1]")
+    # Define a SMARTS pattern for a free carboxyl group 
+    # This matches a carbon double bonded to oxygen and singly bonded to an oxygen that is either protonated or deprotonated.
+    pattern_carboxyl = Chem.MolFromSmarts("C(=O)[O;H1,-]")
     carboxyl_matches = mol.GetSubstructMatches(pattern_carboxyl)
     
     if not carboxyl_matches:
         return False, "No free carboxyl group (C(=O)[O,OH]) found in the molecule"
     
-    candidate_alpha_count = 0
-    candidate_reason = ""
-    
-    # For each free carboxyl group, look at the carbon it is attached to (candidate alpha carbon)
+    # For every free carboxyl group found
     for match in carboxyl_matches:
-        # In the SMARTS pattern "C(=O)[O;H1,-1]", the first atom (index 0) is the carboxyl carbon.
+        # In the SMARTS "C(=O)[O;H1,-]", the first atom (index 0) is the carboxyl carbon.
         carboxyl_idx = match[0]
         carboxyl_atom = mol.GetAtomWithIdx(carboxyl_idx)
         
-        # Iterate over neighbors of the carboxyl carbon: possible alpha carbons should be carbons.
-        for neigh in carboxyl_atom.GetNeighbors():
-            if neigh.GetAtomicNum() != 6:
-                continue
-            
-            # Calculate total valence (explicit heavy neighbors + implicit hydrogens).
-            total_valence = neigh.GetDegree() + neigh.GetTotalNumHs()
-            if total_valence != 4:
-                continue
-            
-            # Check among the other neighbors of candidate alpha for a "free" amino group.
-            found_free_amino = False
-            for subnbr in neigh.GetNeighbors():
-                # Skip the bond to the carboxyl carbon.
+        # Find neighboring carbons; these are candidate alpha carbons.
+        for neighbor in carboxyl_atom.GetNeighbors():
+            if neighbor.GetAtomicNum() != 6:
+                continue  # skip if not carbon
+            alpha_candidate = neighbor
+            # Now, look for a nitrogen substituent on the alpha candidate (the free amine)
+            for subnbr in alpha_candidate.GetNeighbors():
+                # We skip the carboxyl carbon already considered.
                 if subnbr.GetIdx() == carboxyl_idx:
                     continue
-                if subnbr.GetAtomicNum() == 7:  # nitrogen candidate
-                    # A free amino nitrogen should not be involved in an amide bond.
-                    # Here we check that aside from the connection to the candidate alpha carbon,
-                    # the nitrogen is not double-bonded to an oxygen.
+                if subnbr.GetAtomicNum() == 7:  # nitrogen found
+                    # Check that this nitrogen is not part of an amide linkage.
+                    # For each neighbor of the nitrogen (besides the alpha candidate),
+                    # if the neighbor is a carbon that is double-bonded to an oxygen (i.e. C=O),
+                    # then we suspect a peptide bond.
                     involved_in_amide = False
-                    for nn in subnbr.GetNeighbors():
-                        if nn.GetIdx() == neigh.GetIdx():
+                    for n_neighbor in subnbr.GetNeighbors():
+                        if n_neighbor.GetIdx() == alpha_candidate.GetIdx():
                             continue
-                        # If this neighbor of the nitrogen is a carbon that is double-bonded to oxygen, suspect an amide.
-                        if nn.GetAtomicNum() == 6:
-                            bond = mol.GetBondBetweenAtoms(subnbr.GetIdx(), nn.GetIdx())
-                            if bond is not None and bond.GetBondType() == Chem.BondType.DOUBLE:
-                                # We suspect an amide involvement.
-                                involved_in_amide = True
+                        if n_neighbor.GetAtomicNum() == 6:
+                            # Examine bonds of this carbon to see if there is a double bond to oxygen.
+                            for bond in n_neighbor.GetBonds():
+                                # Check if the bond is a double bond to oxygen.
+                                other_atom = bond.GetOtherAtom(n_neighbor)
+                                if other_atom.GetAtomicNum() == 8 and bond.GetBondTypeAsDouble() == 2.0:
+                                    # We allow the case where n_neighbor is the free carboxyl carbon.
+                                    if n_neighbor.GetIdx() != carboxyl_idx:
+                                        involved_in_amide = True
+                                        break
+                            if involved_in_amide:
                                 break
                     if involved_in_amide:
+                        # The nitrogen appears to be part of a peptide bond.
                         continue
-                    # We found a nitrogen that appears free.
-                    found_free_amino = True
-                    break  # no need to check further nitrogens
-            
-            if found_free_amino:
-                candidate_alpha_count += 1
-                candidate_reason = ("Alpha amino acid pattern found: an alpha carbon (adjacent to a free carboxyl group) "
-                                    "has a free (non-amide) amino substituent.")
+                    
+                    # We also check that the nitrogen has at least one hydrogen (i.e. is not fully substituted by acyl groups).
+                    has_hydrogen = any(neigh.GetAtomicNum() == 1 for neigh in subnbr.GetNeighbors())
+                    if not has_hydrogen:
+                        # In some cases (e.g., N-methyl amino acids) the nitrogen may not show a hydrogen,
+                        # so we allow that as long as it is not acylated as determined above.
+                        pass
+                    
+                    # If we found an alpha carbon with a bound, free (non-peptidyl) amino group,
+                    # we consider this as an alpha amino acid pattern.
+                    return True, ("Alpha amino acid pattern found: "
+                                  "an alpha carbon (attached to a free carboxyl group) bears an amino substituent "
+                                  "that does not appear to be involved in a peptide bond")
     
-    # If exactly one candidate alpha center is found, we accept the molecule as a free amino acid.
-    if candidate_alpha_count == 1:
-        return True, candidate_reason
-    elif candidate_alpha_count > 1:
-        return False, ("Multiple potential alpha-carbon centers were found ({} candidates), "
-                       "which suggests the molecule may be a peptide or a derivative rather than a free alpha amino acid."
-                       .format(candidate_alpha_count))
-    else:
-        return False, "No alpha amino acid pattern found: no suitable alpha carbon with a free amino group next to a carboxyl group"
+    # If no alpha carbon candidate with a free amino group was found, then the molecule is not classified as a free alpha-amino acid.
+    return False, "No alpha amino acid pattern found: no suitable alpha carbon with a free amino group next to a free carboxyl group"
 
-# Simple test runs – you can run this module to see some classifications.
+# For testing purposes, you can run a set of example SMILES strings.
 if __name__ == "__main__":
     test_smiles = [
         "OC(=O)C(N)CN1N=CC=C1",          # 3-(1-Pyrazolyl)-alanine (should be True)
         "N[C@@H](CC1=CC=C(F)C=C1)C(O)=O",  # 4-fluorophenyl-L-alanine (should be True)
         "CN[C@@H](Cc1ccccc1)C(O)=O",       # N-methyl-L-phenylalanine (should be True)
-        # An example false positive (likely a peptide):
-        "O=C(N1[C@H](CCC1)C(O)=O)[C@@H](NC(=O)[C@@H](N)CC(O)=O)CCC(=O)N",
-        # An example false negative (should not match the pattern):
-        "C[n+]1ccccc1C([O-])=O"
+        "O=C(N1[C@H](CCC1)C(O)=O)[C@@H](NC(=O)[C@@H](N)CC(O)=O)CCC(=O)N"  # Asp-Gln-Pro peptide (should be False)
     ]
     
     for s in test_smiles:
         result, reason = is_alpha_amino_acid(s)
-        print(f"SMILES: {s}")
-        print(f"Result: {result}")
-        print(f"Reason: {reason}\n")
+        print(f"SMILES: {s}\nResult: {result}, Reason: {reason}\n")
