@@ -3,9 +3,8 @@ Classifies: CHEBI:26195 polyphenol
 """
 """
 Classifies: Polyphenol
-Definition: A polyphenol is a phenolic compound with 2 or more benzene rings—
-(each benzene ring being a six‐membered aromatic ring made exclusively of carbon atoms)
-—and each such ring has at least one hydroxy (-OH) group directly attached.
+Definition: Members of the class of phenols that contain 2 or more benzene rings 
+            each of which is substituted by at least one hydroxy group.
 """
 from rdkit import Chem
 
@@ -13,70 +12,64 @@ def is_polyphenol(smiles: str):
     """
     Determines if a molecule is a polyphenol based on its SMILES string.
     
-    A polyphenol is defined as a molecule that contains 2 or more benzene rings—
-    six-membered aromatic rings composed solely of carbon atoms—
-    where each such ring has at least one directly attached hydroxy (-OH) group.
+    A polyphenol is defined as a molecule that contains 2 or more benzene rings,
+    where each benzene ring (i.e. six-membered aromatic ring) is substituted by at least one hydroxy group.
     
     Args:
         smiles (str): SMILES string of the molecule.
     
     Returns:
-        bool: True if the molecule meets the polyphenol criteria, False otherwise.
+        bool: True if molecule meets the polyphenol criteria, False otherwise.
         str: Reason for the classification.
     """
     # Parse the SMILES string into an RDKit molecule.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
+
+    # Ensure aromaticity and ring info are computed.
+    Chem.SanitizeMol(mol)
     
-    try:
-        Chem.SanitizeMol(mol)
-    except Exception as e:
-        return False, f"Sanitization error: {e}"
-    
-    # Retrieve ring information from the molecule.
     ring_info = mol.GetRingInfo()
     atom_rings = ring_info.AtomRings()
     
-    qualifying_rings = 0  # Count for benzene rings with an -OH substituent.
-    
+    phenol_ring_count = 0  # Count of benzene rings (6-membered aromatic) with at least one -OH substituent.
+    # Iterate over all rings identified in the molecule.
     for ring in atom_rings:
-        # Consider only rings of size 6.
         if len(ring) != 6:
+            continue  # Only consider six-membered rings.
+        # Check if every atom in the ring is aromatic.
+        if not all(mol.GetAtomWithIdx(idx).GetIsAromatic() for idx in ring):
             continue
         
-        # Check that all atoms in the ring are carbon and aromatic.
-        if not all(mol.GetAtomWithIdx(idx).GetAtomicNum() == 6 and 
-                   mol.GetAtomWithIdx(idx).GetIsAromatic() for idx in ring):
-            continue
-        
-        # Now check if at least one ring carbon has a hydroxy substituent.
+        # Now check for a hydroxy substituent attached to any atom in the ring.
         has_hydroxy = False
         for idx in ring:
             atom = mol.GetAtomWithIdx(idx)
-            # Look at neighbors that are not part of the ring.
+            # Look at atoms connected to the ring atom that are not in the ring.
             for neighbor in atom.GetNeighbors():
+                # Skip neighbors that are in the same ring.
                 if neighbor.GetIdx() in ring:
                     continue
-                # A hydroxy group is represented by an oxygen with one or more hydrogens.
+                # Check if the neighbor is oxygen and has at least one hydrogen.
                 if neighbor.GetAtomicNum() == 8 and neighbor.GetTotalNumHs() >= 1:
                     has_hydroxy = True
                     break
             if has_hydroxy:
-                break
+                break  # No need to check further within this ring.
         
         if has_hydroxy:
-            qualifying_rings += 1
+            phenol_ring_count += 1
 
-    if qualifying_rings >= 2:
-        return True, f"Contains {qualifying_rings} benzene ring(s) each substituted with a hydroxy group."
+    # Check the overall classification based on the count of phenolic benzene rings.
+    if phenol_ring_count >= 2:
+        return True, f"Contains {phenol_ring_count} benzene rings each substituted with a hydroxy group."
     else:
-        return False, f"Contains only {qualifying_rings} benzene ring(s) with a hydroxy substituent (need at least 2)."
-
-# Example usage:
+        return False, f"Contains only {phenol_ring_count} benzene ring(s) with a hydroxy substituent (need at least 2)."
+    
+# Example usage (You can remove or comment these lines if not needed):
 if __name__ == "__main__":
-    # Test one of the example SMILES:
-    test_smiles = "COc1cc(O)c2c(c1)oc1cc(C)cc(O)c1c2=O"  # 1,8-dihydroxy-3-methoxy-6-methylxanthone
+    test_smiles = "COc1cc(O)c2c(c1)oc1c(O)cccc1c2=O"  # 1,8-dihydroxy-3-methoxy-6-methylxanthone
     result, reason = is_polyphenol(test_smiles)
     print("Is polyphenol:", result)
     print("Reason:", reason)
