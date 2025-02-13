@@ -3,11 +3,10 @@ Classifies: CHEBI:33848 polycyclic arene
 """
 """
 Classifies: polycyclic arene (polycyclic aromatic hydrocarbon)
-
 A polycyclic aromatic hydrocarbon (PAH) is defined here as a molecule containing at least 
-two aromatic rings that belong to one interconnected aromatic system (i.e. the rings are 
-“fused” or connected via aromatic bonds). In addition, the fused aromatic portion of the 
-molecule should comprise a significant fraction (here >50%) of the heavy (non‐hydrogen) atoms.
+two aromatic rings that are fused (i.e. share at least one full edge – two or more atoms) 
+to form a single connected aromatic substructure. Moreover, the fused system should cover 
+a significant fraction (>40%) of the heavy atoms and be largely composed of carbon atoms.
 """
 
 from rdkit import Chem
@@ -15,104 +14,110 @@ from rdkit.Chem import rdMolDescriptors
 
 def is_polycyclic_arene(smiles: str):
     """
-    Determines if a molecule is a polycyclic arene (polycyclic aromatic hydrocarbon) from its SMILES.
+    Determines if a molecule is a polycyclic arene (polycyclic aromatic hydrocarbon) based on its SMILES.
     
-    A molecule is considered a PAH if:
-      1. It has at least two aromatic rings (as determined by RDKit routines).
-      2. At least two fully aromatic rings appear in one connected aromatic subgraph.
-         (Here we build a graph linking aromatic atoms via aromatic bonds.)
-      3. The fused aromatic component covers a significant fraction (>50%) of the heavy atoms.
+    The molecule is considered a PAH if:
+      1. It contains at least two fully aromatic rings (with 5 or more atoms per ring).
+      2. At least two of these rings are sufficiently fused (i.e. they share at least 2 atoms).
+      3. The fused aromatic system (the union of atoms in the connected rings) covers 
+         a significant fraction (>40%) of all heavy (non-hydrogen) atoms in the molecule.
+      4. The fused system is largely composed of carbons (at least 60% of its atoms).
     
     Args:
         smiles (str): SMILES string of the molecule.
     
     Returns:
-        (bool, str): True and a reason if the molecule qualifies, otherwise False and a reason.
+        (bool, str): Tuple of (True, reason) if molecule qualifies, else (False, reason).
     """
     # Parse the SMILES string into an RDKit molecule
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-        
-    # Sanitize the molecule (including perception of aromaticity)
+    
+    # Sanitize (includes aromaticity perception)
     try:
         Chem.SanitizeMol(mol)
     except Exception as e:
         return False, "Sanitization failed: " + str(e)
     
-    # Count the number of aromatic rings in the molecule (using RDKit descriptor)
-    n_arom_rings = rdMolDescriptors.CalcNumAromaticRings(mol)
-    if n_arom_rings < 2:
-        return False, "Fewer than two aromatic rings detected"
-    
-    # Get ring information (atom indices for each ring)
-    ring_lists = mol.GetRingInfo().AtomRings()
-    # Filter rings to those that are completely aromatic (every atom in the ring is aromatic)
+    # Retrieve all rings in the molecule as sets of atom indices.
+    ring_info = mol.GetRingInfo().AtomRings()
+    # Filter to rings that are fully aromatic and have at least 5 atoms (to avoid small spurious rings, e.g. 3-membered rings)
     aromatic_rings = []
-    for ring in ring_lists:
+    for ring in ring_info:
+        if len(ring) < 5:
+            continue
         if all(mol.GetAtomWithIdx(idx).GetIsAromatic() for idx in ring):
             aromatic_rings.append(set(ring))
+    
     if len(aromatic_rings) < 2:
         return False, "Fewer than two fully aromatic rings detected"
     
-    # Build a graph (as a dict) over aromatic atoms connected by aromatic bonds
-    aromatic_atoms = [atom.GetIdx() for atom in mol.GetAtoms() if atom.GetIsAromatic()]
-    arom_neighbors = { idx: set() for idx in aromatic_atoms }
-    for bond in mol.GetBonds():
-        if bond.GetIsAromatic():
-            a1 = bond.GetBeginAtomIdx()
-            a2 = bond.GetEndAtomIdx()
-            if a1 in arom_neighbors and a2 in arom_neighbors:
-                arom_neighbors[a1].add(a2)
-                arom_neighbors[a2].add(a1)
+    # Build a graph where each node is a ring (by its index in aromatic_rings)
+    # and add an edge if the rings share at least 2 atoms (i.e., are fused).
+    ring_graph = {i: set() for i in range(len(aromatic_rings))}
+    for i in range(len(aromatic_rings)):
+        for j in range(i+1, len(aromatic_rings)):
+            common = aromatic_rings[i].intersection(aromatic_rings[j])
+            if len(common) >= 2:
+                ring_graph[i].add(j)
+                ring_graph[j].add(i)
     
-    # Find connected components in the aromatic subgraph using DFS
+    # Find connected components in the ring graph using DFS.
     visited = set()
-    components = []
-    for atom in arom_neighbors:
-        if atom not in visited:
-            stack = [atom]
+    fused_components = []
+    for i in ring_graph:
+        if i not in visited:
+            stack = [i]
             comp = set()
             while stack:
-                curr = stack.pop()
-                if curr in visited:
+                node = stack.pop()
+                if node in visited:
                     continue
-                visited.add(curr)
-                comp.add(curr)
-                for nbr in arom_neighbors[curr]:
-                    if nbr not in visited:
-                        stack.append(nbr)
-            components.append(comp)
+                visited.add(node)
+                comp.add(node)
+                stack.extend(ring_graph[node] - visited)
+            fused_components.append(comp)
     
-    # For each connected component, check how many aromatic rings (from our aromatic_rings list)
-    # are completely contained in that component.
-    fused_system_found = False
-    for comp in components:
-        ring_count = 0
-        for ring in aromatic_rings:
-            if ring.issubset(comp):
-                ring_count += 1
-        if ring_count >= 2:
-            fused_system_found = True
-            biggest_arom_comp = comp
+    # Look for a fused component that has at least 2 rings.
+    fused_system = None
+    for comp in fused_components:
+        if len(comp) >= 2:
+            fused_system = comp
             break
-            
-    if not fused_system_found:
-        return False, "Aromatic rings are not sufficiently fused (no connected aromatic system with at least two rings)"
+    if fused_system is None:
+        return False, "Aromatic rings are not sufficiently fused (no connected fused system with at least two rings)"
     
-    # Check that the fused aromatic system covers a significant fraction of heavy (non-H) atoms.
+    # Get union of atom indices that are in the fused rings.
+    fused_atoms = set()
+    for idx in fused_system:
+        fused_atoms.update(aromatic_rings[idx])
+    
+    # Calculate the fraction of heavy atoms (atomic number > 1) in the entire molecule.
     heavy_atoms = [atom for atom in mol.GetAtoms() if atom.GetAtomicNum() > 1]
     if not heavy_atoms:
         return False, "No heavy atoms found"
-    frac_arom = len(biggest_arom_comp) / float(len(heavy_atoms))
-    if frac_arom < 0.5:
-        return False, f"Fused aromatic system covers only {frac_arom*100:.1f}% of heavy atoms (<50%)"
+    frac_fused = len(fused_atoms) / float(len(heavy_atoms))
     
-    return True, "Molecule is a polycyclic aromatic hydrocarbon with a fused aromatic system"
+    # We require at least 40% of heavy atoms are in the fused aromatic system.
+    if frac_fused < 0.40:
+        return False, f"Fused aromatic system covers only {frac_fused*100:.1f}% of heavy atoms (<40%)"
+    
+    # Optionally, ensure that the fused system is largely composed of carbon.
+    carbons_in_fused = sum(1 for idx in fused_atoms if mol.GetAtomWithIdx(idx).GetAtomicNum() == 6)
+    if len(fused_atoms) > 0:
+        carbon_frac = carbons_in_fused / float(len(fused_atoms))
+    else:
+        carbon_frac = 0
+    if carbon_frac < 0.60:
+        return False, f"Fused aromatic system is not carbon-dominated ({carbon_frac*100:.1f}% carbons)"
+    
+    return True, "Molecule is a polycyclic aromatic hydrocarbon with a sufficiently fused aromatic system"
 
-# Example usage for testing:
+
+# Example usage for testing
 if __name__ == "__main__":
-    # Example: benzo[a]pyrene, expected to be True
+    # Example: benzo[a]pyrene, expected to be a PAH.
     test_smiles = "c1ccc2c(c1)cc1ccc3cccc4ccc2c1c34"
     result, reason = is_polycyclic_arene(test_smiles)
     print("SMILES:", test_smiles)
