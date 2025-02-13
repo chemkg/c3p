@@ -3,126 +3,97 @@ Classifies: CHEBI:25413 monounsaturated fatty acid
 """
 """
 Classifies: Monounsaturated fatty acid.
-Definition: A fatty acid (free acid or esterified acyl chain) that contains exactly one
-carbon–carbon unsaturation (double or triple bond) in the acyl chain. In our implementation,
-we look for a carboxyl/ester group and then for each candidate carbon chain neighbor (non-oxygen)
-we enumerate all linear acyl chain paths (only aliphatic, non-aromatic, non‐cyclic carbons). 
-We then select the longest path and verify that it contains exactly one unsaturated bond.
-MUFAs are known to have positive effects on the cardiovascular system and in treatment of diabetes.
+Definition: Any fatty acid with one (and only one) carbon–carbon unsaturation 
+(double or triple bond) in the acyl chain and a free (terminal) carboxylic acid group.
+MUFAs are known to have positive effects on the cardiovascular system and in diabetes treatment.
 """
 
 from rdkit import Chem
 
 def is_monounsaturated_fatty_acid(smiles: str):
     """
-    Determines if a molecule contains a monounsaturated fatty acyl chain fragment.
-    For each acidic (or ester) carbonyl group, every eligible carbon neighbor is considered as
-    a potential starting point of an acyl chain. Then, using a DFS that only follows aliphatic,
-    non-aromatic, non-cyclic carbon atoms, every simple path (i.e. linear fragment) is enumerated.
-    The longest path is chosen as representing the acyl chain. If that path has length >= 2 (in 
-    terms of number of carbons) and contains exactly one carbon–carbon unsaturation (double or triple bond),
-    then the molecule is classified as containing a monounsaturated fatty acid.
+    Determines if a molecule is a monounsaturated fatty acid (MUFA) based on its SMILES string.
+    
+    The criteria applied here are:
+      1) The molecule must have exactly one carboxylic acid group. We use a SMARTS pattern
+         that covers both protonated (-C(=O)[OH]) and deprotonated (-C(=O)[O-]) forms.
+      2) The acid group must be terminal (its carboxyl carbon is attached to exactly one carbon atom).
+      3) The carbon chain attached to the acid group ("acyl chain") is extracted (only traversing carbon atoms).
+      4) Within that acyl chain, there must be exactly one unsaturation (a carbon–carbon double or triple bond).
+      5) We also require that the acyl chain is not trivially short (at least 3 carbon atoms beyond the acid, 
+         though this threshold can be adjusted).
     
     Args:
-      smiles (str): SMILES string representing the molecule.
-      
+        smiles (str): SMILES string of the molecule.
+        
     Returns:
-      bool: True if molecule contains at least one fatty acyl chain meeting the MUFA criteria.
-      str: Explanation for the classification decision.
+        bool: True if the molecule meets all criteria for being a monounsaturated fatty acid, 
+              False otherwise.
+        str: Explanation for the classification decision.
     """
-    
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Define SMARTS pattern for free acid (-COOH) and ester (-COO-)
-    free_acid_pattern = Chem.MolFromSmarts("[CX3](=O)[OX2H1]")
-    # The ester pattern here requires the oxygen to be attached to a carbon 
-    # (it may be embedded in a larger structure such as glycerol or phospholipid)
-    ester_pattern = Chem.MolFromSmarts("[CX3](=O)O[#6]")
-    
-    free_acid_matches = mol.GetSubstructMatches(free_acid_pattern)
-    ester_matches = mol.GetSubstructMatches(ester_pattern)
-    
-    # Allow both types of matches
-    candidate_matches = list(free_acid_matches) + list(ester_matches)
-    if not candidate_matches:
-        return False, "No free acid or ester carbonyl group found to derive a fatty acyl chain."
-    
-    # For each match, we try every carbon neighbor of the carbonyl (skipping the paired oxygen)
-    # as the potential start of a fatty acyl chain.
-    candidates = []  # each candidate is (carbonyl_idx, start_idx)
-    for match in candidate_matches:
-        carbonyl_idx = match[0]  # assumed to be the carbonyl carbon
-        # Get all neighbors of the carbonyl atom that are carbon (atomic number 6).
-        carbonyl_atom = mol.GetAtomWithIdx(carbonyl_idx)
-        for nbr in carbonyl_atom.GetNeighbors():
-            # Exclude oxygen neighbors (which are part of -COOH or -COO-)
-            if nbr.GetAtomicNum() == 6:
-                candidates.append((carbonyl_idx, nbr.GetIdx()))
-    
-    if not candidates:
-        return False, "No valid candidate fatty acyl chain found (carbonyl center not attached to any carbon)."
-
-    # Define a helper function to enumerate all simple (linear) paths from a given starting atom.
-    # We only allow traversal through aliphatic carbons (atomic number 6) that are neither aromatic nor in a ring.
-    def dfs_paths(current_path):
-        last_idx = current_path[-1]
-        last_atom = mol.GetAtomWithIdx(last_idx)
-        extended = False
-        for nbr in last_atom.GetNeighbors():
-            nbr_idx = nbr.GetIdx()
-            # continue only if this neighbor is an aliphatic carbon and not already in path
-            if nbr_idx in current_path:
-                continue
-            if nbr.GetAtomicNum() != 6 or nbr.GetIsAromatic() or nbr.IsInRing():
-                continue
-            # Extend the path.
-            extended = True
-            yield from dfs_paths(current_path + [nbr_idx])
-        # If we could not extend further, yield the current path as maximal.
-        if not extended:
-            yield current_path
-
-    # For each candidate, enumerate all possible acyl chain linear paths.
-    for carbonyl_idx, start_idx in candidates:
-        # Only consider the starting atom if it is an eligible carbon.
-        start_atom = mol.GetAtomWithIdx(start_idx)
-        if start_atom.GetAtomicNum() != 6 or start_atom.GetIsAromatic() or start_atom.IsInRing():
-            continue
-        all_paths = list(dfs_paths([start_idx]))
-        if not all_paths:
-            continue
-        # Choose the longest linear path (in terms of number of carbon atoms in the chain)
-        longest_path = max(all_paths, key=lambda p: len(p))
-        if len(longest_path) < 2:
-            continue  # chain too short; try next candidate
+    # Define SMARTS for a carboxylic acid group: match protonated or deprotonated forms.
+    # [CX3](=O)[OX2H1] matches a protonated acid, and [CX3](=O)[OX1H0] will match 
+    # a negatively charged carboxylate oxygen. We combine them into a single pattern:
+    acid_smarts = "[CX3](=O)[OX1H0,OX2H1]"
+    acid_pattern = Chem.MolFromSmarts(acid_smarts)
+    acid_matches = mol.GetSubstructMatches(acid_pattern)
+    if len(acid_matches) != 1:
+        # Either no acid group or multiple acid groups were found.
+        return False, f"Found {len(acid_matches)} acid group(s); need exactly one terminal carboxylic acid group"
         
-        # Count the number of unsaturated carbon–carbon bonds along the selected path.
-        unsat_count = 0
-        # Note: we only consider bonds between consecutive atoms in the path.
-        for i in range(len(longest_path) - 1):
-            bond = mol.GetBondBetweenAtoms(longest_path[i], longest_path[i+1])
-            if bond is None:
-                continue
-            if bond.GetBondType() in (Chem.rdchem.BondType.DOUBLE, Chem.rdchem.BondType.TRIPLE):
-                unsat_count += 1
-        
-        # We require that the acyl chain has exactly one carbon–carbon unsaturation.
-        if unsat_count == 1:
-            return True, ("Found acyl chain (with %d carbon atoms) derived from a carbonyl at atom %d having exactly one "
-                          "carbon–carbon unsaturation." % (len(longest_path), carbonyl_idx))
-    # If none of the candidate chains qualify, return False with details.
-    return False, ("No fatty acyl chain candidate with exactly one unsaturation was found among %d candidate(s)." 
-                   % (len(candidates)))
+    # For the (only) matching acid group, identify the carboxyl carbon.
+    # By our SMARTS, the first atom is the carboxyl carbon.
+    acid_match = acid_matches[0]
+    acid_carbon_idx = acid_match[0]
+    acid_carbon = mol.GetAtomWithIdx(acid_carbon_idx)
+    
+    # Check that the acid carbon is "terminal": it should be bonded to exactly one carbon atom.
+    carbon_neighbors = [nbr for nbr in acid_carbon.GetNeighbors() if nbr.GetAtomicNum() == 6]
+    if len(carbon_neighbors) != 1:
+        return False, "Acid group is not terminal (its acid carbon is attached to more than one carbon)"
+    
+    # The only carbon neighbor is the alpha (first) carbon of the fatty acyl chain.
+    alpha = carbon_neighbors[0]
+    
+    # Now, extract the contiguous acyl chain: all carbon atoms connected to the alpha carbon 
+    # while not traversing back into the acid group.
+    chain_atoms = set()
+    def dfs(atom, coming_from):
+        if atom.GetIdx() in chain_atoms:
+            return
+        chain_atoms.add(atom.GetIdx())
+        for nbr in atom.GetNeighbors():
+            # Only traverse if the neighbor is a carbon and is not the atom we came from.
+            if nbr.GetAtomicNum() == 6 and nbr.GetIdx() != coming_from:
+                dfs(nbr, atom.GetIdx())
+    dfs(alpha, acid_carbon_idx)
+    
+    # For a fatty acid, the acyl chain should be non-trivial.
+    if len(chain_atoms) < 3:
+        return False, f"Acyl chain too short (only {len(chain_atoms)} carbon(s) found beyond the acid group)"
+    
+    # Now count carbon–carbon unsaturation bonds (double or triple) within the acyl chain.
+    unsaturation_count = 0
+    # For every bond in the molecule, if both atoms are in the chain_atoms set then
+    # check if that bond is a double or triple bond.
+    for bond in mol.GetBonds():
+        a1 = bond.GetBeginAtom().GetIdx()
+        a2 = bond.GetEndAtom().GetIdx()
+        if a1 in chain_atoms and a2 in chain_atoms:
+            btype = bond.GetBondType()
+            if btype in (Chem.rdchem.BondType.DOUBLE, Chem.rdchem.BondType.TRIPLE):
+                unsaturation_count += 1
+                
+    if unsaturation_count != 1:
+        return False, f"Found {unsaturation_count} carbon–carbon unsaturation(s) in the acyl chain; need exactly one"
+    
+    return True, "Molecule contains one terminal carboxylic acid group and an acyl chain with exactly one carbon–carbon unsaturation, qualifying as a monounsaturated fatty acid"
 
-# Example usage (uncomment to test a few examples):
-# examples = [
-#     ("CC(C)=CC(O)=O", "3-methylbut-2-enoic acid"),
-#     ("OCCCCCCCCCCCCCCC\\C=C\\C(O)=O", "(2E)-18-hydroxyoctadec-2-enoic acid"),
-#     ("CCCCCC\\C=C\\CCCCCCCCCC(O)=O", "trans-vaccenic acid"),
-#     ("OC(=O)CCCC/C=C/CC", "(2E)-oct-2-enoic acid")
-# ]
-# for smi, name in examples:
-#     result, reason = is_monounsaturated_fatty_acid(smi)
-#     print(name, "->", result, reason)
+# Uncomment the lines below to run a quick test on one of the provided examples.
+# example_smiles = "CCCCCC\\C=C\\CCCCCCCCCC(O)=O"  # trans-vaccenic acid
+# result, reason = is_monounsaturated_fatty_acid(example_smiles)
+# print(result, reason)
