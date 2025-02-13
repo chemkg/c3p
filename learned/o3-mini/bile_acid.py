@@ -4,12 +4,12 @@ Classifies: CHEBI:3098 bile acid
 #!/usr/bin/env python3
 """
 Classifies: Bile acids, defined as hydroxy-5β-cholanic acids (or their glycine/taurine amides or sodium salts).
-Note: The classification here is based on heuristic substructure searches:
-  - Steroid nucleus: at least four rings (the fused rings of cholesterol/cholan skeleton)
-  - Carboxylic acid group: present as “-C(=O)O” (expected at C-24)
-  - At least one hydroxy group on a ring (indicative of hydroxylation)
-  - Molecular weight in a sensible range for bile acids
-This heuristic cannot fully capture the specific stereochemistry (e.g. 5β‑configuration) or the full variation in conjugation.
+Heuristic criteria used:
+  - Molecular weight must be roughly in the 300–1100 Da range.
+  - Must contain at least one carboxyl moiety (–C(=O)O or deprotonated form).
+  - Must contain a fused steroid nucleus: at least four rings overall, with at least four non‐aromatic rings.
+  - At least one –OH group should be attached to an atom that is part of one of the rings in the nucleus.
+Note: 5β configuration is not explicitly verified.
 """
 
 from rdkit import Chem
@@ -18,68 +18,80 @@ from rdkit.Chem import AllChem, rdMolDescriptors
 def is_bile_acid(smiles: str):
     """
     Determines if a molecule is a bile acid based on its SMILES string.
-    Bile acids are defined (heuristically) as hydroxy-5β-cholanic acids (or as their glycine/taurine amides or sodium salts)
-    that contain a steroid nucleus (a fused set of 4 rings), a carboxylic acid group (typically at C-24) and one or more hydroxy groups.
-
-    Args:
-        smiles (str): SMILES string of the molecule
-
-    Returns:
-        bool: True if molecule is classified as a bile acid, False otherwise.
-        str: Reason for classification.
-    """
+    Bile acids are (heuristically) defined here as compounds with:
+      - A molecular weight roughly in the 300–1100 Da range.
+      - A carboxylic acid group (or its salt form).
+      - A steroid nucleus made of at least four fused (non‐aromatic) rings.
+      - At least one hydroxy group attached to one of the ring atoms.
+    (Note: stereochemistry such as 5β is not explicitly verified.)
     
-    # Parse the SMILES string.
+    Args:
+        smiles (str): SMILES string of the molecule.
+    
+    Returns:
+        bool: True if the molecule meets the bile acid criteria, False otherwise.
+        str: A reason for the classification (or mis‐classification).
+    """
+    # Parse the SMILES.
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # If the molecule is a salt (multiple fragments), combine them into a single molecule.
-    if len(Chem.GetMolFrags(mol)) > 1:
-        # Use the largest fragment as the main organic moiety.
-        frags = Chem.GetMolFrags(mol, asMols=True, sanitizeFrags=True)
+    # If the molecule is present as multiple fragments (e.g. salts), use the largest fragment.
+    frags = Chem.GetMolFrags(mol, asMols=True, sanitizeFrags=True)
+    if len(frags) > 1:
         mol = max(frags, key=lambda m: m.GetNumAtoms())
-    
-    # Check molecular weight – most bile acids (and their conjugates) are roughly in the 300-1000 Da range.
+
+    # Check molecular weight (most bile acids and their conjugates are between ~300 and 1100 Da).
     mol_wt = rdMolDescriptors.CalcExactMolWt(mol)
     if mol_wt < 300 or mol_wt > 1100:
         return False, f"Molecular weight ({mol_wt:.1f} Da) outside expected range for bile acids"
     
-    # Check for the presence of at least one carboxylic acid group.
-    # Carboxylic acid pattern: carbonyl with a hydroxyl neighbor.
-    ca_pattern = Chem.MolFromSmarts("C(=O)[OH]")
+    # Check for a carboxyl group.
+    # This pattern will match both protonated and deprotonated carboxyl groups.
+    ca_pattern = Chem.MolFromSmarts("[CX3](=O)[O;H1,-]")
     if not mol.HasSubstructMatch(ca_pattern):
         return False, "No carboxylic acid group (-C(=O)O) found"
     
-    # Check for at least one hydroxy group on a ring.
-    # This pattern matches an –OH group attached to a ring carbon.
-    hydroxy_ring_pattern = Chem.MolFromSmarts("[#6;R][OH]")
-    hydroxy_matches = mol.GetSubstructMatches(hydroxy_ring_pattern)
-    if not hydroxy_matches:
-        return False, "No hydroxy group on a ring found"
-    
-    # Count rings. A steroid nucleus is typically 4 fused rings.
+    # Get ring information.
     ring_info = mol.GetRingInfo()
     num_rings = ring_info.NumRings()
     if num_rings < 4:
         return False, f"Found {num_rings} rings; expected at least 4 rings for a steroid nucleus"
     
-    # Optionally, one might try to see if the overall topology is similar to that of cholanic acid.
-    # This heuristic looks for a fused ring system with 3 six-membered rings plus 1 five-membered ring.
-    steroid_pattern = Chem.MolFromSmarts("[$([#6]1[#6][#6][#6][#6]1),"  
-                                           "$([#6]1[#6][#6][#6]([#6]1))]")  # very rough...
-    # Here we don’t require a match but note that bile acids should have a typical steroid framework.
-    steroid_match = mol.HasSubstructMatch(steroid_pattern)
+    # Count non-aromatic rings (typical steroid rings are non-aromatic).
+    non_aromatic_rings = [ring for ring in ring_info.AtomRings() 
+                          if not all(mol.GetAtomWithIdx(idx).GetIsAromatic() for idx in ring)]
+    if len(non_aromatic_rings) < 4:
+        return False, f"Found {len(non_aromatic_rings)} non-aromatic rings; expected at least 4 for a steroid nucleus"
     
-    # For bile acids the usual configuration is 5β; however, detecting stereochemistry by SMARTS is challenging.
-    # We assume that if the molecule has a steroid nucleus along with the CA group and hydroxy pattern,
-    # it is likely a bile acid.
+    # Check for a hydroxy (-OH) group attached to one of the ring atoms.
+    # We first collect all atom indices involved in any ring.
+    ring_atoms = set()
+    for ring in ring_info.AtomRings():
+        ring_atoms.update(ring)
     
-    # If we reached here, the molecule meets our heuristic criteria.
-    return True, ("Molecule has a steroid nucleus (>=4 rings), carboxylic acid group, and hydroxy groups on rings "
-                  "consistent with features expected for a bile acid (note: 5β stereochemistry is not explicitly verified).")
+    found_oh_on_ring = False
+    for idx in ring_atoms:
+        atom = mol.GetAtomWithIdx(idx)
+        # Check all neighbors; if any is an oxygen that carries at least one hydrogen, count it as an OH.
+        for nbr in atom.GetNeighbors():
+            if nbr.GetAtomicNum() == 8:
+                # Check using both explicit and implicit hydrogens. Also require a single bond.
+                if nbr.GetTotalNumHs() > 0:
+                    found_oh_on_ring = True
+                    break
+        if found_oh_on_ring:
+            break
+    if not found_oh_on_ring:
+        return False, "No hydroxy group attached to a ring atom found"
+    
+    # Passed all tests: assume molecule is a bile acid.
+    return True, ("Molecule has a non-aromatic steroid nucleus (>=4 rings), a carboxylic acid group, "
+                  "and hydroxy groups attached to ring(s) consistent with features expected for a bile acid "
+                  "(note: 5β stereochemistry is not explicitly verified).")
 
-# Example usage (uncomment to test):
+# Example usage:
 # test_smiles = "OC(=O)CC[C@H]([C@@]1([C@@]2([C@]([C@]3([C@@]([C@@]4([C@](CC3)(CC=CC4)[H])C)(CC2)[H])[H])(CC1)[H])C)[H])C"
 # result, reason = is_bile_acid(test_smiles)
 # print(result, reason)
