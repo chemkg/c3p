@@ -4,14 +4,15 @@ Classifies: CHEBI:18379 nitrile
 """
 Classifies: nitrile compounds (RC#N)
 A nitrile is defined as a compound featuring a carbon–nitrogen triple bond 
-where the carbon is substituted (i.e. not simply HC#N). The function disqualifies
-nitrile groups that are coordinated to metals (e.g. in salt forms) but accepts any 
-substituent (even heteroatoms) as long as it is not merely an implicit hydrogen.
+where the carbon is substituted (i.e. not simply HC#N). This version converts 
+all implicit hydrogens into explicit ones so that the degree of the nitrile carbon 
+is counted correctly. A nitrile group is accepted only if on the nitrile carbon, 
+besides the nitrile nitrogen, there is a neighbor that is neither hydrogen nor a metal.
 """
 
 from rdkit import Chem
 
-# Define a set of common metal symbols to filter out metal-bound nitriles.
+# Set of metal symbols that, if attached to a nitrile carbon, cause us to reject that group.
 metal_symbols = {
     "Li", "Be", "Na", "Mg", "Al", "K", "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe",
     "Co", "Ni", "Cu", "Zn", "Ga", "Rb", "Sr", "Y", "Zr", "Nb", "Mo", "Tc", "Ru",
@@ -23,67 +24,89 @@ metal_symbols = {
 
 def is_nitrile(smiles: str):
     """
-    Determines if a molecule is a nitrile based on its SMILES string.
-    A nitrile should contain at least one triple-bonded C#N group where the carbon is substituted.
-    To be considered substituted, the nitrile carbon must have at least one additional explicit neighbor
-    (i.e. a bond other than the one to the nitrile nitrogen). Also, if this additional neighbor is a metal,
-    the group is not counted, as metals (or ionic compounds) are outside our target organic class.
-
+    Determines if a molecule is a substituted nitrile (RC#N) based on its SMILES string.
+    
+    The method adds explicit hydrogens so we can reliably count bonds. Then,
+    for every bond that is a triple bond connecting a carbon and a nitrogen, 
+    it checks if the carbon has exactly two neighbors (once H's are explicit) and if 
+    its non-nitrogen neighbor is not a hydrogen or a metal. Only such groups are accepted.
+    
     Args:
         smiles (str): SMILES string of the molecule.
-
+        
     Returns:
-        bool: True if the molecule is classified as a nitrile (contains at least one appropriate substituted nitrile group),
-              False otherwise.
-        str: Explanation of the reasoning and results.
+        bool: True if the molecule contains at least one valid substituted nitrile group.
+        str: An explanation for the classification decision.
     """
-    # Parse the SMILES string, return error if invalid.
+    # Parse the SMILES
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
-    # Define the basic nitrile SMARTS pattern (a carbon triple-bonded to nitrogen).
-    nitrile_pattern = Chem.MolFromSmarts("[C]#[N]")
-    nitrile_matches = mol.GetSubstructMatches(nitrile_pattern)
-    if not nitrile_matches:
-        return False, "No nitrile (C#N) functional group found"
+    # Add explicit hydrogens so that we can properly count the bonds at nitrile carbons.
+    mol = Chem.AddHs(mol)
     
-    # Check each nitrile match.
-    for match in nitrile_matches:
-        # match[0] is the nitrile carbon; match[1] is the nitrile nitrogen.
-        nitrile_c = mol.GetAtomWithIdx(match[0])
-        nitrile_n = mol.GetAtomWithIdx(match[1])
-        
-        # Get the list of explicit neighbors of the nitrile carbon.
-        # Note: RDKit does not count implicit hydrogens.
-        neighbors = nitrile_c.GetNeighbors()
-        # In an unsubstituted nitrile (HC#N), the nitrile carbon would have only one neighbor: the nitrile N.
-        if len(neighbors) <= 1:
-            # This nitrile is effectively HCN.
-            continue
-        
-        # Identify the substituent neighbor(s) other than the nitrile nitrogen.
-        # We permit any neighbor (even if heteroatom) as long as it is not a metal.
-        valid_substituent_found = False
-        for nb in neighbors:
-            # Skip the nitrile nitrogen.
-            if nb.GetIdx() == nitrile_n.GetIdx():
+    valid_nitrile_found = False
+    # Iterate over all bonds in the molecule.
+    for bond in mol.GetBonds():
+        # Look for triple bonds.
+        if bond.GetBondType() == Chem.BondType.TRIPLE:
+            # Identify the two atoms.
+            atom1 = bond.GetBeginAtom()
+            atom2 = bond.GetEndAtom()
+            # We want one atom to be carbon and the other to be nitrogen.
+            if (atom1.GetSymbol() == "C" and atom2.GetSymbol() == "N"):
+                nitrile_c = atom1
+                nitrile_n = atom2
+            elif (atom2.GetSymbol() == "C" and atom1.GetSymbol() == "N"):
+                nitrile_c = atom2
+                nitrile_n = atom1
+            else:
+                continue  # not a C#N group
+            
+            # For a proper nitrile the C should be sp-hybridized with exactly 2 neighbors.
+            # (One neighbor is the nitrile N, and the other should be the substituent.)
+            if nitrile_c.GetDegree() != 2:
                 continue
-            # Check if the neighbor is a metal.
-            if nb.GetSymbol() in metal_symbols:
+            
+            # Get all neighbors of the nitrile carbon.
+            neighbors = nitrile_c.GetNeighbors()
+            # Identify the neighbor that is not the nitrile nitrogen.
+            substituent = None
+            for nb in neighbors:
+                if nb.GetIdx() == nitrile_n.GetIdx():
+                    continue
+                substituent = nb
+                break
+                
+            # If for some reason there is no substituent, skip.
+            if substituent is None:
                 continue
-            # If we find at least one non-metal neighbor (explicitly represented) then the nitrile carbon is substituted.
-            valid_substituent_found = True
-            break
-        
-        if valid_substituent_found:
+            
+            # If the substituent atom is hydrogen, then this is just HC#N.
+            if substituent.GetAtomicNum() == 1:
+                continue
+            
+            # If the substituent atom is a metal, then reject this nitrile group.
+            if substituent.GetSymbol() in metal_symbols:
+                continue
+            
+            # If we reach here, we have a nitrile carbon (C#N) where the nitrile carbon
+            # has a substituent (other than a hydrogen or metal). This is classified as RC#N.
+            valid_nitrile_found = True
             return True, "Molecule contains a substituted nitrile group (RC#N)"
     
-    # If none of the nitrile matches met the requirement, then only unsubstituted nitrile or metal-bound nitrile was found.
-    return False, "Only unsubstituted nitrile group(s) (HC#N) found; no C-substituted nitrile group present"
+    # If no valid nitrile groups were found.
+    return False, "No substituted nitrile group (RC#N) found; only HCN-like or metal‐bound nitrile(s) detected"
 
-# Example usage (can be removed):
+# Example usage:
 if __name__ == "__main__":
-    test_smiles = "CC#N"  # Acetonitrile, a valid nitrile.
-    result, reason = is_nitrile(test_smiles)
-    print(test_smiles, result, reason)
+    # Test some SMILES strings:
+    test_smiles_list = [
+        "CC#N",                    # acetonitrile (valid nitrile)
+        "N#C[Fe]C#N",              # iron dicyanide (should not be counted)
+        "C#N",                     # hydrogen cyanide (invalid as not substituted)
+    ]
+    for smi in test_smiles_list:
+        result, reason = is_nitrile(smi)
+        print(f"{smi}: {result} -- {reason}")
