@@ -3,78 +3,88 @@ Classifies: CHEBI:36615 triterpenoid
 """
 """
 Classifies: Triterpenoid
-Definition: Any terpenoid derived from a triterpene. The term includes compounds in which the C30 
-skeleton of the parent triterpene has been rearranged or modified by the removal of one or more 
-skeletal atoms (generally methyl groups). Because many triterpenoids bear sugars or other decorations, 
-this heuristic:
-  (1) removes common sugar motifs,
-  (2) finds the largest fused ring system, and
-  (3) checks that its carbon count and connectivity approximate that expected from a modified 
-      triterpene.
-Heuristics used:
-   - Molecule must parse and contain rings.
-   - Optionally remove sugar moieties (detected by a simple pyranose SMARTS).
-   - The largest connected (fused) ring cluster must contain at least 4 rings.
-   - The “core” carbon count from that cluster is accepted if it lies between a more relaxed range 
-     (here we allow between ~15 and 40 carbons, to cover modified/rearranged cases).
-   - Additionally, we require that the fused core represents a sufficiently high fraction 
-     of the total carbons (here at least 35%).
-Note: This is a heuristic and will mis‐classify some genuine triterpenoids and may accept some 
-non-triterpenoids.
+
+Definition: Any terpenoid derived from a triterpene. In our heuristic we first
+remove likely sugar (glycoside) moieties using a simple SMARTS, then we identify
+the largest fused ring system. We require that the overall aglycone has a total carbon
+count between 25 and 70. For the fused core we require it to contain at least 3 rings.
+If exactly 3 fused rings are present we demand that the core’s carbon fraction (number
+of carbons in the fused core divided by the total carbon count of the aglycone) is at least 50%
+(and at least 35% if 4 or more rings). Finally, we check that the raw core carbon count
+lies between 15 and 40. (These heuristics are not perfect but are designed to improve
+the previous version.)
 """
 from rdkit import Chem
 
 def is_triterpenoid(smiles: str):
     """
-    Determines if the molecule is a triterpenoid using heuristic rules.
+    Determines if a molecule is a triterpenoid using heuristic rules.
+    
+    Steps:
+      1. Parse the SMILES and count total carbons.
+         Reject if the overall carbon count (on the aglycone) is outside a chosen range.
+      2. Attempt to remove sugar moieties using a simple pyranose SMARTS.
+      3. Identify all rings and then build a graph connecting rings that share atoms.
+      4. Determine the largest fused ring cluster.
+      5. Count the number of rings in the cluster and gather all atoms in it.
+      6. Count the number of carbons in the fused core and compute the ratio relative to the total.
+      7. Accept the aglycone if:
+           - Total carbons is between 25 and 70,
+           - The fused ring system has ≥3 rings,
+           - The core carbon count is between 15 and 40, and
+           - The ratio of core carbons to total carbons is at least 0.50 when there are only 3 rings,
+             or at least 0.35 when there are 4 or more rings.
     
     Args:
         smiles (str): SMILES string of the molecule.
     
     Returns:
-        bool: True if the molecule is classified as a triterpenoid, False otherwise.
-        str: Explanation of the result.
+        bool: True if classified as a triterpenoid, False otherwise.
+        str: Explanation of the decision.
     """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-
+    
     # Count total carbons in the molecule.
     total_carbons = sum(1 for atom in mol.GetAtoms() if atom.GetAtomicNum() == 6)
-    if total_carbons < 27:
+    if total_carbons < 25:
         return False, f"Total carbon count ({total_carbons}) is too low to be a triterpenoid"
-
-    # --- Pre-process: try to remove sugar moieties ---
-    # (common sugars often are 6-membered rings with 5 carbons/1 oxygen; this simple SMARTS 
-    # may catch many glycosides)
-    sugar_smarts = "[C;R6][O;R6][C;R6]([O;R6])[C;R6]([O;R6])[C;R6]1" 
-    sugar_mol = Chem.MolFromSmarts(sugar_smarts)
-    if sugar_mol is not None:
-        aglycone = Chem.DeleteSubstructs(mol, sugar_mol) 
-        # Chem.DeleteSubstructs returns a Mol that might be disconnected.
+    if total_carbons > 70:
+        return False, f"Total carbon count ({total_carbons}) is too high to be a triterpenoid"
+    
+    # --- Pre-process: remove likely sugar moieties ---
+    # Here we use a simple SMARTS that should catch many common pyranose-like sugar rings.
+    sugar_smarts = "[OX2H][CX4]([OX2H])[CX4]([OX2H])[CX4]([OX2H])C"  # a very rough pattern
+    sugar_query = Chem.MolFromSmarts(sugar_smarts)
+    if sugar_query is not None:
+        # Delete substructures that match the sugar pattern.
+        aglycone = Chem.DeleteSubstructs(mol, sugar_query)
         aglycone = Chem.RemoveHs(aglycone)
     else:
         aglycone = mol
 
-    # Use the aglycone for fused ring system analysis.
-    target = aglycone
-
-    # Look for rings in the target molecule.
-    ring_info = target.GetRingInfo()
+    # Use the aglycone for further analysis and recalc total carbons using aglycone.
+    total_carbons = sum(1 for atom in aglycone.GetAtoms() if atom.GetAtomicNum() == 6)
+    if total_carbons < 25 or total_carbons > 70:
+        return False, f"After sugar removal, total carbon count ({total_carbons}) is not within acceptable range (25-70)"
+    
+    # --- Identify fused ring systems ---
+    ring_info = aglycone.GetRingInfo()
     rings = ring_info.AtomRings()
     if not rings:
         return False, "No rings detected in the (aglycone) molecule"
-
-    # Build a graph where each node is a ring (by its index in rings)
-    # Two rings are adjacent if they share at least one atom.
+    
+    # Build a graph where each node is a ring (indexed by its position in 'rings')
+    # Two rings are connected if they share at least one atom.
     ring_graph = {i: set() for i in range(len(rings))}
     for i in range(len(rings)):
         for j in range(i+1, len(rings)):
             if set(rings[i]).intersection(rings[j]):
                 ring_graph[i].add(j)
                 ring_graph[j].add(i)
-                
-    # Identify connected components (each is a fused ring system)
+    
+    # Identify connected components (each represents a fused ring system)
     visited = set()
     components = []
     for i in range(len(rings)):
@@ -89,12 +99,11 @@ def is_triterpenoid(smiles: str):
                     stack.extend(ring_graph[node] - visited)
             components.append(comp)
     
-    # Identify largest fused ring cluster (by number of rings).
+    # Identify the largest fused ring cluster
     largest_component = max(components, key=lambda comp: len(comp))
-    
-    # Require that the fused ring system has at least 4 rings.
-    if len(largest_component) < 4:
-        return False, f"The largest fused ring system consists of only {len(largest_component)} rings; expected at least 4 for a triterpene core"
+    num_rings = len(largest_component)
+    if num_rings < 3:
+        return False, f"The largest fused ring system consists of only {num_rings} ring(s); expected at least 3 for a triterpenoid core"
     
     # Gather all atom indices in the fused ring core.
     core_atom_indices = set()
@@ -102,24 +111,26 @@ def is_triterpenoid(smiles: str):
         core_atom_indices.update(rings[ring_idx])
     
     # Count number of carbons in the fused core.
-    core_carbons = sum(1 for idx in core_atom_indices if target.GetAtomWithIdx(idx).GetAtomicNum() == 6)
-    core_total_atoms = len(core_atom_indices)
+    core_carbons = sum(1 for idx in core_atom_indices if aglycone.GetAtomWithIdx(idx).GetAtomicNum() == 6)
     
-    # Heuristic: even when modified, the core (aglycone) should have a carbon count not too far from 30.
-    # Here we relax the lower bound to 15 and upper bound to 40.
+    # Check that the core carbon count is in a plausible range.
     if core_carbons < 15 or core_carbons > 40:
-        return False, f"Fused ring system core has {core_carbons} carbons, which is not within the acceptable range (15-40) for a triterpene core"
+        return False, f"Fused ring system core has {core_carbons} carbons, which is not within the acceptable range (15-40)"
     
-    # Also require that the fused core represents a decent fraction of the overall carbons.
+    # Compute the fraction of (aglycone) carbons that are in the fused core.
     ratio = core_carbons / total_carbons
-    if ratio < 0.35:
-        return False, f"Core carbon fraction ({ratio:.2f}) is too low relative to total carbons ({total_carbons})"
+    # Apply a tighter ratio requirement if the fused system has only 3 rings.
+    if num_rings == 3 and ratio < 0.50:
+        return False, f"Core carbon fraction ({ratio:.2f}) is too low (need at least 0.50 for a 3-ring system) relative to total carbons ({total_carbons})"
+    elif num_rings >= 4 and ratio < 0.35:
+        return False, f"Core carbon fraction ({ratio:.2f}) is too low (need at least 0.35 for a {num_rings}-ring system) relative to total carbons ({total_carbons})"
     
-    return True, f"Found triterpene core with {core_carbons} carbons in a fused ring system of {len(largest_component)} rings (total carbons = {total_carbons}, core ratio = {ratio:.2f})"
+    return True, (f"Found triterpene core with {core_carbons} carbons in a fused ring system of {num_rings} rings "
+                  f"(total carbons = {total_carbons}, core ratio = {ratio:.2f})")
 
 # Example usage:
 if __name__ == "__main__":
-    # You can test with one of the provided examples.
+    # Test with one of the provided triterpenoid examples (e.g. Neoruscogenin)
     test_smiles = "O1[C@@]2([C@@]([C@@]3([C@]([C@]4([C@](CC3)([C@@]5(C(=CC4)C[C@@H](O)C[C@H]5O)C)[H])[H])(C2)[H])C)([C@@H]([C@]16OCC(CC6)=C)C)[H])[H]"
     result, reason = is_triterpenoid(test_smiles)
     print(result, reason)
