@@ -11,54 +11,57 @@ from rdkit.Chem import AllChem, rdMolDescriptors
 def is_monoacyl_sn_glycerol_3_phosphate(smiles: str):
     """
     Determines if a molecule is a monoacyl-sn-glycerol 3-phosphate based on its SMILES string.
-    It verifies that:
-      1. The SMILES parses and that the molecule contains exactly one phosphorus atom,
-         typical for a phosphate group.
-      2. There is a glycerol backbone fragment, here heuristically defined as a 3-carbon chain
-         with at least two hydroxyl groups (SMARTS: OCC(O)CO).
-      3. The molecule contains exactly one acyl ester group (an oxygen linked to a carbonyl group)
-         representing the single acyl chain. We search with the pattern "OC(=O)[#6]".
+    The improved criteria are as follows:
+      1. The SMILES string must parse into a valid molecule.
+      2. There must be exactly one phosphorus atom (to indicate a single phosphate group).
+      3. The molecule must contain a glycerol backbone fragment.
+         We use a simple heuristic SMARTS pattern "OCC(O)CO" (ignoring stereochemistry) for that.
+      4. There must be exactly one acyl ester group.
+         We detect this using the SMARTS pattern "OC(=O)[#6]" (an oxygen bonded to a carbonyl and then a carbon).
+      5. The molecule’s exact molecular weight must lie in an expected range (roughly 300–650 Da)
+         for monoacyl-sn-glycerol 3-phosphates.
          
     Args:
         smiles (str): SMILES string of the molecule.
         
     Returns:
         bool: True if the molecule is considered a monoacyl-sn-glycerol 3-phosphate, False otherwise.
-        str: Explanation of the classification decision.
+        str: Explanation for the classification decision.
     """
     # Parse the molecule from the SMILES string
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
-        return False, "Invalid SMILES string"
-        
-    # Check for exactly one phosphorus atom (for the phosphate group)
+        return False, "Invalid SMILES string."
+    
+    # Check that there is exactly one phosphorus atom (for the phosphate group)
     p_atoms = [atom for atom in mol.GetAtoms() if atom.GetAtomicNum() == 15]
     if len(p_atoms) != 1:
         return False, f"Expected exactly one phosphorus atom (phosphate group) but found {len(p_atoms)}."
     
-    # Look for the glycerol backbone.
-    # Here we use a simple heuristic SMARTS pattern for glycerol: a three-carbon chain with two -OH groups
+    # Look for a glycerol backbone fragment.
+    # We use a simple SMARTS pattern for glycerol: a three-carbon chain with two hydroxyl groups.
     glycerol_pattern = Chem.MolFromSmarts("OCC(O)CO")
     if not mol.HasSubstructMatch(glycerol_pattern):
         return False, "Glycerol backbone pattern (OCC(O)CO) not found in molecule."
     
-    # Look for acyl ester group(s)
-    # The pattern "OC(=O)[#6]" is used to find an ester linkage where an oxygen is linked to a carbonyl carbon.
+    # Count acyl ester groups using a SMARTS pattern
+    # "OC(=O)[#6]" should match an ester linkage of an acyl chain.
     acyl_ester_pattern = Chem.MolFromSmarts("OC(=O)[#6]")
     acyl_matches = mol.GetSubstructMatches(acyl_ester_pattern)
     if len(acyl_matches) != 1:
         return False, f"Expected exactly one acyl ester group but found {len(acyl_matches)}."
-        
-    # Optionally, one may include additional checks (molecular weight, rotatable bonds, etc.)
-    # For example, we can check that the molecule weight is in a reasonable range.
-    mol_wt = rdMolDescriptors.CalcExactMolWt(mol)
-    if mol_wt < 250:  # approximate lower limit for such lipids
-        return False, f"Molecular weight {mol_wt:.1f} Da is too low to be a monoacyl-sn-glycerol 3-phosphate."
     
-    return True, "Molecule contains a phosphate group, glycerol backbone, and exactly one acyl ester group."
+    # Check that the molecular weight is within a typical range (300–650 Da)
+    mol_wt = rdMolDescriptors.CalcExactMolWt(mol)
+    if not (300 <= mol_wt <= 650):
+        return False, f"Molecular weight {mol_wt:.1f} Da not in the expected range (300–650 Da) for monoacyl-sn-glycerol 3-phosphate."
+    
+    # If all criteria are met, classify as monoacyl-sn-glycerol 3-phosphate.
+    return True, "Molecule contains one phosphate group, glycerol backbone, and exactly one acyl ester group within the expected molecular weight range."
 
-# Example usage (for testing purposes):
+# Example usage:
 if __name__ == '__main__':
-    test_smiles = "P(OC[C@H](O)COC(=O)CCCCCCCCCCCCCCCCCC)(O)(O)=O"  # 1-nonadecanoyl-glycero-3-phosphate
+    # Test example: 1-nonadecanoyl-glycero-3-phosphate
+    test_smiles = "P(OC[C@H](O)COC(=O)CCCCCCCCCCCCCCCCCC)(O)(O)=O"
     result, reason = is_monoacyl_sn_glycerol_3_phosphate(test_smiles)
     print(result, "->", reason)
