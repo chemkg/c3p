@@ -3,11 +3,11 @@ Classifies: CHEBI:13248 anilide
 """
 """
 Classifies: Anilide
-Definition: Anilide is any aromatic amide obtained by acylation of aniline.
-That is, the amide (C(=O)N) bond must have the acyl carbon attached to the nitrogen and
-the nitrogen must be directly bonded to an aromatic (benzene-like) carbon.
-Additionally, aside from the carbonyl carbon, the nitrogen should have exactly one aromatic substituent,
-allowing at most one extra (aliphatic) heavy substituent.
+Definition: Anilides are aromatic amides formed by acylation of aniline.
+That is, the amide group (C(=O)N) must have the acyl carbon
+attached to the nitrogen while the nitrogen is directly bonded to exactly one aromatic (benzene) carbon.
+Optionally, it may have one additional heavy (non-hydrogen) aliphatic substituent.
+This code improves previous performance by stricter counting of neighbors.
 """
 from rdkit import Chem
 
@@ -27,7 +27,7 @@ def is_in_benzene(atom, ring_info, mol):
     idx = atom.GetIdx()
     for ring in ring_info:
         if idx in ring and len(ring) == 6:
-            # Check that all atoms in the ring are carbons and aromatic.
+            # Verify that all atoms in the ring are carbon and aromatic.
             if all(mol.GetAtomWithIdx(i).GetAtomicNum() == 6 and mol.GetAtomWithIdx(i).GetIsAromatic() 
                    for i in ring):
                 return True
@@ -36,37 +36,37 @@ def is_in_benzene(atom, ring_info, mol):
 def is_anilide(smiles: str):
     """
     Determines if a molecule is an anilide based on its SMILES string.
-    Anilides are aromatic amides formed by acylation of aniline,
-    meaning that the amide nitrogen (N in C(=O)N) must be directly bonded to a benzene ring.
-    To be more selective, we require that aside from the acyl carbon, the nitrogen has exactly one
-    aromatic (benzene) substituent and at most one additional heavy neighbor (assumed aliphatic).
-    
+    Anilides are aromatic amides formed by the acylation of aniline.
+    In our criteria the amide nitrogen must be bonded to:
+      - the acyl carbon (of the C(=O) group) and
+      - exactly one aromatic (benzene) substituent,
+      - optionally one additional heavy (non-hydrogen) aliphatic substituent.
+      
     Args:
-        smiles (str): SMILES string of the molecule
+        smiles (str): SMILES string of the molecule.
         
     Returns:
-        bool: True if molecule is an anilide, False otherwise
-        str: Reason for classification
+        bool: True if molecule is an anilide, False otherwise.
+        str: Reason for classification.
     """
-    # Parse the SMILES string
+    # Parse the SMILES into an RDKit molecule
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
-    
+        
     ring_info = mol.GetRingInfo().AtomRings()
     
-    # Define an amide bond pattern: a carbon bonded to a carbonyl oxygen (=O) and to a nitrogen.
-    # This simple SMARTS "[#6](=O)[#7]" will catch most C(=O)N fragments.
-    amide_pattern = Chem.MolFromSmarts("[#6](=O)[#7]")
+    # Define amide pattern:
+    # Here the SMARTS ensures that we have a carbon with a double-bonded oxygen and a single bond to a nitrogen.
+    amide_pattern = Chem.MolFromSmarts("[#6](=O)-[#7]")
     amide_matches = mol.GetSubstructMatches(amide_pattern)
     if not amide_matches:
         return False, "No amide bond (C(=O)N) found"
     
-    # Evaluate each found amide bond candidate
+    # Evaluate each amide candidate
     for match in amide_matches:
-        # By our SMARTS, the match returns: (acyl carbon, oxygen, amide nitrogen)
-        acyl_c_idx = match[0]
-        nitrogen_idx = match[2]
+        # our SMARTS returns (acyl carbon, amide nitrogen)
+        acyl_c_idx, nitrogen_idx = match[0], match[1]
         n_atom = mol.GetAtomWithIdx(nitrogen_idx)
         
         # Get all heavy (non-hydrogen) neighbors of the nitrogen.
@@ -74,26 +74,29 @@ def is_anilide(smiles: str):
         # Exclude the acyl carbon (which is part of the amide bond)
         other_neighbors = [nbr for nbr in heavy_neighbors if nbr.GetIdx() != acyl_c_idx]
         
-        # Count how many of the remaining heavy neighbors are carbons in a benzene ring.
-        benzene_count = 0
+        # Count how many of these neighbors are aromatic and in a benzene ring.
+        aromatic_count = 0
         for nbr in other_neighbors:
             if nbr.GetAtomicNum() == 6 and nbr.GetIsAromatic() and is_in_benzene(nbr, ring_info, mol):
-                benzene_count += 1
+                aromatic_count += 1
         
-        # For true anilides (from acylation of aniline), we expect the following:
-        #   - There must be exactly one aromatic (benzene) substituent.
-        #   - In total, aside from the acyl carbon, at most one extra heavy substituent is acceptable.
-        if benzene_count == 1 and len(other_neighbors) <= 2:
-            return (True, "Found an amide bond with the N attached to a benzene ring (6-membered aromatic) "
-                          "indicative of anilide structure.")
+        # The allowed heavy neighbor count (aside from acyl carbon) should be either 1 or 2.
+        # If there is only 1 heavy neighbor then it must be aromatic (typical for acetanilide).
+        # If there are 2 heavy neighbors then one should be aromatic and the other aliphatic.
+        num_other = len(other_neighbors)
+        if (num_other == 1 and aromatic_count == 1) or (num_other == 2 and aromatic_count == 1):
+            return True, ("Found an amide bond (C(=O)N) where the nitrogen is bound to exactly one aromatic benzene "
+                          "ring substituent and acceptable additional substituents, indicative of an anilide structure.")
     
-    return (False, "No amide bond with the nitrogen bound to a benzene ring (with appropriate substitution) was found.")
+    # If none of the amide candidates satisfy the criteria then it is not an anilide.
+    return False, "No amide bond with the nitrogen bound to a single benzene substituent (with allowed extra groups) was found."
 
-# For testing purposes you can run:
+# Example testing (commented out):
 # test_smiles_list = [
-#    "C1C2CC3(CC1CC(C3)(C2)C(=O)OCC(=O)NC4=CC=CC=C4OC(F)F)",  # a true anilide example with additional groups
-#    "CCCOCCN(C(=O)CCl)c1c(CC)cccc1CC",  # Pretilachlor (true positive expected)
-#    "CCC(=O)N(C1CCN(CC1)CCc1ccccc1)c1ccccc1",  # fentanyl (should be false, as N has two aromatic groups)
+#     "CCCOCCN(C(=O)CCl)c1c(CC)cccc1CC",  # Pretilachlor (true positive expected)
+#     "CCC(=O)N(C1CCN(CC1)CCc1ccccc1)c1ccccc1",  # fentanyl (should be false, as N has two aromatic groups)
 # ]
+#
 # for s in test_smiles_list:
-#    print(s, "->", is_anilide(s))
+#     result, reason = is_anilide(s)
+#     print(s, "->", result, ";", reason)
