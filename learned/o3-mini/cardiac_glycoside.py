@@ -6,46 +6,45 @@ Classifies: Cardiac glycoside
 Definition: Steroid lactones containing sugar residues that act on the contractile force of the cardiac muscles.
 
 Heuristic approach:
-  1. Detect a steroid nucleus by looking for a fused ring system composed of ≥4 rings that share at least 2 atoms.
-     When found, store the union of the atom indices of these rings for later connection checks.
-  2. Detect a lactone (butenolide) ring by scanning for a 5‐membered ring (ring size 5) that contains at least one oxygen atom and 
-     at least one carbon in that ring that is connected via a double bond to an external oxygen (C=O).
-  3. Detect a sugar residue by scanning for rings of size 5 or 6 that have exactly one ring oxygen and at least 2 exocyclic –OH groups.
-     In addition, at least one atom of the candidate sugar ring must be directly attached (via any bond) to an atom of the steroid nucleus.
+  1. Detect a steroid nucleus by checking for a fused ring system of 4 or more rings.
+  2. Detect a lactone (butenolide) ring by scanning 5-membered rings for a ring oxygen and 
+     a carbon (in the ring) that bears an external carbonyl (C=O) double bond.
+  3. Detect a sugar residue by scanning rings of size 5 or 6 that have one ring oxygen and at least
+     two hydroxyl (-OH) substituents on the ring atoms.
      
-Note: This is a heuristic approach. It does not guarantee perfect discrimination between cardiac glycosides and other molecules.
+Note: This is a heuristic approach. The code does not guarantee perfect accuracy.
 """
 
 from rdkit import Chem
 
 def is_cardiac_glycoside(smiles: str):
     """
-    Determines if a molecule qualifies as a cardiac glycoside based on its SMILES string.
+    Determines if a molecule is a cardiac glycoside based on its SMILES string.
+    Cardiac glycosides are defined as steroid lactones containing sugar residues.
     
     Heuristic criteria:
-      (1) A steroid nucleus: a set of ≥4 fused rings (fused means sharing at least 2 atoms). 
-          The atoms comprising that fused system are stored.
-      (2) A lactone ring: a 5-membered ring that contains at least one ring oxygen and at least one carbon 
-          (in the ring) that has a double bond to an oxygen outside the ring.
-      (3) At least one sugar residue: a 5- or 6-membered ring that (a) has exactly one ring oxygen,
-          (b) has at least two exocyclic hydroxyl groups attached to ring atoms and (c) is directly attached 
-          to the steroid nucleus.
-    
+      - Steroid nucleus: fused ring system with at least 4 rings that share bonds.
+      - Lactone ring: a 5-membered ring that contains one oxygen and a carbon bearing an external carbonyl.
+      - Sugar residue: at least one ring of size 5 or 6 containing one ring oxygen and having at least two hydroxyl substituents.
+      
     Args:
         smiles (str): SMILES string of the molecule.
     
     Returns:
-        bool: True if the molecule meets all criteria, False otherwise.
-        str: Explanation of the classification decision.
+        bool: True if molecule qualifies as a cardiac glycoside, False otherwise.
+        str: Reason for the classification.
     """
+    
+    # Parse SMILES
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return False, "Invalid SMILES string"
     
+    # ---------------------------
+    # (1) Check for fused steroid nucleus.
+    # We define a steroid nucleus as a set of at least 4 rings that are fused (share at least 2 atoms).
     ring_info = mol.GetRingInfo()
     rings = ring_info.AtomRings()
-    
-    # (1) Check for fused steroid nucleus.
     if len(rings) < 4:
         return False, "Fewer than 4 rings found in molecule; no steroid nucleus."
     
@@ -59,45 +58,45 @@ def is_cardiac_glycoside(smiles: str):
                 adjacency[j].add(i)
     
     visited = set()
-    steroid_nucleus_found = False
-    steroid_atoms = set()
     def dfs(node, comp):
         comp.add(node)
         for neighbor in adjacency[node]:
             if neighbor not in comp:
                 dfs(neighbor, comp)
         return comp
-    
+
+    steroid_nucleus_found = False
     for i in range(n):
         if i not in visited:
             comp = dfs(i, set())
-            # if fused component has at least 4 rings then mark as steroid nucleus
             if len(comp) >= 4:
                 steroid_nucleus_found = True
-                # Collect all atoms in these rings for later sugar attachment check.
-                for ring_idx in comp:
-                    steroid_atoms.update(rings[ring_idx])
                 break
             visited.update(comp)
     if not steroid_nucleus_found:
         return False, "No fused steroid nucleus (≥4 fused rings) detected"
-    
-    # (2) Lactone (butenolide) detection: look for a 5-membered ring that has at least one ring oxygen and a carbon
-    # in the ring that has an external C=O bond.
+
+    # ---------------------------
+    # (2) Check for lactone (butenolide) ring.
+    # We search for 5-membered rings that (a) contain at least one oxygen in the ring,
+    # and (b) have at least one ring carbon that bears a carbonyl double bond (C=O) outside the ring.
     lactone_found = False
     for ring in rings:
-        if len(ring) == 5:
+        if len(ring) == 5:  # look at 5-membered rings
+            # Count oxygen atoms in the ring:
             ring_oxygens = [idx for idx in ring if mol.GetAtomWithIdx(idx).GetAtomicNum() == 8]
             if len(ring_oxygens) < 1:
-                continue
-            # Look for a carbon in ring that is bonded (double bond) to an oxygen not in the ring.
+                continue  # must at least have one oxygen in the ring
+            # Now, check every atom in the ring that is a carbon to see if it is attached (via a double bond)
+            # to an oxygen that is not part of the ring.
             for idx in ring:
                 atom = mol.GetAtomWithIdx(idx)
-                if atom.GetAtomicNum() == 6:  # carbon
+                if atom.GetAtomicNum() == 6:  # carbon atom
                     for bond in atom.GetBonds():
-                        # Check bond double order (approximate by GetBondTypeAsDouble)
+                        # Look for a double bond
                         if bond.GetBondTypeAsDouble() == 2.0:
                             nbr = bond.GetOtherAtom(atom)
+                            # The neighbor should be oxygen and should lie outside the ring.
                             if nbr.GetAtomicNum() == 8 and nbr.GetIdx() not in ring:
                                 lactone_found = True
                                 break
@@ -108,53 +107,45 @@ def is_cardiac_glycoside(smiles: str):
     if not lactone_found:
         return False, "No lactone (butenolide) ring detected"
     
-    # (3) Sugar residue detection.
+    # ---------------------------
+    # (3) Check for sugar residues.
+    # Instead of fixed SMARTS, we now look over rings that are 5 or 6 members in size.
+    # A typical sugar (pyranose or furanose) ring has one oxygen atom in the ring and several hydroxyl groups attached.
     sugar_found = False
     for ring in rings:
         if len(ring) not in (5, 6):
             continue
+        # Count oxygen atoms within the ring:
         ring_atoms = [mol.GetAtomWithIdx(i) for i in ring]
-        # For typical sugars (pyranoses/furanoses) we expect exactly one ring oxygen.
         ring_oxygen_count = sum(1 for atom in ring_atoms if atom.GetAtomicNum() == 8)
+        # For a sugar ring, we expect exactly one ring oxygen.
         if ring_oxygen_count != 1:
             continue
-        
-        # Count exocyclic hydroxyl substituents on the ring atoms.
+        # Now, count the number of hydroxyl substituents on the ring atoms.
+        # We consider a substituent hydroxyl if an atom not in the ring is oxygen and has at least one hydrogen.
         hydroxyl_count = 0
         for atom in ring_atoms:
             for nbr in atom.GetNeighbors():
                 if nbr.GetIdx() not in ring and nbr.GetAtomicNum() == 8:
-                    # Consider it a hydroxyl if the oxygen has at least one hydrogen.
+                    # Use GetTotalNumHs which returns the (implicit + explicit) hydrogen count.
                     if nbr.GetTotalNumHs() > 0:
                         hydroxyl_count += 1
-        # Relax threshold to at least 2 hydroxyl groups.
-        if hydroxyl_count < 2:
-            continue
-        
-        # Additionally, check that the candidate sugar ring is attached to the steroid nucleus.
-        attached_to_steroid = False
-        for idx in ring:
-            atom = mol.GetAtomWithIdx(idx)
-            for nbr in atom.GetNeighbors():
-                if nbr.GetIdx() not in ring and nbr.GetIdx() in steroid_atoms:
-                    attached_to_steroid = True
-                    break
-            if attached_to_steroid:
-                break
-        if attached_to_steroid:
+        # We set a loose threshold that a sugar ring will have at least 2 hydroxyl groups.
+        if hydroxyl_count >= 2:
             sugar_found = True
             break
     if not sugar_found:
-        return False, "No sugar residue (glycosidic moiety) detected that is directly attached to the steroid nucleus"
+        return False, "No sugar residue (glycosidic moiety) detected"
     
-    msg = ("Detected a steroid nucleus (≥4 fused rings), a lactone (butenolide) ring, and at least one sugar residue that is attached "
-           "to the nucleus – criteria for a cardiac glycoside structure.")
+    # If all criteria are met then it is classified as a cardiac glycoside.
+    msg = ("Detected a steroid nucleus (≥4 fused rings), a lactone (butenolide) ring, and "
+           "at least one sugar residue consistent with a cardiac glycoside structure.")
     return True, msg
 
 
 # Example usage:
 if __name__ == "__main__":
-    # Test with one example of a known cardiac glycoside (Erychroside)
+    # Test with one of the provided SMILES (Erychroside).
     test_smiles = "O[C@@]12[C@]3([C@@]([C@@]4([C@](O)(CC3)C[C@@H](O[C@@H]5O[C@@H]([C@@H](O[C@@H]6OC[C@@H](O)[C@H](O)[C@H]6O)[C@@H](O)C5)C)CC4)C=O)(CC[C@@]1([C@H](CC2)C=7COC(=O)C7)C)[H])[H]"
     result, reason = is_cardiac_glycoside(test_smiles)
     print("Is cardiac glycoside?", result)
