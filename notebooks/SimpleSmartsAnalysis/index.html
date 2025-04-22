@@ -1,0 +1,3627 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.11">
+    
+    
+      
+        <title>SimpleSmartsAnalysis - Learning ChEBI Classification Programs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.4af4bdda.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../css/ansi-colours.css">
+    
+      <link rel="stylesheet" href="../../css/jupyter-cells.css">
+    
+      <link rel="stylesheet" href="../../css/pandas-dataframe.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="pink">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Learning ChEBI Classification Programs" class="md-header__button md-logo" aria-label="Learning ChEBI Classification Programs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Learning ChEBI Classification Programs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              SimpleSmartsAnalysis
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="pink"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="blue" data-md-color-accent="amber"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Learning ChEBI Classification Programs" class="md-nav__button md-logo" aria-label="Learning ChEBI Classification Programs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Learning ChEBI Classification Programs
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Methods
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Methods
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../leia/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Learning Algorithm
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../benchmark/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Benchmark
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../chebacr/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Benchmark Evaluation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Results
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Results
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../analysis/programs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Programs
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../analysis/performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Performance
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../analysis/code_analysis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Code Analysis
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../analysis/chebifier/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Chebifier
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_5" id="__nav_3_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Applications
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_5">
+            <span class="md-nav__icon md-icon"></span>
+            Applications
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../analysis/npatlas/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Natural Products
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../analysis/metabolomics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Metabolomics
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_6" id="__nav_3_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Validation
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_6">
+            <span class="md-nav__icon md-icon"></span>
+            Validation
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../analysis/curation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Curated
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_6_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_6_2" id="__nav_3_6_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Terpenoids
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_6_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_6_2">
+            <span class="md-nav__icon md-icon"></span>
+            Terpenoids
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../analysis/terpenoids/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    About
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../analysis/terpenoids_table.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Table
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_7" id="__nav_3_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Ranked Classes
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_7">
+            <span class="md-nav__icon md-icon"></span>
+            Ranked Classes
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../analysis/classes_top.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Top Classes
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../analysis/classes_bottom.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Bottom Classes
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../analysis/classes_all.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    All Classes
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Notebooks
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Notebooks
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Summarize-Benchmark/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Summarize Benchmark
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Metabolights-Overrepresentation-Analysis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Metabolights analysis notebook
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NPAtlas.ipynb" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    NPAtlas analysis notebook
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Run-Chebifier/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Run Chebifier
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Code
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Code
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/datamodel/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Datamodel
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/learn/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Learn
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/classifier/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Classifier
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/extractor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Extractor
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+  <h1>SimpleSmartsAnalysis</h1>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
+<script>
+(function() {
+  function addWidgetsRenderer() {
+    var requireJsScript = document.createElement('script');
+    requireJsScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js';
+
+    var mimeElement = document.querySelector('script[type="application/vnd.jupyter.widget-view+json"]');
+    var jupyterWidgetsScript = document.createElement('script');
+    var widgetRendererSrc = 'https://unpkg.com/@jupyter-widgets/html-manager@*/dist/embed-amd.js';
+    var widgetState;
+
+    // Fallback for older version:
+    try {
+      widgetState = mimeElement && JSON.parse(mimeElement.innerHTML);
+
+      if (widgetState && (widgetState.version_major < 2 || !widgetState.version_major)) {
+        widgetRendererSrc = 'jupyter-js-widgets@*/dist/embed.js';
+      }
+    } catch(e) {}
+
+    jupyterWidgetsScript.src = widgetRendererSrc;
+
+    document.body.appendChild(requireJsScript);
+    document.body.appendChild(jupyterWidgetsScript);
+  }
+
+  document.addEventListener('DOMContentLoaded', addWidgetsRenderer);
+}());
+</script>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">defaultdict</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">oaklib</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_adapter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">semsql.sqla.relation_graph</span><span class="w"> </span><span class="kn">import</span> <span class="n">EntailedEdge</span><span class="p">,</span> <span class="n">RdfsLabelStatement</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sqlalchemy</span><span class="w"> </span><span class="kn">import</span> <span class="n">alias</span>
+
+<span class="n">chebi</span> <span class="o">=</span> <span class="n">get_adapter</span><span class="p">(</span><span class="s2">&quot;sqlite:obo:chebi&quot;</span><span class="p">)</span>
+<span class="n">session</span> <span class="o">=</span> <span class="n">chebi</span><span class="o">.</span><span class="n">session</span>
+</code></pre></div>
+
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="output_text output_subarea">
+<pre>
+<code>Downloading chebi.db.gz: 0.00B [00:00, ?B/s]</code>
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">semsql.sqla.semsql</span><span class="w"> </span><span class="kn">import</span> <span class="n">Statements</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sqlalchemy.orm</span><span class="w"> </span><span class="kn">import</span> <span class="n">aliased</span>
+
+<span class="n">child_label</span> <span class="o">=</span> <span class="n">aliased</span><span class="p">(</span><span class="n">RdfsLabelStatement</span><span class="p">)</span>
+<span class="n">parent_label</span> <span class="o">=</span> <span class="n">aliased</span><span class="p">(</span><span class="n">RdfsLabelStatement</span><span class="p">)</span>
+<span class="n">child_smiles</span> <span class="o">=</span> <span class="n">aliased</span><span class="p">(</span><span class="n">Statements</span><span class="p">)</span>
+<span class="n">parent_smiles</span> <span class="o">=</span> <span class="n">aliased</span><span class="p">(</span><span class="n">Statements</span><span class="p">)</span>
+
+<span class="n">q</span> <span class="o">=</span> <span class="n">session</span><span class="o">.</span><span class="n">query</span><span class="p">(</span>
+    <span class="n">EntailedEdge</span><span class="o">.</span><span class="n">subject</span><span class="p">,</span>
+    <span class="n">EntailedEdge</span><span class="o">.</span><span class="n">object</span><span class="p">,</span>
+    <span class="n">EntailedEdge</span><span class="o">.</span><span class="n">subject</span><span class="o">.</span><span class="n">label</span><span class="p">(</span><span class="s2">&quot;child&quot;</span><span class="p">),</span>
+    <span class="n">EntailedEdge</span><span class="o">.</span><span class="n">object</span><span class="o">.</span><span class="n">label</span><span class="p">(</span><span class="s2">&quot;parent&quot;</span><span class="p">),</span>
+    <span class="n">child_label</span><span class="o">.</span><span class="n">value</span><span class="o">.</span><span class="n">label</span><span class="p">(</span><span class="s2">&quot;child_label&quot;</span><span class="p">),</span>
+    <span class="n">parent_label</span><span class="o">.</span><span class="n">value</span><span class="o">.</span><span class="n">label</span><span class="p">(</span><span class="s2">&quot;parent_label&quot;</span><span class="p">),</span>
+    <span class="n">child_smiles</span><span class="o">.</span><span class="n">value</span><span class="o">.</span><span class="n">label</span><span class="p">(</span><span class="s2">&quot;child_smiles&quot;</span><span class="p">),</span>
+    <span class="n">parent_smiles</span><span class="o">.</span><span class="n">value</span><span class="o">.</span><span class="n">label</span><span class="p">(</span><span class="s2">&quot;parent_smiles&quot;</span><span class="p">),</span>
+<span class="p">)</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+    <span class="n">child_label</span><span class="p">,</span>
+    <span class="n">EntailedEdge</span><span class="o">.</span><span class="n">subject</span> <span class="o">==</span> <span class="n">child_label</span><span class="o">.</span><span class="n">subject</span><span class="p">,</span>
+<span class="p">)</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+    <span class="n">parent_label</span><span class="p">,</span>
+    <span class="n">EntailedEdge</span><span class="o">.</span><span class="n">object</span> <span class="o">==</span> <span class="n">parent_label</span><span class="o">.</span><span class="n">subject</span><span class="p">,</span>
+<span class="p">)</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+    <span class="n">child_smiles</span><span class="p">,</span>
+    <span class="n">EntailedEdge</span><span class="o">.</span><span class="n">subject</span> <span class="o">==</span> <span class="n">child_smiles</span><span class="o">.</span><span class="n">subject</span><span class="p">,</span>
+<span class="p">)</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+    <span class="n">parent_smiles</span><span class="p">,</span>
+    <span class="n">EntailedEdge</span><span class="o">.</span><span class="n">object</span> <span class="o">==</span> <span class="n">parent_smiles</span><span class="o">.</span><span class="n">subject</span><span class="p">,</span>
+<span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+    <span class="n">child_smiles</span><span class="o">.</span><span class="n">predicate</span> <span class="o">==</span> <span class="s2">&quot;obo:chebi/smiles&quot;</span><span class="p">,</span>
+<span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+    <span class="n">parent_smiles</span><span class="o">.</span><span class="n">predicate</span> <span class="o">==</span> <span class="s2">&quot;obo:chebi/smiles&quot;</span><span class="p">,</span>
+<span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+    <span class="n">EntailedEdge</span><span class="o">.</span><span class="n">predicate</span> <span class="o">==</span> <span class="s2">&quot;rdfs:subClassOf&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+
+<span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_sql</span><span class="p">(</span><span class="n">q</span><span class="o">.</span><span class="n">statement</span><span class="p">,</span> <span class="n">session</span><span class="o">.</span><span class="n">bind</span><span class="p">)</span>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">df</span>
+</code></pre></div>
+
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+<thead>
+<tr style="text-align: right;">
+<th></th>
+<th>subject</th>
+<th>object</th>
+<th>child</th>
+<th>parent</th>
+<th>child_label</th>
+<th>parent_label</th>
+<th>child_smiles</th>
+<th>parent_smiles</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>0</th>
+<td>CHEBI:10</td>
+<td>CHEBI:10</td>
+<td>CHEBI:10</td>
+<td>CHEBI:10</td>
+<td>(+)-Atherospermoline</td>
+<td>(+)-Atherospermoline</td>
+<td>COc1cc2CCN(C)[C@H]3Cc4ccc(Oc5cc(C[C@@H]6N(C)CC...</td>
+<td>COc1cc2CCN(C)[C@H]3Cc4ccc(Oc5cc(C[C@@H]6N(C)CC...</td>
+</tr>
+<tr>
+<th>1</th>
+<td>CHEBI:100</td>
+<td>CHEBI:100</td>
+<td>CHEBI:100</td>
+<td>CHEBI:100</td>
+<td>(-)-medicarpin</td>
+<td>(-)-medicarpin</td>
+<td>[H][C@@]12COc3cc(O)ccc3[C@]1([H])Oc1cc(OC)ccc21</td>
+<td>[H][C@@]12COc3cc(O)ccc3[C@]1([H])Oc1cc(OC)ccc21</td>
+</tr>
+<tr>
+<th>2</th>
+<td>CHEBI:100</td>
+<td>CHEBI:16114</td>
+<td>CHEBI:100</td>
+<td>CHEBI:16114</td>
+<td>(-)-medicarpin</td>
+<td>medicarpin</td>
+<td>[H][C@@]12COc3cc(O)ccc3[C@]1([H])Oc1cc(OC)ccc21</td>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+</tr>
+<tr>
+<th>3</th>
+<td>CHEBI:100</td>
+<td>CHEBI:26377</td>
+<td>CHEBI:100</td>
+<td>CHEBI:26377</td>
+<td>(-)-medicarpin</td>
+<td>pterocarpans</td>
+<td>[H][C@@]12COc3cc(O)ccc3[C@]1([H])Oc1cc(OC)ccc21</td>
+<td>[*]c1c([*])c([*])c2c(OC([*])([*])C3([*])c4c([*...</td>
+</tr>
+<tr>
+<th>4</th>
+<td>CHEBI:10000</td>
+<td>CHEBI:10000</td>
+<td>CHEBI:10000</td>
+<td>CHEBI:10000</td>
+<td>Vismione D</td>
+<td>Vismione D</td>
+<td>CC(C)=CCC\C(C)=C\COc1cc(O)c2c(O)c3C(=O)CC(C)(O...</td>
+<td>CC(C)=CCC\C(C)=C\COc1cc(O)c2c(O)c3C(=O)CC(C)(O...</td>
+</tr>
+<tr>
+<th>...</th>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+</tr>
+<tr>
+<th>396276</th>
+<td>CHEBI:99997</td>
+<td>CHEBI:99997</td>
+<td>CHEBI:99997</td>
+<td>CHEBI:99997</td>
+<td>N-[(2S,4aS,12aS)-2-[2-(cyclohexylmethylamino)-...</td>
+<td>N-[(2S,4aS,12aS)-2-[2-(cyclohexylmethylamino)-...</td>
+<td>CN1[C@H]2CC[C@H](O[C@@H]2COC3=C(C1=O)C=C(C=C3)...</td>
+<td>CN1[C@H]2CC[C@H](O[C@@H]2COC3=C(C1=O)C=C(C=C3)...</td>
+</tr>
+<tr>
+<th>396277</th>
+<td>CHEBI:99998</td>
+<td>CHEBI:37622</td>
+<td>CHEBI:99998</td>
+<td>CHEBI:37622</td>
+<td>N-[[(3S,9S,10R)-16-(dimethylamino)-12-[(2S)-1-...</td>
+<td>carboxamide</td>
+<td>C[C@H]1CCCCO[C@@H]([C@@H](CN(C(=O)C2=C(O1)C=CC...</td>
+<td>[*]C(=O)N([*])[*]</td>
+</tr>
+<tr>
+<th>396278</th>
+<td>CHEBI:99998</td>
+<td>CHEBI:99998</td>
+<td>CHEBI:99998</td>
+<td>CHEBI:99998</td>
+<td>N-[[(3S,9S,10R)-16-(dimethylamino)-12-[(2S)-1-...</td>
+<td>N-[[(3S,9S,10R)-16-(dimethylamino)-12-[(2S)-1-...</td>
+<td>C[C@H]1CCCCO[C@@H]([C@@H](CN(C(=O)C2=C(O1)C=CC...</td>
+<td>C[C@H]1CCCCO[C@@H]([C@@H](CN(C(=O)C2=C(O1)C=CC...</td>
+</tr>
+<tr>
+<th>396279</th>
+<td>CHEBI:99999</td>
+<td>CHEBI:37622</td>
+<td>CHEBI:99999</td>
+<td>CHEBI:37622</td>
+<td>N-[(5S,6S,9S)-5-methoxy-3,6,9-trimethyl-2-oxo-...</td>
+<td>carboxamide</td>
+<td>C[C@H]1CN[C@H](COC2=C(C=CC(=C2)NC(=O)C3=NC4=CC...</td>
+<td>[*]C(=O)N([*])[*]</td>
+</tr>
+<tr>
+<th>396280</th>
+<td>CHEBI:99999</td>
+<td>CHEBI:99999</td>
+<td>CHEBI:99999</td>
+<td>CHEBI:99999</td>
+<td>N-[(5S,6S,9S)-5-methoxy-3,6,9-trimethyl-2-oxo-...</td>
+<td>N-[(5S,6S,9S)-5-methoxy-3,6,9-trimethyl-2-oxo-...</td>
+<td>C[C@H]1CN[C@H](COC2=C(C=CC(=C2)NC(=O)C3=NC4=CC...</td>
+<td>C[C@H]1CN[C@H](COC2=C(C=CC(=C2)NC(=O)C3=NC4=CC...</td>
+</tr>
+</tbody>
+</table>
+<p>396281 rows × 8 columns</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">df</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="s2">&quot;smarts-analysis/chebi-ancestor-smiles.csv&quot;</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">cls_id_to_smarts</span> <span class="o">=</span> <span class="p">{</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;parent&quot;</span><span class="p">]:</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;parent_smiles&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">iterrows</span><span class="p">()}</span>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">c3p.datamodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dataset</span>
+
+<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s2">&quot;../results/2025/benchmark/dataset.json&quot;</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+    <span class="n">dataset</span> <span class="o">=</span> <span class="n">Dataset</span><span class="o">.</span><span class="n">model_validate_json</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">())</span>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Set</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">c3p.datamodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChemicalClass</span><span class="p">,</span> <span class="n">Result</span><span class="p">,</span> <span class="n">Outcome</span><span class="p">,</span> <span class="n">EvaluationResult</span><span class="p">,</span> <span class="n">ResultSet</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">rdkit</span><span class="w"> </span><span class="kn">import</span> <span class="n">Chem</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">rdkit</span><span class="w"> </span><span class="kn">import</span> <span class="n">RDLogger</span>
+<span class="n">RDLogger</span><span class="o">.</span><span class="n">DisableLog</span><span class="p">(</span><span class="s1">&#39;rdApp.*&#39;</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">validate_single_class</span><span class="p">(</span><span class="bp">cls</span><span class="p">:</span> <span class="n">ChemicalClass</span><span class="p">,</span> <span class="n">dataset</span><span class="p">:</span> <span class="n">Dataset</span><span class="p">):</span>
+    <span class="k">if</span> <span class="bp">cls</span><span class="o">.</span><span class="n">id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">cls_id_to_smarts</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">smarts</span> <span class="o">=</span> <span class="n">cls_id_to_smarts</span><span class="p">[</span><span class="bp">cls</span><span class="o">.</span><span class="n">id</span><span class="p">]</span>
+    <span class="n">smarts_pattern</span> <span class="o">=</span> <span class="n">Chem</span><span class="o">.</span><span class="n">MolFromSmarts</span><span class="p">(</span><span class="n">smarts</span><span class="p">)</span>
+    <span class="n">cls_lite</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">lite_copy</span><span class="p">()</span>
+    <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">pattern</span> <span class="o">=</span> <span class="n">Chem</span><span class="o">.</span><span class="n">MolFromSmarts</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">{smarts}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">true_positives</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">false_positives</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">true_negatives</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">false_negatives</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">smiles</span> <span class="ow">in</span> <span class="n">dataset</span><span class="o">.</span><span class="n">validation_examples</span><span class="p">:</span>
+        <span class="n">mol</span> <span class="o">=</span> <span class="n">Chem</span><span class="o">.</span><span class="n">MolFromSmiles</span><span class="p">(</span><span class="n">smiles</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">mol</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">false_negatives</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">smiles</span><span class="p">)</span>
+            <span class="k">continue</span>
+        <span class="n">prediction</span> <span class="o">=</span>  <span class="n">mol</span><span class="o">.</span><span class="n">HasSubstructMatch</span><span class="p">(</span><span class="n">smarts_pattern</span><span class="p">)</span>
+        <span class="n">actual</span> <span class="o">=</span> <span class="n">smiles</span> <span class="ow">in</span> <span class="bp">cls</span><span class="o">.</span><span class="n">all_positive_examples</span>
+        <span class="k">if</span> <span class="n">prediction</span> <span class="ow">and</span> <span class="n">actual</span><span class="p">:</span>
+            <span class="n">true_positives</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">smiles</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">prediction</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">actual</span><span class="p">:</span>
+            <span class="n">false_positives</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">smiles</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="n">prediction</span> <span class="ow">and</span> <span class="n">actual</span><span class="p">:</span>
+            <span class="n">false_negatives</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">smiles</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">true_negatives</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">smiles</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">outcomes</span><span class="p">(</span><span class="n">smiles_list</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">]):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">Outcome</span><span class="p">(</span><span class="n">smiles</span><span class="o">=</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">smiles_list</span><span class="p">]</span>
+
+    <span class="n">result</span> <span class="o">=</span> <span class="n">Result</span><span class="p">(</span>
+                <span class="n">chemical_class</span><span class="o">=</span><span class="n">cls_lite</span><span class="p">,</span>
+                <span class="n">code</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+                <span class="n">num_true_positives</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">true_positives</span><span class="p">),</span>
+                <span class="n">num_false_positives</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">false_positives</span><span class="p">),</span>
+                <span class="n">num_false_negatives</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">false_negatives</span><span class="p">),</span>
+                <span class="n">num_true_negatives</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">true_negatives</span><span class="p">),</span>
+                <span class="n">true_positives</span><span class="o">=</span><span class="n">outcomes</span><span class="p">(</span><span class="n">true_positives</span><span class="p">),</span>
+                <span class="n">false_positives</span><span class="o">=</span><span class="n">outcomes</span><span class="p">(</span><span class="n">false_positives</span><span class="p">),</span>
+                <span class="n">sample_true_negatives</span><span class="o">=</span><span class="n">outcomes</span><span class="p">(</span><span class="n">true_negatives</span><span class="p">)[:</span><span class="mi">10</span><span class="p">],</span>
+                <span class="n">sample_false_negatives</span><span class="o">=</span><span class="n">outcomes</span><span class="p">(</span><span class="n">false_negatives</span><span class="p">)[:</span><span class="mi">10</span><span class="p">],</span>
+                <span class="n">best</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="p">)</span>
+    <span class="n">result</span><span class="o">.</span><span class="n">calculate</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">result</span>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">result</span> <span class="o">=</span> <span class="n">validate_single_class</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">classes</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dataset</span><span class="p">)</span>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">result</span><span class="o">.</span><span class="n">f1</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">recall</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">precision</span>
+</code></pre></div>
+
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="output_text output_subarea output_execute_result">
+<pre>
+<code>(0.005571030640668524, 0.45652173913043476, 0.002802615774723075)</code>
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">ers</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="k">for</span> <span class="bp">cls</span> <span class="ow">in</span> <span class="n">dataset</span><span class="o">.</span><span class="n">classes</span><span class="p">:</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">validate_single_class</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">dataset</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">result</span><span class="p">:</span>
+        <span class="k">continue</span>
+    <span class="n">er</span> <span class="o">=</span> <span class="n">EvaluationResult</span><span class="p">(</span>
+                <span class="n">train_results</span><span class="o">=</span><span class="n">ResultSet</span><span class="p">(</span><span class="n">results</span><span class="o">=</span><span class="p">[]),</span>
+                <span class="n">test_result</span><span class="o">=</span><span class="n">result</span>
+            <span class="p">)</span>
+    <span class="n">ers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">er</span><span class="p">)</span>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="nb">len</span><span class="p">(</span><span class="n">ers</span><span class="p">)</span>
+</code></pre></div>
+
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="output_text output_subarea output_execute_result">
+<pre>
+<code>342</code>
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">c3p.learn</span><span class="w"> </span><span class="kn">import</span> <span class="n">safe_name</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="n">output_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;smartifier&quot;</span><span class="p">)</span>
+<span class="n">output_dir</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">er</span> <span class="ow">in</span> <span class="n">ers</span><span class="p">:</span>
+    <span class="n">sn</span> <span class="o">=</span> <span class="n">safe_name</span><span class="p">(</span><span class="n">er</span><span class="o">.</span><span class="n">test_result</span><span class="o">.</span><span class="n">chemical_class</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">output_dir</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">sn</span><span class="si">}</span><span class="s2">.json&quot;</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">er</span><span class="o">.</span><span class="n">model_dump_json</span><span class="p">(</span><span class="n">indent</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">TMPL</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">from rdkit import Chem</span>
+
+<span class="s2">def </span><span class="si">{func_name}</span><span class="s2">(smiles: str):</span>
+<span class="s2">    mol = Chem.MolFromSmiles(smiles)</span>
+<span class="s2">    if mol is None:</span>
+<span class="s2">        return False, &quot;Invalid SMILES string&quot;</span>
+<span class="s2">    pattern = Chem.MolFromSmarts(&quot;</span><span class="si">{smarts}</span><span class="s2">&quot;)</span>
+<span class="s2">    matches = mol.GetSubstructMatches(pattern)</span>
+<span class="s2">    if len(matches) == 0:</span>
+<span class="s2">        return False, f&quot;No </span><span class="si">{smarts}</span><span class="s2"> match group found&quot;</span>
+<span class="s2">    return True, f&quot;Found {len(matches)} </span><span class="si">{smarts}</span><span class="s2"> match groups&quot;</span>
+<span class="s2">&quot;&quot;&quot;</span>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">rdkit</span><span class="w"> </span><span class="kn">import</span> <span class="n">Chem</span>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">parents</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="s2">&quot;parent_smiles&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">())</span>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">query_map</span> <span class="o">=</span> <span class="p">{</span><span class="n">smiles</span><span class="p">:</span> <span class="n">Chem</span><span class="o">.</span><span class="n">MolFromSmarts</span><span class="p">(</span><span class="n">smiles</span><span class="p">)</span> <span class="k">for</span> <span class="n">smiles</span> <span class="ow">in</span> <span class="n">parents</span><span class="p">}</span>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="n">query_map</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">leaf_node_q</span> <span class="o">=</span> <span class="n">session</span><span class="o">.</span><span class="n">query</span><span class="p">(</span>
+    <span class="n">RdfsSubclassOfStatement</span><span class="o">.</span><span class="n">subject</span><span class="o">.</span><span class="n">label</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">),</span>
+    <span class="n">child_label</span><span class="o">.</span><span class="n">value</span><span class="o">.</span><span class="n">label</span><span class="p">(</span><span class="s2">&quot;label&quot;</span><span class="p">),</span>
+    <span class="n">child_smiles</span><span class="o">.</span><span class="n">value</span><span class="o">.</span><span class="n">label</span><span class="p">(</span><span class="s2">&quot;smiles&quot;</span><span class="p">),</span>
+<span class="p">)</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+    <span class="n">child_label</span><span class="p">,</span>
+    <span class="n">RdfsSubclassOfStatement</span><span class="o">.</span><span class="n">subject</span> <span class="o">==</span> <span class="n">child_label</span><span class="o">.</span><span class="n">subject</span><span class="p">,</span>
+<span class="p">)</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+    <span class="n">child_smiles</span><span class="p">,</span>
+    <span class="n">RdfsSubclassOfStatement</span><span class="o">.</span><span class="n">subject</span> <span class="o">==</span> <span class="n">child_smiles</span><span class="o">.</span><span class="n">subject</span><span class="p">,</span>
+<span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+    <span class="n">child_smiles</span><span class="o">.</span><span class="n">predicate</span> <span class="o">==</span> <span class="s2">&quot;obo:chebi/smiles&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">leaf_node_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_sql</span><span class="p">(</span><span class="n">leaf_node_q</span><span class="o">.</span><span class="n">statement</span><span class="p">,</span> <span class="n">session</span><span class="o">.</span><span class="n">bind</span><span class="p">)</span>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">leaf_node_df</span>
+</code></pre></div>
+
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+<thead>
+<tr style="text-align: right;">
+<th></th>
+<th>id</th>
+<th>label</th>
+<th>smiles</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>0</th>
+<td>CHEBI:10</td>
+<td>(+)-Atherospermoline</td>
+<td>COc1cc2CCN(C)[C@H]3Cc4ccc(Oc5cc(C[C@@H]6N(C)CC...</td>
+</tr>
+<tr>
+<th>1</th>
+<td>CHEBI:100</td>
+<td>(-)-medicarpin</td>
+<td>[H][C@@]12COc3cc(O)ccc3[C@]1([H])Oc1cc(OC)ccc21</td>
+</tr>
+<tr>
+<th>2</th>
+<td>CHEBI:100</td>
+<td>(-)-medicarpin</td>
+<td>[H][C@@]12COc3cc(O)ccc3[C@]1([H])Oc1cc(OC)ccc21</td>
+</tr>
+<tr>
+<th>3</th>
+<td>CHEBI:100</td>
+<td>(-)-medicarpin</td>
+<td>[H][C@@]12COc3cc(O)ccc3[C@]1([H])Oc1cc(OC)ccc21</td>
+</tr>
+<tr>
+<th>4</th>
+<td>CHEBI:10000</td>
+<td>Vismione D</td>
+<td>CC(C)=CCC\C(C)=C\COc1cc(O)c2c(O)c3C(=O)CC(C)(O...</td>
+</tr>
+<tr>
+<th>...</th>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+</tr>
+<tr>
+<th>348062</th>
+<td>CHEBI:99997</td>
+<td>N-[(2S,4aS,12aS)-2-[2-(cyclohexylmethylamino)-...</td>
+<td>CN1[C@H]2CC[C@H](O[C@@H]2COC3=C(C1=O)C=C(C=C3)...</td>
+</tr>
+<tr>
+<th>348063</th>
+<td>CHEBI:99998</td>
+<td>N-[[(3S,9S,10R)-16-(dimethylamino)-12-[(2S)-1-...</td>
+<td>C[C@H]1CCCCO[C@@H]([C@@H](CN(C(=O)C2=C(O1)C=CC...</td>
+</tr>
+<tr>
+<th>348064</th>
+<td>CHEBI:99998</td>
+<td>N-[[(3S,9S,10R)-16-(dimethylamino)-12-[(2S)-1-...</td>
+<td>C[C@H]1CCCCO[C@@H]([C@@H](CN(C(=O)C2=C(O1)C=CC...</td>
+</tr>
+<tr>
+<th>348065</th>
+<td>CHEBI:99999</td>
+<td>N-[(5S,6S,9S)-5-methoxy-3,6,9-trimethyl-2-oxo-...</td>
+<td>C[C@H]1CN[C@H](COC2=C(C=CC(=C2)NC(=O)C3=NC4=CC...</td>
+</tr>
+<tr>
+<th>348066</th>
+<td>CHEBI:99999</td>
+<td>N-[(5S,6S,9S)-5-methoxy-3,6,9-trimethyl-2-oxo-...</td>
+<td>C[C@H]1CN[C@H](COC2=C(C=CC(=C2)NC(=O)C3=NC4=CC...</td>
+</tr>
+</tbody>
+</table>
+<p>348067 rows × 3 columns</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">children</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">leaf_node_df</span><span class="p">[</span><span class="s2">&quot;smiles&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">())</span>
+<span class="nb">len</span><span class="p">(</span><span class="n">children</span><span class="p">)</span>
+</code></pre></div>
+
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="output_text output_subarea output_execute_result">
+<pre>
+<code>185103</code>
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">smiles_map</span> <span class="o">=</span> <span class="p">{</span><span class="n">smiles</span><span class="p">:</span> <span class="n">Chem</span><span class="o">.</span><span class="n">MolFromSmiles</span><span class="p">(</span><span class="n">smiles</span><span class="p">)</span> <span class="k">for</span> <span class="n">smiles</span> <span class="ow">in</span> <span class="n">children</span><span class="p">}</span>
+</code></pre></div>
+
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="output_subarea output_stream output_stderr output_text">
+<pre>
+<code>[11:04:04] WARNING: not removing hydrogen atom without neighbors
+[11:04:04] WARNING: not removing hydrogen atom with dummy atom neighbors
+[11:04:04] Explicit valence for atom # 0 F, 5, is greater than permitted
+[11:04:05] WARNING: not removing hydrogen atom without neighbors
+[11:04:05] WARNING: not removing hydrogen atom without neighbors
+[11:04:05] WARNING: not removing hydrogen atom without neighbors
+[11:04:08] WARNING: not removing hydrogen atom without neighbors
+[11:04:10] Conflicting single bond directions around double bond at index 20.
+[11:04:10]   BondStereo set to STEREONONE and single bond directions set to NONE.
+[11:04:11] WARNING: not removing hydrogen atom with dummy atom neighbors
+[11:04:11] WARNING: not removing hydrogen atom with dummy atom neighbors
+[11:04:12] Explicit valence for atom # 2 O, 3, is greater than permitted
+[11:04:12] Explicit valence for atom # 0 Br, 5, is greater than permitted
+[11:04:12] Explicit valence for atom # 22 N, 4, is greater than permitted
+[11:04:13] Explicit valence for atom # 22 C, 6, is greater than permitted
+[11:04:14] WARNING: not removing hydrogen atom without neighbors
+[11:04:14] WARNING: not removing hydrogen atom without neighbors
+[11:04:14] WARNING: not removing hydrogen atom without neighbors
+[11:04:14] WARNING: not removing hydrogen atom without neighbors
+[11:04:14] WARNING: not removing hydrogen atom without neighbors
+[11:04:15] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] Explicit valence for atom # 0 C, 5, is greater than permitted
+[11:04:16] Explicit valence for atom # 21 N, 4, is greater than permitted
+[11:04:16] Explicit valence for atom # 22 N, 4, is greater than permitted
+[11:04:16] Explicit valence for atom # 0 O, 3, is greater than permitted
+[11:04:16] Explicit valence for atom # 17 N, 4, is greater than permitted
+[11:04:16] Explicit valence for atom # 1 C, 6, is greater than permitted
+[11:04:16] Explicit valence for atom # 20 N, 4, is greater than permitted
+[11:04:16] Explicit valence for atom # 20 N, 4, is greater than permitted
+[11:04:16] Explicit valence for atom # 22 N, 4, is greater than permitted
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] Explicit valence for atom # 1 Cl, 1, is greater than permitted
+[11:04:16] Explicit valence for atom # 1 Cl, 4, is greater than permitted
+[11:04:16] Explicit valence for atom # 0 N, 3, is greater than permitted
+[11:04:16] Explicit valence for atom # 1 N, 5, is greater than permitted
+[11:04:16] Explicit valence for atom # 0 C, 4, is greater than permitted
+[11:04:16] Explicit valence for atom # 0 C, 4, is greater than permitted
+[11:04:16] Explicit valence for atom # 1 N, 5, is greater than permitted
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] Explicit valence for atom # 1 N, 5, is greater than permitted
+[11:04:16] Explicit valence for atom # 1 N, 4, is greater than permitted
+[11:04:16] Explicit valence for atom # 1 Br, 3, is greater than permitted
+[11:04:16] Explicit valence for atom # 1 Br, 4, is greater than permitted
+[11:04:16] Explicit valence for atom # 0 Cl, 7, is greater than permitted
+[11:04:16] Explicit valence for atom # 1 Cl, 3, is greater than permitted
+[11:04:16] Explicit valence for atom # 0 Br, 5, is greater than permitted
+[11:04:16] Explicit valence for atom # 0 Cl, 5, is greater than permitted
+[11:04:16] Explicit valence for atom # 0 Br, 7, is greater than permitted
+[11:04:16] Explicit valence for atom # 1 I, 7, is greater than permitted
+[11:04:16] Explicit valence for atom # 1 Br, 1, is greater than permitted
+[11:04:16] Explicit valence for atom # 1 Cl, 3, is greater than permitted
+[11:04:16] Explicit valence for atom # 1 Cl, 2, is greater than permitted
+[11:04:16] Explicit valence for atom # 1 Cl, 4, is greater than permitted
+[11:04:16] Explicit valence for atom # 1 Cl, 3, is greater than permitted
+[11:04:16] Explicit valence for atom # 0 B, 3, is greater than permitted
+[11:04:16] Explicit valence for atom # 0 B, 4, is greater than permitted
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] Explicit valence for atom # 1 Al, 6, is greater than permitted
+[11:04:16] Explicit valence for atom # 0 O, 3, is greater than permitted
+[11:04:16] Explicit valence for atom # 1 F, 1, is greater than permitted
+[11:04:16] Explicit valence for atom # 1 F, 3, is greater than permitted
+[11:04:16] Explicit valence for atom # 0 O, 3, is greater than permitted
+[11:04:16] Explicit valence for atom # 0 O, 3, is greater than permitted
+[11:04:16] Explicit valence for atom # 31 C, 6, is greater than permitted
+[11:04:16] Explicit valence for atom # 1 Te, 7, is greater than permitted
+[11:04:16] Explicit valence for atom # 1 Be, 4, is greater than permitted
+[11:04:16] Explicit valence for atom # 0 O, 3, is greater than permitted
+[11:04:16] Explicit valence for atom # 0 O, 3, is greater than permitted
+[11:04:16] Explicit valence for atom # 0 O, 3, is greater than permitted
+[11:04:16] Explicit valence for atom # 0 O, 3, is greater than permitted
+[11:04:16] Explicit valence for atom # 15 O, 3, is greater than permitted
+[11:04:16] Explicit valence for atom # 9 O, 3, is greater than permitted
+[11:04:16] Explicit valence for atom # 6 O, 3, is greater than permitted
+[11:04:16] Explicit valence for atom # 4 O, 3, is greater than permitted
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:16] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] Can't kekulize mol.  Unkekulized atoms: 3 4 5 6 7 8 9 10 11
+[11:04:17] Can't kekulize mol.  Unkekulized atoms: 3 4 5 6 7 8 9 10 11
+[11:04:17] Can't kekulize mol.  Unkekulized atoms: 3 4 5 6 7 8 9 10 11
+[11:04:17] Unusual charge on atom 0 number of radical electrons set to zero
+[11:04:17] Unusual charge on atom 0 number of radical electrons set to zero
+[11:04:17] Explicit valence for atom # 0 O, 3, is greater than permitted
+[11:04:17] Explicit valence for atom # 0 O, 3, is greater than permitted
+[11:04:17] Explicit valence for atom # 0 O, 3, is greater than permitted
+[11:04:17] Explicit valence for atom # 0 O, 3, is greater than permitted
+[11:04:17] Explicit valence for atom # 1 N, 4, is greater than permitted
+[11:04:17] Explicit valence for atom # 1 Al, 4, is greater than permitted
+[11:04:17] Explicit valence for atom # 0 B, 4, is greater than permitted
+[11:04:17] Explicit valence for atom # 0 B, 5, is greater than permitted
+[11:04:17] Explicit valence for atom # 0 B, 6, is greater than permitted
+[11:04:17] Explicit valence for atom # 0 B, 5, is greater than permitted
+[11:04:17] Explicit valence for atom # 0 B, 6, is greater than permitted
+[11:04:17] Explicit valence for atom # 0 B, 5, is greater than permitted
+[11:04:17] Explicit valence for atom # 0 He, 1, is greater than permitted
+[11:04:17] Explicit valence for atom # 0 He, 1, is greater than permitted
+[11:04:17] Explicit valence for atom # 0 He, 1, is greater than permitted
+[11:04:17] Explicit valence for atom # 0 He, 1, is greater than permitted
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] SMILES Parse Error: syntax error while parsing: [al]1[al][al--][al]1
+[11:04:17] SMILES Parse Error: Failed parsing SMILES '[al]1[al][al--][al]1' for input: '[al]1[al][al--][al]1'
+[11:04:17] Explicit valence for atom # 0 Al, 4, is greater than permitted
+[11:04:17] Explicit valence for atom # 0 Al, 4, is greater than permitted
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: could not find number of expected rings. Switching to an approximate ring finding algorithm.
+[11:04:17] Explicit valence for atom # 1 Bi, 6, is greater than permitted
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] Explicit valence for atom # 31 O, 6, is greater than permitted
+[11:04:17] Explicit valence for atom # 0 O, 3, is greater than permitted
+[11:04:17] Explicit valence for atom # 0 O, 3, is greater than permitted
+[11:04:17] Explicit valence for atom # 0 B, 6, is greater than permitted
+[11:04:17] Explicit valence for atom # 0 B, 6, is greater than permitted
+[11:04:17] Explicit valence for atom # 0 B, 6, is greater than permitted
+[11:04:17] Explicit valence for atom # 0 B, 6, is greater than permitted
+[11:04:17] Explicit valence for atom # 0 B, 6, is greater than permitted
+[11:04:17] Explicit valence for atom # 0 B, 5, is greater than permitted
+[11:04:17] Explicit valence for atom # 0 B, 5, is greater than permitted
+[11:04:17] Explicit valence for atom # 0 B, 5, is greater than permitted
+[11:04:17] Explicit valence for atom # 10 C, 5, is greater than permitted
+[11:04:17] SMILES Parse Error: syntax error while parsing: [F,Cl,Br,I-].[*]C1=C([*])C([*])=C(C([*])=C1[*])C1=[O+]C2=C([*])C([*])=C([*])C([*])=C2C([*])=C1[*]
+[11:04:17] SMILES Parse Error: Failed parsing SMILES '[F,Cl,Br,I-].[*]C1=C([*])C([*])=C(C([*])=C1[*])C1=[O+]C2=C([*])C([*])=C([*])C([*])=C2C([*])=C1[*]' for input: '[F,Cl,Br,I-].[*]C1=C([*])C([*])=C(C([*])=C1[*])C1=[O+]C2=C([*])C([*])=C([*])C([*])=C2C([*])=C1[*]'
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] Explicit valence for atom # 4 N, 3, is greater than permitted
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] Explicit valence for atom # 1 F, 3, is greater than permitted
+[11:04:17] WARNING: not removing hydrogen atom with dummy atom neighbors
+[11:04:17] Explicit valence for atom # 1 H, 2, is greater than permitted
+[11:04:17] Can't kekulize mol.  Unkekulized atoms: 30 32 33 34 35 36 38
+[11:04:17] Explicit valence for atom # 0 O, 3, is greater than permitted
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] Explicit valence for atom # 0 B, 5, is greater than permitted
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] Explicit valence for atom # 9 O, 3, is greater than permitted
+[11:04:17] Explicit valence for atom # 5 O, 3, is greater than permitted
+[11:04:17] Explicit valence for atom # 20 N, 4, is greater than permitted
+[11:04:17] Explicit valence for atom # 0 B, 5, is greater than permitted
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] Explicit valence for atom # 4 B, 4, is greater than permitted
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] Explicit valence for atom # 24 Al, 5, is greater than permitted
+[11:04:17] Explicit valence for atom # 12 O, 3, is greater than permitted
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] Can't kekulize mol.  Unkekulized atoms: 11 12 13 15 16
+[11:04:17] Can't kekulize mol.  Unkekulized atoms: 20 22 23 24 25 26 27
+[11:04:17] Can't kekulize mol.  Unkekulized atoms: 20 22 23 24 25 26 27
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:17] WARNING: not removing hydrogen atom without neighbors
+[11:04:18] Explicit valence for atom # 31 N, 6, is greater than permitted
+[11:04:18] Explicit valence for atom # 31 N, 6, is greater than permitted
+[11:04:18] WARNING: not removing hydrogen atom without neighbors
+[11:04:18] WARNING: not removing hydrogen atom without neighbors
+[11:04:18] WARNING: not removing hydrogen atom without neighbors
+[11:04:18] WARNING: not removing hydrogen atom without neighbors
+[11:04:18] WARNING: not removing hydrogen atom without neighbors
+[11:04:18] WARNING: not removing hydrogen atom without neighbors
+[11:04:18] WARNING: not removing hydrogen atom without neighbors
+[11:04:18] WARNING: not removing hydrogen atom without neighbors
+[11:04:18] WARNING: not removing hydrogen atom without neighbors
+[11:04:18] WARNING: not removing hydrogen atom without neighbors
+[11:04:18] WARNING: not removing hydrogen atom without neighbors
+[11:04:18] WARNING: not removing hydrogen atom without neighbors
+[11:04:18] WARNING: not removing hydrogen atom without neighbors
+[11:04:18] WARNING: not removing hydrogen atom without neighbors
+[11:04:18] WARNING: not removing hydrogen atom without neighbors
+[11:04:18] WARNING: not removing hydrogen atom without neighbors
+[11:04:18] WARNING: not removing hydrogen atom without neighbors
+[11:04:18] WARNING: not removing hydrogen atom without neighbors
+[11:04:18] WARNING: not removing hydrogen atom without neighbors
+[11:04:18] WARNING: not removing hydrogen atom without neighbors
+[11:04:18] WARNING: not removing hydrogen atom without neighbors
+[11:04:18] WARNING: not removing hydrogen atom without neighbors
+[11:04:18] WARNING: not removing hydrogen atom without neighbors
+[11:04:18] WARNING: not removing hydrogen atom without neighbors
+[11:04:18] WARNING: not removing hydrogen atom without neighbors
+[11:04:18] WARNING: not removing hydrogen atom without neighbors
+[11:04:19] WARNING: not removing hydrogen atom without neighbors
+[11:04:19] WARNING: not removing hydrogen atom without neighbors
+[11:04:19] WARNING: not removing hydrogen atom without neighbors
+[11:04:19] WARNING: not removing hydrogen atom without neighbors
+[11:04:19] WARNING: not removing hydrogen atom without neighbors
+[11:04:19] WARNING: not removing hydrogen atom without neighbors
+[11:04:19] Explicit valence for atom # 7 P, 5, is greater than permitted
+[11:04:19] WARNING: not removing hydrogen atom without neighbors
+[11:04:19] WARNING: not removing hydrogen atom without neighbors
+[11:04:19] WARNING: not removing hydrogen atom without neighbors
+[11:04:19] WARNING: not removing hydrogen atom without neighbors
+[11:04:19] WARNING: not removing hydrogen atom without neighbors
+[11:04:19] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] Explicit valence for atom # 4 O, 3, is greater than permitted
+[11:04:20] Explicit valence for atom # 12 C, 6, is greater than permitted
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] Explicit valence for atom # 17 O, 2, is greater than permitted
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:20] WARNING: not removing hydrogen atom without neighbors
+[11:04:21] WARNING: not removing hydrogen atom without neighbors
+[11:04:21] WARNING: not removing hydrogen atom without neighbors
+[11:04:21] WARNING: not removing hydrogen atom without neighbors
+[11:04:21] WARNING: not removing hydrogen atom without neighbors
+[11:04:21] WARNING: not removing hydrogen atom without neighbors
+[11:04:21] WARNING: not removing hydrogen atom without neighbors
+[11:04:21] WARNING: not removing hydrogen atom without neighbors
+[11:04:21] WARNING: not removing hydrogen atom without neighbors
+[11:04:21] WARNING: not removing hydrogen atom without neighbors
+[11:04:21] WARNING: not removing hydrogen atom without neighbors
+[11:04:21] WARNING: not removing hydrogen atom without neighbors
+[11:04:21] WARNING: not removing hydrogen atom without neighbors
+</code>
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">bad_smiles</span> <span class="o">=</span> <span class="p">{</span><span class="n">smiles</span><span class="p">:</span> <span class="n">mol</span> <span class="k">for</span> <span class="n">smiles</span><span class="p">,</span> <span class="n">mol</span> <span class="ow">in</span> <span class="n">smiles_map</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">mol</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">}</span>
+<span class="nb">len</span><span class="p">(</span><span class="n">bad_smiles</span><span class="p">)</span>
+</code></pre></div>
+
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="output_text output_subarea output_execute_result">
+<pre>
+<code>113</code>
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">smiles</span> <span class="o">=</span> <span class="p">{</span><span class="n">smiles</span><span class="p">:</span> <span class="n">mol</span> <span class="k">for</span> <span class="n">smiles</span><span class="p">,</span> <span class="n">mol</span> <span class="ow">in</span> <span class="n">smiles_map</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">mol</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">}</span>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">classifications</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="n">n</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="k">for</span> <span class="n">qs</span><span class="p">,</span> <span class="n">q</span> <span class="ow">in</span> <span class="n">query_map</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="n">n</span> <span class="o">+=</span> <span class="mi">1</span>
+    <span class="k">if</span> <span class="n">n</span> <span class="o">%</span> <span class="mi">50</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Processed </span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2"> queries of </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">query_map</span><span class="p">)</span><span class="si">}</span><span class="s2"> :: </span><span class="si">{</span><span class="n">qs</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">ss</span><span class="p">,</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">smiles</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">HasSubstructMatch</span><span class="p">(</span><span class="n">q</span><span class="p">):</span>
+            <span class="n">classifications</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">qs</span><span class="p">,</span> <span class="n">ss</span><span class="p">))</span>
+</code></pre></div>
+
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>
+<code>Processed 50 queries of 4692 :: C12C(C3C(C(CC3)*)(C)CC1)CCC4C2(CCCC4)C
+Processed 100 queries of 4692 :: N(N=C(*)*)=C(*)*
+Processed 150 queries of 4692 :: CN(C)C(=O)NC1=CC([*])=C([*])C=C1
+Processed 200 queries of 4692 :: Oc1ccccc1*
+Processed 250 queries of 4692 :: [H][C@]1(OC(O)(C[C@H](O)[C@H]1O)C(O)=O)[C@H](O)[C@H](O)CO
+Processed 300 queries of 4692 :: C(S([O-])(=O)=O)*
+Processed 350 queries of 4692 :: [C@H]1(O[C@@H]([C@@H](O)[C@@H]([C@H]1O)O)CO)S/C(=N\OS(O)(=O)=O)/*
+Processed 400 queries of 4692 :: [NH3+]C(C(NC(C([O-])=O)*)=O)*
+Processed 450 queries of 4692 :: O1[C@@H]([C@@H]([C@@H]([C@H]([C@@H]1OC[C@@H](CO*)O*)O)O)O)CO
+Processed 500 queries of 4692 :: CCCCCC(OO)\C=C\C=C/CCCCCCCC([O-])=O
+Processed 550 queries of 4692 :: [*][C@@H]1[C@@H]([*])C=CC1=O
+Processed 600 queries of 4692 :: CN1C(CNC2=CC=C(C=C2)C(=O)N[C@@H](CCC(O)=O)C(O)=O)CNC2=C1C(=O)NC(N)=N2
+Processed 650 queries of 4692 :: CC(=O)CC(N)C(O)=O
+Processed 700 queries of 4692 :: CSCCCCCC(NO)C(O)=O
+Processed 750 queries of 4692 :: CC(C)(COP(O)(=O)OP(O)(=O)OC[C@H]1O[C@H]([C@H](O)[C@@H]1OP(O)(O)=O)N1C=NC2=C1N=CN=C2N)[C@@H](O)C(=O)NCCC(=O)NCCSC([*])=O
+Processed 800 queries of 4692 :: C1(CCCCCCCC(=O)O)C(CCCCCCCCO)O1
+Processed 850 queries of 4692 :: CC(=CCOC([*])=O)C=CC=C(C)C=CC1=C(C)CCCC1(C)C
+Processed 900 queries of 4692 :: OCC(COP([O-])(=O)OCC(CO)OC([*])=O)OC([*])=O
+Processed 950 queries of 4692 :: C(=O)(N*)C
+Processed 1000 queries of 4692 :: [C@@H]1([C@H](O[C@@H](O[C@@H]2[C@H]([C@@H](O[C@H]3[C@H](O[C@@H](O[C@@H]4[C@H](O[C@@H](OC[C@@H]([C@@H](*)O)NC(=O)*)[C@@H]([C@H]4O)O)CO)[C@@H]([C@H]3O)O)CO)O[C@@H]([C@@H]2O[C@@H]5O[C@@H]([C@H](O)[C@@H]([C@H]5NC(C)=O)O[C@H]6[C@@H]([C@H]([C@@H](O)[C@H](O6)CO)O)O)CO)CO)O)[C@@H]([C@H]1O[C@@H]7[C@@H]([C@H]([C@@H](O)[C@H](O7)CO)O)NC(C)=O)NC(C)=O)CO)O
+Processed 1050 queries of 4692 :: C(C(CCSSCCC(C(=O)O)N)N)(O)=O
+Processed 1100 queries of 4692 :: O([C@@H]1[C@H](O[C@@H](OC[C@@H]([C@@H](*)O)NC(*)=O)[C@@H]([C@H]1O)O)CO)[C@H]2[C@@H]([C@H]([C@H]([C@H](O2)CO)O[C@H]3[C@@H]([C@H]([C@H]([C@H](O3)CO)O)O[C@H]4[C@@H]([C@H]([C@H]([C@H](O4)CO)O)O[C@H]5[C@@H]([C@H]([C@@H]([C@H](O5)CO)O[C@H]6[C@@H]([C@H]([C@H]([C@H](O6)CO)O)O)O)O[C@@H]7O[C@H]([C@H]([C@H]([C@@H]7O)O)O)C)NC(C)=O)O)NC(C)=O)O[C@@]8(C[C@@H]([C@H]([C@@](O8)([C@@H]([C@@H](CO)O)O)[H])NC(C)=O)O)C(=O)[O-])O
+Processed 1150 queries of 4692 :: [C@H]1(O[C@@H]([C@H](O)[C@@H]([C@H]1O)O[C@H]2[C@@H]([C@H]([C@H](O[C@@H]3O[C@H]([C@H]([C@H]([C@@H]3O)O)O)C)[C@H](O2)CO)O[C@@H]4O[C@@H]([C@H](O)[C@@H]([C@H]4O)O)CO)NC(C)=O)CO)O[C@@H]5[C@H]([C@H](O[C@@H]6[C@H]([C@H](O[C@@H]7[C@H](O[C@@H](OC[C@@H]([C@@H](*)O)NC(=O)*)[C@@H]([C@H]7O)O)CO)O[C@@H]([C@@H]6O)CO)O)O[C@H](CO)[C@H]5O[C@@H]8O[C@H]([C@H]([C@H]([C@@H]8O)O)O)C)NC(C)=O
+Processed 1200 queries of 4692 :: C1=CC(=CC=C1CC(C(O)=O)N)N
+Processed 1250 queries of 4692 :: C(=O)([O-])*C(C)O
+Processed 1300 queries of 4692 :: [C@H]([C@@H](*)O)(NC(=O)*)CO[C@@H]1O[C@@H]([C@@H](O[C@H]2[C@@H]([C@@H](O[C@H]3[C@@H]([C@H]([C@H](O[C@@H]4O[C@@H]([C@H](O)[C@@H]([C@H]4O)O)CO)[C@H](O3)CO)O)NC(C)=O)[C@H]([C@@H](CO)O2)O)O)[C@@H]([C@H]1O)O)CO
+Processed 1350 queries of 4692 :: C1=C(CC(C=C1)N)C(O)=O
+Processed 1400 queries of 4692 :: CC(=O)N[C@H]1C(O)O[C@H](CO)[C@H](O)[C@@H]1OC1O[C@H](CO)[C@H](O)[C@H](O[C@@H]2O[C@H](CO)[C@H](O)[C@H](O)[C@H]2O)[C@H]1NC(C)=O
+Processed 1450 queries of 4692 :: C1(C(=C(NC(=C1P2(OCC(CO2)(C)C)=O)C)C)C(OCCN(CC3=CC=CC=C3)C4=CC=CC=C4)=O)C=5C=C(C=CC5)[N+](=O)[O-]
+Processed 1500 queries of 4692 :: O([C@@H]1[C@H](OC(O)[C@H](O)[C@H]1O)CO[C@H]2O[C@@H]([C@@H](O)[C@H](O)[C@H]2O)CO)[C@H]3O[C@@H]([C@@H](O)[C@H](O)[C@H]3O)CO
+Processed 1550 queries of 4692 :: O1[C@H]([C@@H](O)[C@@H](O)C1O)CO
+Processed 1600 queries of 4692 :: CC1(C)C2CC(=O)C1(C)CC2O
+Processed 1650 queries of 4692 :: OC(CC([O-])=O)C([O-])=O
+Processed 1700 queries of 4692 :: [C@]12([C@@](C=C(CCC=C(C)CCC=C(CC1)C)C)(C2(C)C)[H])[H]
+Processed 1750 queries of 4692 :: [H]C(CCCC(O)=O)=CCC([H])=CCC([H])=CCC([H])=CCCCCC
+Processed 1800 queries of 4692 :: CC(=O)OC(CO)CO[*]
+Processed 1850 queries of 4692 :: *[C@H]([C@H]([C@H](COP([O-])(=O)O[C@H]1[C@@H]([C@H]([C@@H]([C@H]([C@H]1O)O)O)O)O[C@@H]2[C@H]([C@H]([C@@H]([C@H](O2)CO)O)O)O)NC(=O)*)O)O
+Processed 1900 queries of 4692 :: [H]C(CCC(C)=C([H])CCC(C)=C([H])CCC(C)=C([H])COP(O)(=O)OP(O)(O)=O)=C(C)CCC=C(C)C
+Processed 1950 queries of 4692 :: [H]C(=O)C(C)O
+Processed 2000 queries of 4692 :: C1=CC=CC=2C(=CNC12)CC=NO
+Processed 2050 queries of 4692 :: CC(O)CCC(C)O
+Processed 2100 queries of 4692 :: [H]C(C)=C([H])CCC1CCCC(=O)O1
+Processed 2150 queries of 4692 :: [*]S(=O)(=O)S[*]
+Processed 2200 queries of 4692 :: [H][C@@](COC([*])=O)(COP([O-])(=O)O[C@@H]1[C@H](O)[C@H](O)[C@@H](O)[C@H](O)[C@H]1O[C@H]1O[C@H](CO)[C@@H](O)[C@H](O)[C@H]1[NH3+])OC([*])=O
+Processed 2250 queries of 4692 :: CC(=O)N[C@H]1C(O)O[C@H](CO)[C@@H](O[C@@H]2O[C@H](CO)[C@@H](O[C@@H]3O[C@H](CO[C@H]4O[C@H](CO)[C@@H](O)[C@H](O)[C@@H]4O[C@@H]4O[C@H](CO)[C@@H](O)[C@H](O)[C@H]4NC(C)=O)[C@@H](O)[C@H](O[C@H]4O[C@H](CO)[C@@H](O)[C@H](O)[C@@H]4O[C@@H]4O[C@H](CO)[C@@H](O)[C@H](O)[C@H]4NC(C)=O)[C@@H]3O[C@@H]3OC[C@@H](O)[C@H](O)[C@H]3O)[C@H](O)[C@H]2NC(C)=O)[C@@H]1O
+Processed 2300 queries of 4692 :: [H]C(=O)C([H])=C([H])CCCCC
+Processed 2350 queries of 4692 :: [H][C@@]1(CCC(=O)OC1)[C@@]1([H])CC[C@]2([H])[C@]3([H])CCC4CCCC[C@]4(C)[C@@]3([H])CC[C@]12C
+Processed 2400 queries of 4692 :: C(NC(CCNC(=O)[C@@H](C(COP(OC[C@@H](C(*)=O)N*)(=O)[O-])(C)C)O)=O)CSC(/C=C(/C*)\CC([O-])=O)=O
+Processed 2450 queries of 4692 :: *[C@@H](O)[C@@H](NC(*)=O)COC(*)=O
+Processed 2500 queries of 4692 :: OC1C[C@@H](O)[C@H]([*])[C@H]1[*]
+Processed 2550 queries of 4692 :: OC1C(Oc2cc(O)cc(O)c2C1=O)c1cc(O)c(O)c(O)c1
+Processed 2600 queries of 4692 :: [H][H]
+Processed 2650 queries of 4692 :: NC(Cc1ccc(Oc2ccc(O)cc2)cc1)C(O)=O
+Processed 2700 queries of 4692 :: [H]C(=CC([H])=C(C)C([H])=CC([H])=C(C)C([H])=C=C1C(C)(C)C[C@H](O)C[C@@]1(C)O)C=C(C)C=C([H])C=C(C)C=C([H])[C@@]12O[C@]1(C)C[C@@H](O)CC2(C)C
+Processed 2750 queries of 4692 :: NC(CCCNC(N)=N)C([O-])=O
+Processed 2800 queries of 4692 :: CCCCCCCCCCCCCCCCCCCC(O)CCCCCCCCC
+Processed 2850 queries of 4692 :: [H][C@]1(COC(=O)C1)[C@@]1([H])CC[C@]2([H])[C@]3([H])CCC4CCCC[C@]4(C)[C@@]3([H])CC[C@]12C
+Processed 2900 queries of 4692 :: CC1(C)C2CCC1(C)C(=O)C2=O
+Processed 2950 queries of 4692 :: OC[C@H]1OC(O)[C@H](O)[C@H](O)[C@H]1O
+Processed 3000 queries of 4692 :: CC(C(O)=O)c1ccc(c(F)c1)-c1ccccc1
+Processed 3050 queries of 4692 :: CC(=O)C(N)C(O)=O
+Processed 3100 queries of 4692 :: NC(=O)CCCCC(S)CCS
+Processed 3150 queries of 4692 :: OCC1(O)O[C@H](COP(O)(O)=O)[C@H](O)[C@@H]1O
+Processed 3200 queries of 4692 :: [H]C(=Cc1cccc(O)c1)C([O-])=O
+Processed 3250 queries of 4692 :: CC(=O)NC(CCCNC(N)=O)C(O)=O
+Processed 3300 queries of 4692 :: OC[C@H]1O[C@@H](O[C@H]2[C@H](O)[C@@H](O)[C@H](O[C@H]3[C@H](O)[C@@H](O)[C@H](O[C@H]4[C@H](O)[C@@H](O)[C@H](O[C@H]5[C@H](O)[C@@H](O)[C@H](O[C@H]6[C@H](O)[C@@H](O)C(O)O[C@@H]6CO)O[C@@H]5CO)O[C@@H]4CO)O[C@@H]3CO)O[C@@H]2CO)[C@H](O)[C@@H](O)[C@@H]1O
+Processed 3350 queries of 4692 :: C(CCCC)(=O)O*
+Processed 3400 queries of 4692 :: CCCCCCCCCCCCCCCCCCCCCCCC(O)CC(O)=O
+Processed 3450 queries of 4692 :: C(C(C(*)=O)N*)[Se]C
+Processed 3500 queries of 4692 :: OCC(O)COP([O-])([O-])=O
+Processed 3550 queries of 4692 :: CN(C)C(=O)Oc1cc(OC(=O)N(C)C)cc(c1)C(O)CNC(C)(C)C
+Processed 3600 queries of 4692 :: OCC1(O)O[C@@H]([C@@H](O)[C@@H]1O)C([O-])=O
+Processed 3650 queries of 4692 :: CCCCN1CCCCC1C(=O)Nc1c(C)cccc1C
+Processed 3700 queries of 4692 :: [C@H]1(OP(=O)([O-])[O-])[C@H](OC(=O)C[C@@H](*)O)[C@@H](NC(=O)C[C@@H](*)OC(=O)*)[C@@H](O[C@@H]1CO[C@@]2(C(=O)[O-])O[C@@H]([C@H](O)[C@@H](C2)O[C@@]3(C(=O)[O-])O[C@@H]([C@H](O)[C@@H](C3)O)[C@@H](CO)O)[C@@H](CO)O)OC[C@@H]4[C@H]([C@@H]([C@H]([C@H](O4)OP(=O)([O-])[O-])NC(=O)C[C@@H](*)O)OC(=O)C[C@@H](*)O)O
+Processed 3750 queries of 4692 :: C[C@@H]1O[C@@H](O[C@@H]2[C@@H](O)[C@@H](O)[C@@H](CO)O[C@H]2O[C@H]2[C@H](O)[C@@H](NC(C)=O)C(O)O[C@@H]2COS(O)(=O)=O)[C@@H](O)[C@H](O)[C@@H]1O
+Processed 3800 queries of 4692 :: OC[C@H](O)[C@H](O)[C@@H](O)[C@@H](NC([*])=O)C=O
+Processed 3850 queries of 4692 :: NC(C(O)=O)C(=O)COP(O)(O)=O
+Processed 3900 queries of 4692 :: CC(=O)N[C@@H]1[C@@H](O)[C@H](O[C@@H]2O[C@H](CO)[C@H](O)[C@H](O)[C@H]2O)[C@@H](CO)O[C@H]1OC[C@H]1OC(O)[C@H](NC(C)=O)[C@@H](O[C@@H]2O[C@H](CO)[C@@H](O[C@@H]3O[C@H](CO)[C@H](O)[C@H](O)[C@H]3O)[C@H](O)[C@H]2NC(C)=O)[C@H]1O
+Processed 3950 queries of 4692 :: CC(=O)N[C@H]1[C@@H](O)[C@H](O)[C@@H](CO)OC1OP([O-])(=O)OP([O-])(=O)OC[C@H]1O[C@H]([C@H](O)[C@@H]1O)n1ccc(=O)[nH]c1=O
+Processed 4000 queries of 4692 :: C[C@H](CCCC(C)C([O-])=O)[C@H]1CC[C@H]2[C@@H]3CC=C4C[C@@H](O)CC[C@]4(C)[C@H]3CC[C@]12C
+Processed 4050 queries of 4692 :: [H][C@@](COC([*])=O)(COP(O)(O)=O)OC(=O)CCCCCCCCCCCCCCC
+Processed 4100 queries of 4692 :: [H][C@@](COC([*])=O)(COP([O-])([O-])=O)OC(=O)CCCCCCCCCCC
+Processed 4150 queries of 4692 :: C[C@H]1O[C@H](O[*])[C@@H](O)[C@@H](O)[C@@H]1O
+Processed 4200 queries of 4692 :: C(=O)(C[C@@H](*)O)*
+Processed 4250 queries of 4692 :: O[C@H](CO[*])COP([O-])([O-])=O
+Processed 4300 queries of 4692 :: CCCCCCCCCCCCC\C=C\[C@@H](O)[C@H](CO[C@@H]1O[C@H](CO)[C@@H](O[C@@H]2O[C@H](CO)[C@H](O[C@@H]3O[C@H](CO)[C@H](O)[C@H](O[C@@H]4O[C@H](CO)[C@H](O)[C@H](O)[C@H]4O)[C@H]3NC(C)=O)[C@H](O)[C@H]2O)[C@H](O)[C@H]1O)NC([*])=O
+Processed 4350 queries of 4692 :: OC[C@H]1O[C@@H](OCC(COC([*])=O)OC([*])=O)[C@H](O)[C@@H](OS(O)(=O)=O)[C@H]1O
+Processed 4400 queries of 4692 :: CC1CCCCN1CCCOC(=O)c1ccc(Cl)c(Cl)c1
+Processed 4450 queries of 4692 :: Clc1ccc(C(Cn2ccnc2)OCC=C)c(Cl)c1
+Processed 4500 queries of 4692 :: CCCCCCCCCCCCCCC[C@@H](O)[C@H](CO[C@@H]1O[C@H](CO)[C@@H](O[C@@H]2O[C@H](CO)[C@H](O)[C@H](O)[C@H]2O)[C@H](O)[C@H]1O)NC([*])=O
+Processed 4550 queries of 4692 :: C[C@H]1OC(OP(O)(=O)OP(O)(=O)OC[C@H]2O[C@H]([C@H](O)[C@@H]2O)n2ccc(=O)[nH]c2=O)[C@H](O)[C@@H](O)C1=O
+Processed 4600 queries of 4692 :: CCCCCC(C)O
+Processed 4650 queries of 4692 :: CCCCCCCCCCCCC\C=C\[C@@H](O)[C@H](CO[C@@H]1O[C@H](CO)[C@@H](O[C@@H]2O[C@H](CO)[C@H](O[C@@H]3O[C@H](CO)[C@H](O)[C@H](O[C@@H]4O[C@H](CO)[C@H](O)[C@H](O[C@@]5(C[C@H](O)[C@@H](NC(C)=O)[C@@H](O5)[C@H](O)[C@H](O)CO)C([O-])=O)[C@H]4O)[C@H]3NC(C)=O)[C@H](O[C@@]3(C[C@H](O)[C@@H](NC(C)=O)[C@@H](O3)[C@H](O)[C@H](O)CO)C([O-])=O)[C@H]2O)[C@H](O)[C@H]1O)NC([*])=O
+</code>
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="nb">len</span><span class="p">(</span><span class="n">classifications</span><span class="p">)</span>
+</code></pre></div>
+
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="output_text output_subarea output_execute_result">
+<pre>
+<code>10087350</code>
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="nb">len</span><span class="p">(</span><span class="n">classifications</span><span class="p">)</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">smiles</span><span class="p">)</span>
+</code></pre></div>
+
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="output_text output_subarea output_execute_result">
+<pre>
+<code>54.529163738580465</code>
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="err">!</span><span class="n">mkdir</span> <span class="n">smarts</span><span class="o">-</span><span class="n">analysis</span>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">cs_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">classifications</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;class&#39;</span><span class="p">,</span> <span class="s1">&#39;structure&#39;</span><span class="p">])</span>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">cs_df</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">20</span><span class="p">)</span>
+</code></pre></div>
+
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+<thead>
+<tr style="text-align: right;">
+<th></th>
+<th>class</th>
+<th>structure</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>0</th>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+<td>[H][C@@]12COc3cc(O)ccc3[C@]1([H])Oc1cc(OC)ccc21</td>
+</tr>
+<tr>
+<th>1</th>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+<td>C12=C3C(=CC=C2OC(CC1)(C)C)[C@]4([C@@](O3)(C=5C...</td>
+</tr>
+<tr>
+<th>2</th>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+<td>COC1=CC2=C(C=C1)[C@@H]3COC4=C([C@@H]3O2)C=CC(=...</td>
+</tr>
+<tr>
+<th>3</th>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+<td>COc1ccc2c(O[C@@H]3c4ccc(OC)cc4OC[C@]23O)c1</td>
+</tr>
+<tr>
+<th>4</th>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+</tr>
+<tr>
+<th>5</th>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+<td>O1C2C(C3=C1C4=C(OC(C=C4)(C)C)C=C3)COC5=C2C=CC(...</td>
+</tr>
+<tr>
+<th>6</th>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+<td>O1C2C(C=3C1=CC=4OCOC4C3)COC5=C2C(O)=C(OC)C(O)=C5</td>
+</tr>
+<tr>
+<th>7</th>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+<td>O1[C@@]2([C@](C3=C1C=C(OC)C=C3)(COC4=C2C=CC(O)...</td>
+</tr>
+<tr>
+<th>8</th>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+<td>O1C2C(C=3C1=CC(OC)=C(O)C3)COC4=C2C=CC(O)=C4</td>
+</tr>
+<tr>
+<th>9</th>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+<td>O1C2C(C3=C1C=C(OC)C=C3)COC4=C2C=CC(O)=C4O</td>
+</tr>
+<tr>
+<th>10</th>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+<td>O1C2C(O)(C3=C1C=C(OC)C=C3)COC4=C2C=CC(O)=C4</td>
+</tr>
+<tr>
+<th>11</th>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+<td>O1C2C(O)(C=3C1=CC=4OCOC4C3)COC5=C2C=CC(O)=C5</td>
+</tr>
+<tr>
+<th>12</th>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+<td>O1C2C(C=3C1=CC(OC)=C(O)C3)COC4=C2C=CC(OC)=C4</td>
+</tr>
+<tr>
+<th>13</th>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+<td>O1C2C(C3=C1C=C(OC)C=C3)COC=4C2=CC(OC)=C(O)C4</td>
+</tr>
+<tr>
+<th>14</th>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+<td>O1C2C(C3=C1C=C(OC)C=C3)COC4=C2C=CC(O)=C4OC</td>
+</tr>
+<tr>
+<th>15</th>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+<td>O1C2C(C3=C1C(OC)=C(OC)C=C3)COC4=C2C=CC(O)=C4</td>
+</tr>
+<tr>
+<th>16</th>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+<td>O1C2C(C3=C1C=C(OC)C=C3)COC4=C2C=CC(OC)=C4OC</td>
+</tr>
+<tr>
+<th>17</th>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+<td>O1C2C(C3=C1C=C(OC)C=C3)COC=4C2=CC(OC)=C(OC)C4</td>
+</tr>
+<tr>
+<th>18</th>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+<td>O1C2C(C3=C1C(O)=C(OC)C=C3)COC4=C2C=CC(OC)=C4O</td>
+</tr>
+<tr>
+<th>19</th>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+<td>O1C2C(C3=C1C(OC)=C(OC)C=C3)COC4=C2C=CC(OC)=C4O</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">cs_df</span><span class="o">.</span><span class="n">tail</span><span class="p">(</span><span class="mi">20</span><span class="p">)</span>
+</code></pre></div>
+
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+<thead>
+<tr style="text-align: right;">
+<th></th>
+<th>class</th>
+<th>structure</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>10087330</th>
+<td>Nc1ncnc2n(cnc12)[C@@H]1O[C@H](CO)[C@@H](O)[C@@...</td>
+<td>P(OC[C@H]1O[C@@H](N2C3=C(C(=NC=N3)N)N=C2)[C@@H...</td>
+</tr>
+<tr>
+<th>10087331</th>
+<td>Nc1ncnc2n(cnc12)[C@@H]1O[C@H](CO)[C@@H](O)[C@@...</td>
+<td>C(CCCCCCCCCCCCCCCCC1=CC=C(C=C1)O)(=O)OP(OC[C@H...</td>
+</tr>
+<tr>
+<th>10087332</th>
+<td>Nc1ncnc2n(cnc12)[C@@H]1O[C@H](CO)[C@@H](O)[C@@...</td>
+<td>O(P(OC[C@H]1O[C@@H](N2C=3N=CN=C(N)C3N=C2)[C@@H...</td>
+</tr>
+<tr>
+<th>10087333</th>
+<td>Nc1ncnc2n(cnc12)[C@@H]1O[C@H](CO)[C@@H](O)[C@@...</td>
+<td>CCCCC#CC1=NC2=C(C(=N1)NC)N=CN2C3C(C(C(O3)CO)O)O</td>
+</tr>
+<tr>
+<th>10087334</th>
+<td>Nc1ncnc2n(cnc12)[C@@H]1O[C@H](CO)[C@@H](O)[C@@...</td>
+<td>CCCC(=O)NC1=NC=NC2=C1N=CN2C3C(C4C(O3)COP(=O)(O...</td>
+</tr>
+<tr>
+<th>10087335</th>
+<td>Nc1ncnc2n(cnc12)[C@@H]1O[C@H](CO)[C@@H](O)[C@@...</td>
+<td>CCCC(=O)NC1=NC=NC2=C1N=CN2C3[C@@H]([C@H]4[C@H]...</td>
+</tr>
+<tr>
+<th>10087336</th>
+<td>Nc1ncnc2n(cnc12)[C@@H]1O[C@H](CO)[C@@H](O)[C@@...</td>
+<td>COC1C(C(OC1N2C=NC3=C2N=CN=C3NC4CCCCC4)CO)O</td>
+</tr>
+<tr>
+<th>10087337</th>
+<td>Nc1ncnc2n(cnc12)[C@@H]1O[C@H](CO)[C@@H](O)[C@@...</td>
+<td>C1=CC=C(C=C1)NC2=NC3=C(C(=N2)N)N=CN3C4C(C(C(O4...</td>
+</tr>
+<tr>
+<th>10087338</th>
+<td>Nc1ncnc2n(cnc12)[C@@H]1O[C@H](CO)[C@@H](O)[C@@...</td>
+<td>C1CCC(C1)NC2=NC=NC3=C2N=CN3C4C(C(C(O4)CO)O)O</td>
+</tr>
+<tr>
+<th>10087339</th>
+<td>Nc1ncnc2n(cnc12)[C@@H]1O[C@H](CO)[C@@H](O)[C@@...</td>
+<td>C1C[C@@H]([C@H](C1)O)NC2=NC=NC3=C2N=CN3[C@H]4[...</td>
+</tr>
+<tr>
+<th>10087340</th>
+<td>Nc1ncnc2n(cnc12)[C@@H]1O[C@H](CO)[C@@H](O)[C@@...</td>
+<td>C1C2C(C(C(O2)N3C4=C(C(=NC=N4)N)N=C3Br)O)OP(=O)...</td>
+</tr>
+<tr>
+<th>10087341</th>
+<td>Nc1ncnc2n(cnc12)[C@@H]1O[C@H](CO)[C@@H](O)[C@@...</td>
+<td>CO[C@@H]1[C@@H](O[C@H]2C1OP(=O)(OC2)O)N3C4=C(C...</td>
+</tr>
+<tr>
+<th>10087342</th>
+<td>Nc1ncnc2n(cnc12)[C@@H]1O[C@H](CO)[C@@H](O)[C@@...</td>
+<td>C1=NC2=C(C(=N1)N)N=CN2C3C(C(C(O3)CO)O)O</td>
+</tr>
+<tr>
+<th>10087343</th>
+<td>Nc1ncnc2n(cnc12)[C@@H]1O[C@H](CO)[C@@H](O)[C@@...</td>
+<td>C1=NC2=C(N1[C@H]3C(C([C@H](O3)CO)O)O)N=C(N=C2N)F</td>
+</tr>
+<tr>
+<th>10087344</th>
+<td>Nc1ncnc2n(cnc12)[C@@H]1O[C@H](CO)[C@@H](O)[C@@...</td>
+<td>C1=NC2=C(N1[C@H]3[C@H]([C@@H]([C@H](O3)CO)O)O)...</td>
+</tr>
+<tr>
+<th>10087345</th>
+<td>Nc1ncnc2n(cnc12)[C@@H]1O[C@H](CO)[C@@H](O)[C@@...</td>
+<td>C1=CC(=CC=C1COC[C@@H]2[C@H]([C@H]([C@@H](O2)N3...</td>
+</tr>
+<tr>
+<th>10087346</th>
+<td>Nc1ncnc2n(cnc12)[C@@H]1O[C@H](CO)[C@@H](O)[C@@...</td>
+<td>C1=COC(=C1)CNC2=NC=NC3=C2N=CN3[C@H]4[C@@H]([C@...</td>
+</tr>
+<tr>
+<th>10087347</th>
+<td>Nc1ncnc2n(cnc12)[C@@H]1O[C@H](CO)[C@@H](O)[C@@...</td>
+<td>C1=NC2=C(C(=N1)N)N=CN2C3[C@@H]([C@@H]([C@H](O3...</td>
+</tr>
+<tr>
+<th>10087348</th>
+<td>Nc1ncnc2n(cnc12)[C@@H]1O[C@H](CO)[C@@H](O)[C@@...</td>
+<td>C1=NC2=C(C(=N1)N)N=CN2[C@H]3C([C@H]([C@H](O3)C...</td>
+</tr>
+<tr>
+<th>10087349</th>
+<td>Nc1ncnc2n(cnc12)[C@@H]1O[C@H](CO)[C@@H](O)[C@@...</td>
+<td>O.Nc1ncnc2n(cnc12)[C@@H]1O[C@H](CO)[C@@H](O)[C...</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="err">!</span><span class="n">pip</span> <span class="n">install</span> <span class="n">pyarrow</span>
+</code></pre></div>
+
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>
+<code>Collecting pyarrow
+  Downloading pyarrow-19.0.1-cp311-cp311-macosx_12_0_arm64.whl.metadata (3.3 kB)
+Downloading pyarrow-19.0.1-cp311-cp311-macosx_12_0_arm64.whl (30.7 MB)
+   <span class="ansi-black-intense-fg">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span> <span class="ansi-green-fg">30.7/30.7 MB</span> <span class="ansi-red-fg">47.6 MB/s</span> eta <span class="ansi-cyan-fg">0:00:00</span>a <span class="ansi-cyan-fg">0:00:01</span>
+Installing collected packages: pyarrow
+Successfully installed pyarrow-19.0.1
+</code>
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">cs_df</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="s2">&quot;smarts-analysis/classifications.parquet&quot;</span><span class="p">,</span> <span class="n">compression</span><span class="o">=</span><span class="s1">&#39;snappy&#39;</span><span class="p">)</span>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html"></div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">cs_df</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="s2">&quot;smarts-analysis/classifications.csv&quot;</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">defaultdict</span>
+<span class="n">struct2class</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">c</span><span class="p">,</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">classifications</span><span class="p">:</span>
+    <span class="n">struct2class</span><span class="p">[</span><span class="n">s</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">c</span><span class="p">)</span>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">struct2class</span><span class="p">[</span><span class="s2">&quot;COc1ccc2c(O[C@@H]3c4ccc(OC)cc4OC[C@]23O)c1&quot;</span><span class="p">]</span>
+</code></pre></div>
+
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="output_text output_subarea output_execute_result">
+<pre>
+<code>['COc1ccc2C3COc4cc(O)ccc4C3Oc2c1',
+ '**',
+ '*C(*)O',
+ '[*]O[*]',
+ 'Oc1ccccc1*',
+ 'O*',
+ '*O',
+ 'C[*]',
+ '*CO',
+ 'O[*]',
+ 'OC[*]',
+ 'OCC(O)CO[*]',
+ 'CC(O)c1ccccc1',
+ '*C(O)*',
+ 'COc1ccccc1',
+ 'C(O)*',
+ 'CC(O)CO',
+ '[O]',
+ 'C1Oc2ccccc2CC1c1ccccc1',
+ '[C]',
+ 'CCCO',
+ 'OC(C(O)c1ccccc1)c1ccccc1',
+ '[CH2]',
+ 'C(*)O',
+ 'Oc1cccc(O)c1',
+ 'COc1ccc(C2COc3cc(O)ccc3C2)c(O)c1']</code>
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="c1"># do a left join to make a new df that is like df, </span>
+<span class="c1"># with cs_df added. Left join: df.child_smiles==cs_df.structure, parent_smiles=cs_df.class</span>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">results_df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
+    <span class="n">cs_df</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;class&#39;</span><span class="p">:</span> <span class="s1">&#39;child_class&#39;</span><span class="p">}),</span>
+    <span class="n">left_on</span><span class="o">=</span><span class="s1">&#39;child_smiles&#39;</span><span class="p">,</span>
+    <span class="n">right_on</span><span class="o">=</span><span class="s1">&#39;structure&#39;</span><span class="p">,</span>
+    <span class="n">how</span><span class="o">=</span><span class="s1">&#39;left&#39;</span>
+<span class="p">)</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
+    <span class="n">cs_df</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;class&#39;</span><span class="p">:</span> <span class="s1">&#39;parent_class&#39;</span><span class="p">}),</span>
+    <span class="n">left_on</span><span class="o">=</span><span class="s1">&#39;parent_smiles&#39;</span><span class="p">,</span>
+    <span class="n">right_on</span><span class="o">=</span><span class="s1">&#39;structure&#39;</span><span class="p">,</span>
+    <span class="n">how</span><span class="o">=</span><span class="s1">&#39;left&#39;</span>
+<span class="p">)</span>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">results_df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
+    <span class="n">cs_df</span><span class="p">,</span>
+    <span class="n">left_on</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;child_smiles&#39;</span><span class="p">,</span> <span class="s1">&#39;parent_smiles&#39;</span><span class="p">],</span>
+    <span class="n">right_on</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;structure&#39;</span><span class="p">,</span> <span class="s1">&#39;class&#39;</span><span class="p">],</span>
+    <span class="n">how</span><span class="o">=</span><span class="s1">&#39;left&#39;</span>
+<span class="p">)</span>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">results_df</span>
+</code></pre></div>
+
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+<thead>
+<tr style="text-align: right;">
+<th></th>
+<th>subject</th>
+<th>object</th>
+<th>child</th>
+<th>parent</th>
+<th>child_label</th>
+<th>parent_label</th>
+<th>child_smiles</th>
+<th>parent_smiles</th>
+<th>class</th>
+<th>structure</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>0</th>
+<td>CHEBI:100</td>
+<td>CHEBI:16114</td>
+<td>CHEBI:100</td>
+<td>CHEBI:16114</td>
+<td>(-)-medicarpin</td>
+<td>medicarpin</td>
+<td>[H][C@@]12COc3cc(O)ccc3[C@]1([H])Oc1cc(OC)ccc21</td>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+<td>[H][C@@]12COc3cc(O)ccc3[C@]1([H])Oc1cc(OC)ccc21</td>
+</tr>
+<tr>
+<th>1</th>
+<td>CHEBI:100005</td>
+<td>CHEBI:35358</td>
+<td>CHEBI:100005</td>
+<td>CHEBI:35358</td>
+<td>N-[(1S,3S,4aS,9aR)-1-(hydroxymethyl)-3-[2-oxo-...</td>
+<td>sulfonamide</td>
+<td>COC1=CC(=CC=C1)S(=O)(=O)NC2=CC3=C(C=C2)O[C@@H]...</td>
+<td>[*]S(=O)(=O)N([*])[*]</td>
+<td>NaN</td>
+<td>NaN</td>
+</tr>
+<tr>
+<th>2</th>
+<td>CHEBI:100011</td>
+<td>CHEBI:17792</td>
+<td>CHEBI:100011</td>
+<td>CHEBI:17792</td>
+<td>2-[(3R,6aR,8R,10aR)-1-[(4-fluorophenyl)-oxomet...</td>
+<td>organohalogen compound</td>
+<td>C1CCN(CC1)C(=O)C[C@H]2CC[C@@H]3[C@@H](O2)COC[C...</td>
+<td>**</td>
+<td>**</td>
+<td>C1CCN(CC1)C(=O)C[C@H]2CC[C@@H]3[C@@H](O2)COC[C...</td>
+</tr>
+<tr>
+<th>3</th>
+<td>CHEBI:100012</td>
+<td>CHEBI:140326</td>
+<td>CHEBI:100012</td>
+<td>CHEBI:140326</td>
+<td>N-[(2R,4aR,12aR)-2-[2-(cyclohexylmethylamino)-...</td>
+<td>tertiary carboxamide</td>
+<td>CN1[C@@H]2CC[C@@H](O[C@H]2COC3=C(C1=O)C=C(C=C3...</td>
+<td>N(C(*)=O)(*)*</td>
+<td>N(C(*)=O)(*)*</td>
+<td>CN1[C@@H]2CC[C@@H](O[C@H]2COC3=C(C1=O)C=C(C=C3...</td>
+</tr>
+<tr>
+<th>4</th>
+<td>CHEBI:100012</td>
+<td>CHEBI:140325</td>
+<td>CHEBI:100012</td>
+<td>CHEBI:140325</td>
+<td>N-[(2R,4aR,12aR)-2-[2-(cyclohexylmethylamino)-...</td>
+<td>secondary carboxamide</td>
+<td>CN1[C@@H]2CC[C@@H](O[C@H]2COC3=C(C1=O)C=C(C=C3...</td>
+<td>N(C(*)=O)(*)[H]</td>
+<td>NaN</td>
+<td>NaN</td>
+</tr>
+<tr>
+<th>...</th>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+</tr>
+<tr>
+<th>56775</th>
+<td>CHEBI:99977</td>
+<td>CHEBI:35358</td>
+<td>CHEBI:99977</td>
+<td>CHEBI:35358</td>
+<td>2-[(2S,4aS,12aS)-8-[(4-fluorophenyl)sulfonylam...</td>
+<td>sulfonamide</td>
+<td>CN1[C@H]2CC[C@H](O[C@@H]2COC3=C(C1=O)C=C(C=C3)...</td>
+<td>[*]S(=O)(=O)N([*])[*]</td>
+<td>NaN</td>
+<td>NaN</td>
+</tr>
+<tr>
+<th>56776</th>
+<td>CHEBI:99978</td>
+<td>CHEBI:35358</td>
+<td>CHEBI:99978</td>
+<td>CHEBI:35358</td>
+<td>2-[(2S,4aS,12aS)-8-(ethylsulfonylamino)-5-meth...</td>
+<td>sulfonamide</td>
+<td>CCS(=O)(=O)NC1=CC2=C(C=C1)OC[C@@H]3[C@H](CC[C@...</td>
+<td>[*]S(=O)(=O)N([*])[*]</td>
+<td>NaN</td>
+<td>NaN</td>
+</tr>
+<tr>
+<th>56777</th>
+<td>CHEBI:99990</td>
+<td>CHEBI:35358</td>
+<td>CHEBI:99990</td>
+<td>CHEBI:35358</td>
+<td>N-[(2R,3R)-4-[(2,5-difluorophenyl)methyl-methy...</td>
+<td>sulfonamide</td>
+<td>CC1=CC=C(C=C1)S(=O)(=O)N(C[C@@H](C)[C@H](CN(C)...</td>
+<td>[*]S(=O)(=O)N([*])[*]</td>
+<td>[*]S(=O)(=O)N([*])[*]</td>
+<td>CC1=CC=C(C=C1)S(=O)(=O)N(C[C@@H](C)[C@H](CN(C)...</td>
+</tr>
+<tr>
+<th>56778</th>
+<td>CHEBI:99992</td>
+<td>CHEBI:35358</td>
+<td>CHEBI:99992</td>
+<td>CHEBI:35358</td>
+<td>2-[(3S,6aR,8S,10aR)-1-(3-chlorophenyl)sulfonyl...</td>
+<td>sulfonamide</td>
+<td>C1CCN(CC1)C(=O)C[C@@H]2CC[C@@H]3[C@@H](O2)COC[...</td>
+<td>[*]S(=O)(=O)N([*])[*]</td>
+<td>[*]S(=O)(=O)N([*])[*]</td>
+<td>C1CCN(CC1)C(=O)C[C@@H]2CC[C@@H]3[C@@H](O2)COC[...</td>
+</tr>
+<tr>
+<th>56779</th>
+<td>CHEBI:99997</td>
+<td>CHEBI:17792</td>
+<td>CHEBI:99997</td>
+<td>CHEBI:17792</td>
+<td>N-[(2S,4aS,12aS)-2-[2-(cyclohexylmethylamino)-...</td>
+<td>organohalogen compound</td>
+<td>CN1[C@H]2CC[C@H](O[C@@H]2COC3=C(C1=O)C=C(C=C3)...</td>
+<td>**</td>
+<td>**</td>
+<td>CN1[C@H]2CC[C@H](O[C@@H]2COC3=C(C1=O)C=C(C=C3)...</td>
+</tr>
+</tbody>
+</table>
+<p>56780 rows × 10 columns</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">missing_from_smarts</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span>
+    <span class="o">~</span><span class="n">df</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
+        <span class="n">cs_df</span><span class="p">,</span>
+        <span class="n">left_on</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;child_smiles&#39;</span><span class="p">,</span> <span class="s1">&#39;parent_smiles&#39;</span><span class="p">],</span>
+        <span class="n">right_on</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;structure&#39;</span><span class="p">,</span> <span class="s1">&#39;class&#39;</span><span class="p">],</span>
+        <span class="n">how</span><span class="o">=</span><span class="s1">&#39;left&#39;</span>
+    <span class="p">)[</span><span class="s1">&#39;structure&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">notna</span><span class="p">()</span>
+<span class="p">]</span>
+</code></pre></div>
+
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">missing_from_smarts</span>
+</code></pre></div>
+
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+<thead>
+<tr style="text-align: right;">
+<th></th>
+<th>subject</th>
+<th>object</th>
+<th>child</th>
+<th>parent</th>
+<th>child_label</th>
+<th>parent_label</th>
+<th>child_smiles</th>
+<th>parent_smiles</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>1</th>
+<td>CHEBI:100005</td>
+<td>CHEBI:35358</td>
+<td>CHEBI:100005</td>
+<td>CHEBI:35358</td>
+<td>N-[(1S,3S,4aS,9aR)-1-(hydroxymethyl)-3-[2-oxo-...</td>
+<td>sulfonamide</td>
+<td>COC1=CC(=CC=C1)S(=O)(=O)NC2=CC3=C(C=C2)O[C@@H]...</td>
+<td>[*]S(=O)(=O)N([*])[*]</td>
+</tr>
+<tr>
+<th>4</th>
+<td>CHEBI:100012</td>
+<td>CHEBI:140325</td>
+<td>CHEBI:100012</td>
+<td>CHEBI:140325</td>
+<td>N-[(2R,4aR,12aR)-2-[2-(cyclohexylmethylamino)-...</td>
+<td>secondary carboxamide</td>
+<td>CN1[C@@H]2CC[C@@H](O[C@H]2COC3=C(C1=O)C=C(C=C3...</td>
+<td>N(C(*)=O)(*)[H]</td>
+</tr>
+<tr>
+<th>10</th>
+<td>CHEBI:100054</td>
+<td>CHEBI:35358</td>
+<td>CHEBI:100054</td>
+<td>CHEBI:35358</td>
+<td>2-[(1S,3S,4aR,9aS)-1-(hydroxymethyl)-6-[(3-met...</td>
+<td>sulfonamide</td>
+<td>COC1=CC(=CC=C1)S(=O)(=O)NC2=CC3=C(C=C2)O[C@H]4...</td>
+<td>[*]S(=O)(=O)N([*])[*]</td>
+</tr>
+<tr>
+<th>15</th>
+<td>CHEBI:100076</td>
+<td>CHEBI:35358</td>
+<td>CHEBI:100076</td>
+<td>CHEBI:35358</td>
+<td>2-[(1R,3S,4aS,9aR)-1-(hydroxymethyl)-6-[(3-met...</td>
+<td>sulfonamide</td>
+<td>COC1=CC(=CC=C1)S(=O)(=O)NC2=CC3=C(C=C2)O[C@@H]...</td>
+<td>[*]S(=O)(=O)N([*])[*]</td>
+</tr>
+<tr>
+<th>16</th>
+<td>CHEBI:100079</td>
+<td>CHEBI:35358</td>
+<td>CHEBI:100079</td>
+<td>CHEBI:35358</td>
+<td>2-[(2S,4aR,12aR)-8-(ethylsulfonylamino)-5-meth...</td>
+<td>sulfonamide</td>
+<td>CCS(=O)(=O)NC1=CC2=C(C=C1)OC[C@H]3[C@@H](CC[C@...</td>
+<td>[*]S(=O)(=O)N([*])[*]</td>
+</tr>
+<tr>
+<th>...</th>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+</tr>
+<tr>
+<th>56769</th>
+<td>CHEBI:99969</td>
+<td>CHEBI:35358</td>
+<td>CHEBI:99969</td>
+<td>CHEBI:35358</td>
+<td>2-[(2R,4aS,12aS)-8-(methanesulfonamido)-5-meth...</td>
+<td>sulfonamide</td>
+<td>CN1[C@H]2CC[C@@H](O[C@@H]2COC3=C(C1=O)C=C(C=C3...</td>
+<td>[*]S(=O)(=O)N([*])[*]</td>
+</tr>
+<tr>
+<th>56770</th>
+<td>CHEBI:9997</td>
+<td>CHEBI:51751</td>
+<td>CHEBI:9997</td>
+<td>CHEBI:51751</td>
+<td>pristinamycin IIA</td>
+<td>enamide</td>
+<td>CC(C)[C@H]1OC(=O)C2=CCCN2C(=O)c2coc(CC(=O)C[C@...</td>
+<td>[*]\C([*])=C(\[*])C(=O)N([*])[*]</td>
+</tr>
+<tr>
+<th>56773</th>
+<td>CHEBI:9997</td>
+<td>CHEBI:140325</td>
+<td>CHEBI:9997</td>
+<td>CHEBI:140325</td>
+<td>pristinamycin IIA</td>
+<td>secondary carboxamide</td>
+<td>CC(C)[C@H]1OC(=O)C2=CCCN2C(=O)c2coc(CC(=O)C[C@...</td>
+<td>N(C(*)=O)(*)[H]</td>
+</tr>
+<tr>
+<th>56775</th>
+<td>CHEBI:99977</td>
+<td>CHEBI:35358</td>
+<td>CHEBI:99977</td>
+<td>CHEBI:35358</td>
+<td>2-[(2S,4aS,12aS)-8-[(4-fluorophenyl)sulfonylam...</td>
+<td>sulfonamide</td>
+<td>CN1[C@H]2CC[C@H](O[C@@H]2COC3=C(C1=O)C=C(C=C3)...</td>
+<td>[*]S(=O)(=O)N([*])[*]</td>
+</tr>
+<tr>
+<th>56776</th>
+<td>CHEBI:99978</td>
+<td>CHEBI:35358</td>
+<td>CHEBI:99978</td>
+<td>CHEBI:35358</td>
+<td>2-[(2S,4aS,12aS)-8-(ethylsulfonylamino)-5-meth...</td>
+<td>sulfonamide</td>
+<td>CCS(=O)(=O)NC1=CC2=C(C=C1)OC[C@@H]3[C@H](CC[C@...</td>
+<td>[*]S(=O)(=O)N([*])[*]</td>
+</tr>
+</tbody>
+</table>
+<p>18852 rows × 8 columns</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="c1"># Pairs in SMARTS that don&#39;t exist in CHEBI</span>
+<span class="n">missing_from_chebi</span> <span class="o">=</span> <span class="n">cs_df</span><span class="p">[</span>
+    <span class="o">~</span><span class="n">cs_df</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
+        <span class="n">df</span><span class="p">,</span>
+        <span class="n">left_on</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;structure&#39;</span><span class="p">,</span> <span class="s1">&#39;class&#39;</span><span class="p">],</span>
+        <span class="n">right_on</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;child_smiles&#39;</span><span class="p">,</span> <span class="s1">&#39;parent_smiles&#39;</span><span class="p">],</span>
+        <span class="n">how</span><span class="o">=</span><span class="s1">&#39;left&#39;</span>
+    <span class="p">)[</span><span class="s1">&#39;child_smiles&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">notna</span><span class="p">()</span>
+<span class="p">]</span>
+</code></pre></div>
+
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="output_subarea output_stream output_stderr output_text">
+<pre>
+<code>/var/folders/nc/m4tx21912kv1b8nk3zzx9plr0000gn/T/ipykernel_64591/2723449236.py:2: UserWarning: Boolean Series key will be reindexed to match DataFrame index.
+  missing_from_chebi = cs_df[
+</code>
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="n">missing_from_chebi</span>
+</code></pre></div>
+
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+<thead>
+<tr style="text-align: right;">
+<th></th>
+<th>class</th>
+<th>structure</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>1</th>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+<td>C12=C3C(=CC=C2OC(CC1)(C)C)[C@]4([C@@](O3)(C=5C...</td>
+</tr>
+<tr>
+<th>2</th>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+<td>COC1=CC2=C(C=C1)[C@@H]3COC4=C([C@@H]3O2)C=CC(=...</td>
+</tr>
+<tr>
+<th>3</th>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+<td>COc1ccc2c(O[C@@H]3c4ccc(OC)cc4OC[C@]23O)c1</td>
+</tr>
+<tr>
+<th>4</th>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+</tr>
+<tr>
+<th>5</th>
+<td>COc1ccc2C3COc4cc(O)ccc4C3Oc2c1</td>
+<td>O1C2C(C3=C1C4=C(OC(C=C4)(C)C)C=C3)COC5=C2C=CC(...</td>
+</tr>
+<tr>
+<th>...</th>
+<td>...</td>
+<td>...</td>
+</tr>
+<tr>
+<th>10087345</th>
+<td>Nc1ncnc2n(cnc12)[C@@H]1O[C@H](CO)[C@@H](O)[C@@...</td>
+<td>C1=CC(=CC=C1COC[C@@H]2[C@H]([C@H]([C@@H](O2)N3...</td>
+</tr>
+<tr>
+<th>10087346</th>
+<td>Nc1ncnc2n(cnc12)[C@@H]1O[C@H](CO)[C@@H](O)[C@@...</td>
+<td>C1=COC(=C1)CNC2=NC=NC3=C2N=CN3[C@H]4[C@@H]([C@...</td>
+</tr>
+<tr>
+<th>10087347</th>
+<td>Nc1ncnc2n(cnc12)[C@@H]1O[C@H](CO)[C@@H](O)[C@@...</td>
+<td>C1=NC2=C(C(=N1)N)N=CN2C3[C@@H]([C@@H]([C@H](O3...</td>
+</tr>
+<tr>
+<th>10087348</th>
+<td>Nc1ncnc2n(cnc12)[C@@H]1O[C@H](CO)[C@@H](O)[C@@...</td>
+<td>C1=NC2=C(C(=N1)N)N=CN2[C@H]3C([C@H]([C@H](O3)C...</td>
+</tr>
+<tr>
+<th>10087349</th>
+<td>Nc1ncnc2n(cnc12)[C@@H]1O[C@H](CO)[C@@H](O)[C@@...</td>
+<td>O.Nc1ncnc2n(cnc12)[C@@H]1O[C@H](CO)[C@@H](O)[C...</td>
+</tr>
+</tbody>
+</table>
+<p>10049423 rows × 2 columns</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code><span class="c1"># Option 1: Use string concatenation with nunique()</span>
+<span class="n">all_pairs</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">chebi_pairs</span><span class="p">,</span> <span class="n">smarts_pairs</span><span class="p">])</span>
+<span class="n">summary_df</span> <span class="o">=</span> <span class="n">all_pairs</span><span class="o">.</span><span class="n">groupby</span><span class="p">([</span><span class="s1">&#39;child_smiles&#39;</span><span class="p">,</span> <span class="s1">&#39;parent_smiles&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">agg</span><span class="p">(</span>
+    <span class="n">source_count</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;source&#39;</span><span class="p">,</span> <span class="s1">&#39;nunique&#39;</span><span class="p">),</span>
+    <span class="n">sources</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;source&#39;</span><span class="p">,</span> <span class="nb">set</span><span class="p">)</span>
+<span class="p">)</span><span class="o">.</span><span class="n">assign</span><span class="p">(</span>
+    <span class="n">source</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="s1">&#39;source_count&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">2</span><span class="p">,</span> <span class="s1">&#39;CHEBI/SMARTS&#39;</span><span class="p">,</span>
+           <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="s1">&#39;sources&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">contains</span><span class="p">(</span><span class="s1">&#39;CHEBI&#39;</span><span class="p">),</span> <span class="s1">&#39;CHEBI&#39;</span><span class="p">,</span> <span class="s1">&#39;SMARTS&#39;</span><span class="p">))</span>
+<span class="p">)</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
+
+<span class="c1"># Option 2: Even simpler - use value_counts</span>
+<span class="n">summary_df</span> <span class="o">=</span> <span class="p">(</span><span class="n">all_pairs</span><span class="o">.</span><span class="n">groupby</span><span class="p">([</span><span class="s1">&#39;child_smiles&#39;</span><span class="p">,</span> <span class="s1">&#39;parent_smiles&#39;</span><span class="p">])</span>
+             <span class="p">[</span><span class="s1">&#39;source&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value_counts</span><span class="p">()</span>
+             <span class="o">.</span><span class="n">unstack</span><span class="p">(</span><span class="n">fill_value</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+             <span class="o">.</span><span class="n">assign</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">((</span><span class="n">x</span><span class="p">[</span><span class="s1">&#39;CHEBI&#39;</span><span class="p">]</span> <span class="o">&amp;</span><span class="n">gt</span><span class="p">;</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span><span class="n">amp</span><span class="p">;</span> <span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="s1">&#39;SMARTS&#39;</span><span class="p">]</span> <span class="o">&amp;</span><span class="n">gt</span><span class="p">;</span> <span class="mi">0</span><span class="p">),</span> 
+                                             <span class="s1">&#39;CHEBI/SMARTS&#39;</span><span class="p">,</span>
+                                             <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="s1">&#39;CHEBI&#39;</span><span class="p">]</span> <span class="o">&amp;</span><span class="n">gt</span><span class="p">;</span> <span class="mi">0</span><span class="p">,</span> <span class="s1">&#39;CHEBI&#39;</span><span class="p">,</span> <span class="s1">&#39;SMARTS&#39;</span><span class="p">)))</span>
+             <span class="o">.</span><span class="n">reset_index</span><span class="p">())</span>
+</code></pre></div>
+
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="output_subarea output_text output_error">
+<pre>
+<span class="ansi-red-fg">---------------------------------------------------------------------------</span>
+<span class="ansi-red-fg">KeyboardInterrupt</span>                         Traceback (most recent call last)
+Cell <span class="ansi-green-fg">In[69], line 3</span>
+<span class="ansi-green-intense-fg ansi-bold">      1</span> <span style="color: rgb(95,135,135)"># Option 1: Use string concatenation with nunique()</span>
+<span class="ansi-green-intense-fg ansi-bold">      2</span> all_pairs <span style="color: rgb(98,98,98)">=</span> pd<span style="color: rgb(98,98,98)">.</span>concat([chebi_pairs, smarts_pairs])
+<span class="ansi-green-fg">----&gt; 3</span> summary_df <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">all_pairs</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">groupby</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">[</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">'</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">child_smiles</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">'</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">'</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">parent_smiles</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">'</span><span class="ansi-yellow-bg">]</span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">agg</span><span class="ansi-yellow-bg">(</span>
+<span class="ansi-green-intense-fg ansi-bold">      4</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">source_count</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">'</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">source</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">'</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">'</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">nunique</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">'</span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg">,</span>
+<span class="ansi-green-intense-fg ansi-bold">      5</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">sources</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">'</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">source</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">'</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">set</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">      6</span> <span class="ansi-yellow-bg">)</span><span style="color: rgb(98,98,98)">.</span>assign(
+<span class="ansi-green-intense-fg ansi-bold">      7</span>     source<span style="color: rgb(98,98,98)">=</span><span class="ansi-bold" style="color: rgb(0,135,0)">lambda</span> x: np<span style="color: rgb(98,98,98)">.</span>where(x[<span style="color: rgb(175,0,0)">'</span><span style="color: rgb(175,0,0)">source_count</span><span style="color: rgb(175,0,0)">'</span>] <span style="color: rgb(98,98,98)">==</span> <span style="color: rgb(98,98,98)">2</span>, <span style="color: rgb(175,0,0)">'</span><span style="color: rgb(175,0,0)">CHEBI/SMARTS</span><span style="color: rgb(175,0,0)">'</span>,
+<span class="ansi-green-intense-fg ansi-bold">      8</span>            np<span style="color: rgb(98,98,98)">.</span>where(x[<span style="color: rgb(175,0,0)">'</span><span style="color: rgb(175,0,0)">sources</span><span style="color: rgb(175,0,0)">'</span>]<span style="color: rgb(98,98,98)">.</span>str<span style="color: rgb(98,98,98)">.</span>contains(<span style="color: rgb(175,0,0)">'</span><span style="color: rgb(175,0,0)">CHEBI</span><span style="color: rgb(175,0,0)">'</span>), <span style="color: rgb(175,0,0)">'</span><span style="color: rgb(175,0,0)">CHEBI</span><span style="color: rgb(175,0,0)">'</span>, <span style="color: rgb(175,0,0)">'</span><span style="color: rgb(175,0,0)">SMARTS</span><span style="color: rgb(175,0,0)">'</span>))
+<span class="ansi-green-intense-fg ansi-bold">      9</span> )<span style="color: rgb(98,98,98)">.</span>reset_index()
+<span class="ansi-green-intense-fg ansi-bold">     11</span> <span style="color: rgb(95,135,135)"># Option 2: Even simpler - use value_counts</span>
+<span class="ansi-green-intense-fg ansi-bold">     12</span> summary_df <span style="color: rgb(98,98,98)">=</span> (all_pairs<span style="color: rgb(98,98,98)">.</span>groupby([<span style="color: rgb(175,0,0)">'</span><span style="color: rgb(175,0,0)">child_smiles</span><span style="color: rgb(175,0,0)">'</span>, <span style="color: rgb(175,0,0)">'</span><span style="color: rgb(175,0,0)">parent_smiles</span><span style="color: rgb(175,0,0)">'</span>])
+<span class="ansi-green-intense-fg ansi-bold">     13</span>              [<span style="color: rgb(175,0,0)">'</span><span style="color: rgb(175,0,0)">source</span><span style="color: rgb(175,0,0)">'</span>]<span style="color: rgb(98,98,98)">.</span>value_counts()
+<span class="ansi-green-intense-fg ansi-bold">     14</span>              <span style="color: rgb(98,98,98)">.</span>unstack(fill_value<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(98,98,98)">0</span>)
+<span class="ansi-green-fg">   (...)</span>
+<span class="ansi-green-intense-fg ansi-bold">     17</span>                                              np<span style="color: rgb(98,98,98)">.</span>where(x[<span style="color: rgb(175,0,0)">'</span><span style="color: rgb(175,0,0)">CHEBI</span><span style="color: rgb(175,0,0)">'</span>] <span style="color: rgb(98,98,98)">&gt;</span> <span style="color: rgb(98,98,98)">0</span>, <span style="color: rgb(175,0,0)">'</span><span style="color: rgb(175,0,0)">CHEBI</span><span style="color: rgb(175,0,0)">'</span>, <span style="color: rgb(175,0,0)">'</span><span style="color: rgb(175,0,0)">SMARTS</span><span style="color: rgb(175,0,0)">'</span>)))
+<span class="ansi-green-intense-fg ansi-bold">     18</span>              <span style="color: rgb(98,98,98)">.</span>reset_index())
+
+File <span class="ansi-green-fg">~/Library/Caches/pypoetry/virtualenvs/c3p-93U7KWO_-py3.11/lib/python3.11/site-packages/pandas/core/groupby/generic.py:1432</span>, in <span class="ansi-cyan-fg">DataFrameGroupBy.aggregate</span><span class="ansi-blue-fg">(self, func, engine, engine_kwargs, *args, **kwargs)</span>
+<span class="ansi-green-intense-fg ansi-bold">   1429</span>     kwargs[<span style="color: rgb(175,0,0)">"</span><span style="color: rgb(175,0,0)">engine_kwargs</span><span style="color: rgb(175,0,0)">"</span>] <span style="color: rgb(98,98,98)">=</span> engine_kwargs
+<span class="ansi-green-intense-fg ansi-bold">   1431</span> op <span style="color: rgb(98,98,98)">=</span> GroupByApply(<span style="color: rgb(0,135,0)">self</span>, func, args<span style="color: rgb(98,98,98)">=</span>args, kwargs<span style="color: rgb(98,98,98)">=</span>kwargs)
+<span class="ansi-green-fg">-&gt; 1432</span> result <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">op</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">agg</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">   1433</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> is_dict_like(func) <span class="ansi-bold" style="color: rgb(175,0,255)">and</span> result <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
+<span class="ansi-green-intense-fg ansi-bold">   1434</span>     <span style="color: rgb(95,135,135)"># GH #52849</span>
+<span class="ansi-green-intense-fg ansi-bold">   1435</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>as_index <span class="ansi-bold" style="color: rgb(175,0,255)">and</span> is_list_like(func):
+
+File <span class="ansi-green-fg">~/Library/Caches/pypoetry/virtualenvs/c3p-93U7KWO_-py3.11/lib/python3.11/site-packages/pandas/core/apply.py:190</span>, in <span class="ansi-cyan-fg">Apply.agg</span><span class="ansi-blue-fg">(self)</span>
+<span class="ansi-green-intense-fg ansi-bold">    187</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>apply_str()
+<span class="ansi-green-intense-fg ansi-bold">    189</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> is_dict_like(func):
+<span class="ansi-green-fg">--&gt; 190</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">agg_dict_like</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    191</span> <span class="ansi-bold" style="color: rgb(0,135,0)">elif</span> is_list_like(func):
+<span class="ansi-green-intense-fg ansi-bold">    192</span>     <span style="color: rgb(95,135,135)"># we require a list, but not a 'str'</span>
+<span class="ansi-green-intense-fg ansi-bold">    193</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>agg_list_like()
+
+File <span class="ansi-green-fg">~/Library/Caches/pypoetry/virtualenvs/c3p-93U7KWO_-py3.11/lib/python3.11/site-packages/pandas/core/apply.py:423</span>, in <span class="ansi-cyan-fg">Apply.agg_dict_like</span><span class="ansi-blue-fg">(self)</span>
+<span class="ansi-green-intense-fg ansi-bold">    415</span> <span class="ansi-bold" style="color: rgb(0,135,0)">def</span> <span style="color: rgb(0,0,255)">agg_dict_like</span>(<span style="color: rgb(0,135,0)">self</span>) <span style="color: rgb(98,98,98)">-</span><span style="color: rgb(98,98,98)">&gt;</span> DataFrame <span style="color: rgb(98,98,98)">|</span> Series:
+<span class="ansi-green-intense-fg ansi-bold">    416</span> <span style="color: rgb(188,188,188)">    </span><span style="color: rgb(175,0,0)">"""</span>
+<span class="ansi-green-intense-fg ansi-bold">    417</span> <span style="color: rgb(175,0,0)">    Compute aggregation in the case of a dict-like argument.</span>
+<span class="ansi-green-intense-fg ansi-bold">    418</span> 
+<span class="ansi-green-fg">   (...)</span>
+<span class="ansi-green-intense-fg ansi-bold">    421</span> <span style="color: rgb(175,0,0)">    Result of aggregation.</span>
+<span class="ansi-green-intense-fg ansi-bold">    422</span> <span style="color: rgb(175,0,0)">    """</span>
+<span class="ansi-green-fg">--&gt; 423</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">agg_or_apply_dict_like</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">op_name</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">"</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">agg</span><span class="ansi-yellow-bg" style="color: rgb(175,0,0)">"</span><span class="ansi-yellow-bg">)</span>
+
+File <span class="ansi-green-fg">~/Library/Caches/pypoetry/virtualenvs/c3p-93U7KWO_-py3.11/lib/python3.11/site-packages/pandas/core/apply.py:1608</span>, in <span class="ansi-cyan-fg">GroupByApply.agg_or_apply_dict_like</span><span class="ansi-blue-fg">(self, op_name)</span>
+<span class="ansi-green-intense-fg ansi-bold">   1603</span>     kwargs<span style="color: rgb(98,98,98)">.</span>update({<span style="color: rgb(175,0,0)">"</span><span style="color: rgb(175,0,0)">engine</span><span style="color: rgb(175,0,0)">"</span>: engine, <span style="color: rgb(175,0,0)">"</span><span style="color: rgb(175,0,0)">engine_kwargs</span><span style="color: rgb(175,0,0)">"</span>: engine_kwargs})
+<span class="ansi-green-intense-fg ansi-bold">   1605</span> <span class="ansi-bold" style="color: rgb(0,135,0)">with</span> com<span style="color: rgb(98,98,98)">.</span>temp_setattr(
+<span class="ansi-green-intense-fg ansi-bold">   1606</span>     obj, <span style="color: rgb(175,0,0)">"</span><span style="color: rgb(175,0,0)">as_index</span><span style="color: rgb(175,0,0)">"</span>, <span class="ansi-bold" style="color: rgb(0,135,0)">True</span>, condition<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(0,135,0)">hasattr</span>(obj, <span style="color: rgb(175,0,0)">"</span><span style="color: rgb(175,0,0)">as_index</span><span style="color: rgb(175,0,0)">"</span>)
+<span class="ansi-green-intense-fg ansi-bold">   1607</span> ):
+<span class="ansi-green-fg">-&gt; 1608</span>     result_index, result_data <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">compute_dict_like</span><span class="ansi-yellow-bg">(</span>
+<span class="ansi-green-intense-fg ansi-bold">   1609</span> <span class="ansi-yellow-bg">        </span><span class="ansi-yellow-bg">op_name</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">selected_obj</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">selection</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">kwargs</span>
+<span class="ansi-green-intense-fg ansi-bold">   1610</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">   1611</span> result <span style="color: rgb(98,98,98)">=</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>wrap_results_dict_like(selected_obj, result_index, result_data)
+<span class="ansi-green-intense-fg ansi-bold">   1612</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> result
+
+File <span class="ansi-green-fg">~/Library/Caches/pypoetry/virtualenvs/c3p-93U7KWO_-py3.11/lib/python3.11/site-packages/pandas/core/apply.py:496</span>, in <span class="ansi-cyan-fg">Apply.compute_dict_like</span><span class="ansi-blue-fg">(self, op_name, selected_obj, selection, kwargs)</span>
+<span class="ansi-green-intense-fg ansi-bold">    493</span>         results <span style="color: rgb(98,98,98)">+</span><span style="color: rgb(98,98,98)">=</span> key_data
+<span class="ansi-green-intense-fg ansi-bold">    494</span> <span class="ansi-bold" style="color: rgb(0,135,0)">else</span>:
+<span class="ansi-green-intense-fg ansi-bold">    495</span>     <span style="color: rgb(95,135,135)"># key used for column selection and output</span>
+<span class="ansi-green-fg">--&gt; 496</span>     results <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">[</span>
+<span class="ansi-green-intense-fg ansi-bold">    497</span> <span class="ansi-yellow-bg">        </span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">getattr</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">obj</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">_gotitem</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">key</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">ndim</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">1</span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">op_name</span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">how</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">*</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">*</span><span class="ansi-yellow-bg">kwargs</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    498</span> <span class="ansi-yellow-bg">        </span><span class="ansi-yellow-bg ansi-bold" style="color: rgb(0,135,0)">for</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">key</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">how</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg ansi-bold" style="color: rgb(175,0,255)">in</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">func</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">items</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    499</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">]</span>
+<span class="ansi-green-intense-fg ansi-bold">    500</span>     keys <span style="color: rgb(98,98,98)">=</span> <span style="color: rgb(0,135,0)">list</span>(func<span style="color: rgb(98,98,98)">.</span>keys())
+<span class="ansi-green-intense-fg ansi-bold">    502</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> keys, results
+
+File <span class="ansi-green-fg">~/Library/Caches/pypoetry/virtualenvs/c3p-93U7KWO_-py3.11/lib/python3.11/site-packages/pandas/core/apply.py:497</span>, in <span class="ansi-cyan-fg">&lt;listcomp&gt;</span><span class="ansi-blue-fg">(.0)</span>
+<span class="ansi-green-intense-fg ansi-bold">    493</span>         results <span style="color: rgb(98,98,98)">+</span><span style="color: rgb(98,98,98)">=</span> key_data
+<span class="ansi-green-intense-fg ansi-bold">    494</span> <span class="ansi-bold" style="color: rgb(0,135,0)">else</span>:
+<span class="ansi-green-intense-fg ansi-bold">    495</span>     <span style="color: rgb(95,135,135)"># key used for column selection and output</span>
+<span class="ansi-green-intense-fg ansi-bold">    496</span>     results <span style="color: rgb(98,98,98)">=</span> [
+<span class="ansi-green-fg">--&gt; 497</span>         <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">getattr</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">obj</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">_gotitem</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">key</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">ndim</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">1</span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">op_name</span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">how</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">*</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">*</span><span class="ansi-yellow-bg">kwargs</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    498</span>         <span class="ansi-bold" style="color: rgb(0,135,0)">for</span> key, how <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> func<span style="color: rgb(98,98,98)">.</span>items()
+<span class="ansi-green-intense-fg ansi-bold">    499</span>     ]
+<span class="ansi-green-intense-fg ansi-bold">    500</span>     keys <span style="color: rgb(98,98,98)">=</span> <span style="color: rgb(0,135,0)">list</span>(func<span style="color: rgb(98,98,98)">.</span>keys())
+<span class="ansi-green-intense-fg ansi-bold">    502</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> keys, results
+
+File <span class="ansi-green-fg">~/Library/Caches/pypoetry/virtualenvs/c3p-93U7KWO_-py3.11/lib/python3.11/site-packages/pandas/core/groupby/generic.py:257</span>, in <span class="ansi-cyan-fg">SeriesGroupBy.aggregate</span><span class="ansi-blue-fg">(self, func, engine, engine_kwargs, *args, **kwargs)</span>
+<span class="ansi-green-intense-fg ansi-bold">    255</span> kwargs[<span style="color: rgb(175,0,0)">"</span><span style="color: rgb(175,0,0)">engine</span><span style="color: rgb(175,0,0)">"</span>] <span style="color: rgb(98,98,98)">=</span> engine
+<span class="ansi-green-intense-fg ansi-bold">    256</span> kwargs[<span style="color: rgb(175,0,0)">"</span><span style="color: rgb(175,0,0)">engine_kwargs</span><span style="color: rgb(175,0,0)">"</span>] <span style="color: rgb(98,98,98)">=</span> engine_kwargs
+<span class="ansi-green-fg">--&gt; 257</span> ret <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">_aggregate_multiple_funcs</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">func</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">*</span><span class="ansi-yellow-bg">args</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">*</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">*</span><span class="ansi-yellow-bg">kwargs</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    258</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> relabeling:
+<span class="ansi-green-intense-fg ansi-bold">    259</span>     <span style="color: rgb(95,135,135)"># columns is not narrowed by mypy from relabeling flag</span>
+<span class="ansi-green-intense-fg ansi-bold">    260</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">assert</span> columns <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>  <span style="color: rgb(95,135,135)"># for mypy</span>
+
+File <span class="ansi-green-fg">~/Library/Caches/pypoetry/virtualenvs/c3p-93U7KWO_-py3.11/lib/python3.11/site-packages/pandas/core/groupby/generic.py:362</span>, in <span class="ansi-cyan-fg">SeriesGroupBy._aggregate_multiple_funcs</span><span class="ansi-blue-fg">(self, arg, *args, **kwargs)</span>
+<span class="ansi-green-intense-fg ansi-bold">    360</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">for</span> idx, (name, func) <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> <span style="color: rgb(0,135,0)">enumerate</span>(arg):
+<span class="ansi-green-intense-fg ansi-bold">    361</span>         key <span style="color: rgb(98,98,98)">=</span> base<span style="color: rgb(98,98,98)">.</span>OutputKey(label<span style="color: rgb(98,98,98)">=</span>name, position<span style="color: rgb(98,98,98)">=</span>idx)
+<span class="ansi-green-fg">--&gt; 362</span>         results[key] <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">aggregate</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">func</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">*</span><span class="ansi-yellow-bg">args</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">*</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">*</span><span class="ansi-yellow-bg">kwargs</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    364</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,135,0)">any</span>(<span style="color: rgb(0,135,0)">isinstance</span>(x, DataFrame) <span class="ansi-bold" style="color: rgb(0,135,0)">for</span> x <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> results<span style="color: rgb(98,98,98)">.</span>values()):
+<span class="ansi-green-intense-fg ansi-bold">    365</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">from</span> <span class="ansi-bold" style="color: rgb(0,0,255)">pandas</span> <span class="ansi-bold" style="color: rgb(0,135,0)">import</span> concat
+
+File <span class="ansi-green-fg">~/Library/Caches/pypoetry/virtualenvs/c3p-93U7KWO_-py3.11/lib/python3.11/site-packages/pandas/core/groupby/generic.py:291</span>, in <span class="ansi-cyan-fg">SeriesGroupBy.aggregate</span><span class="ansi-blue-fg">(self, func, engine, engine_kwargs, *args, **kwargs)</span>
+<span class="ansi-green-intense-fg ansi-bold">    283</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>obj<span style="color: rgb(98,98,98)">.</span>_constructor(
+<span class="ansi-green-intense-fg ansi-bold">    284</span>         [],
+<span class="ansi-green-intense-fg ansi-bold">    285</span>         name<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>obj<span style="color: rgb(98,98,98)">.</span>name,
+<span class="ansi-green-intense-fg ansi-bold">    286</span>         index<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_grouper<span style="color: rgb(98,98,98)">.</span>result_index,
+<span class="ansi-green-intense-fg ansi-bold">    287</span>         dtype<span style="color: rgb(98,98,98)">=</span>obj<span style="color: rgb(98,98,98)">.</span>dtype,
+<span class="ansi-green-intense-fg ansi-bold">    288</span>     )
+<span class="ansi-green-intense-fg ansi-bold">    290</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_grouper<span style="color: rgb(98,98,98)">.</span>nkeys <span style="color: rgb(98,98,98)">&gt;</span> <span style="color: rgb(98,98,98)">1</span>:
+<span class="ansi-green-fg">--&gt; 291</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">_python_agg_general</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">func</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">*</span><span class="ansi-yellow-bg">args</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">*</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">*</span><span class="ansi-yellow-bg">kwargs</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    293</span> <span class="ansi-bold" style="color: rgb(0,135,0)">try</span>:
+<span class="ansi-green-intense-fg ansi-bold">    294</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_python_agg_general(func, <span style="color: rgb(98,98,98)">*</span>args, <span style="color: rgb(98,98,98)">*</span><span style="color: rgb(98,98,98)">*</span>kwargs)
+
+File <span class="ansi-green-fg">~/Library/Caches/pypoetry/virtualenvs/c3p-93U7KWO_-py3.11/lib/python3.11/site-packages/pandas/core/groupby/generic.py:327</span>, in <span class="ansi-cyan-fg">SeriesGroupBy._python_agg_general</span><span class="ansi-blue-fg">(self, func, *args, **kwargs)</span>
+<span class="ansi-green-intense-fg ansi-bold">    324</span> f <span style="color: rgb(98,98,98)">=</span> <span class="ansi-bold" style="color: rgb(0,135,0)">lambda</span> x: func(x, <span style="color: rgb(98,98,98)">*</span>args, <span style="color: rgb(98,98,98)">*</span><span style="color: rgb(98,98,98)">*</span>kwargs)
+<span class="ansi-green-intense-fg ansi-bold">    326</span> obj <span style="color: rgb(98,98,98)">=</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_obj_with_exclusions
+<span class="ansi-green-fg">--&gt; 327</span> result <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">_grouper</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">agg_series</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">obj</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">f</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    328</span> res <span style="color: rgb(98,98,98)">=</span> obj<span style="color: rgb(98,98,98)">.</span>_constructor(result, name<span style="color: rgb(98,98,98)">=</span>obj<span style="color: rgb(98,98,98)">.</span>name)
+<span class="ansi-green-intense-fg ansi-bold">    329</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_wrap_aggregated_output(res)
+
+File <span class="ansi-green-fg">~/Library/Caches/pypoetry/virtualenvs/c3p-93U7KWO_-py3.11/lib/python3.11/site-packages/pandas/core/groupby/ops.py:864</span>, in <span class="ansi-cyan-fg">BaseGrouper.agg_series</span><span class="ansi-blue-fg">(self, obj, func, preserve_dtype)</span>
+<span class="ansi-green-intense-fg ansi-bold">    857</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span class="ansi-bold" style="color: rgb(175,0,255)">not</span> <span style="color: rgb(0,135,0)">isinstance</span>(obj<span style="color: rgb(98,98,98)">.</span>_values, np<span style="color: rgb(98,98,98)">.</span>ndarray):
+<span class="ansi-green-intense-fg ansi-bold">    858</span>     <span style="color: rgb(95,135,135)"># we can preserve a little bit more aggressively with EA dtype</span>
+<span class="ansi-green-intense-fg ansi-bold">    859</span>     <span style="color: rgb(95,135,135)">#  because maybe_cast_pointwise_result will do a try/except</span>
+<span class="ansi-green-intense-fg ansi-bold">    860</span>     <span style="color: rgb(95,135,135)">#  with _from_sequence.  NB we are assuming here that _from_sequence</span>
+<span class="ansi-green-intense-fg ansi-bold">    861</span>     <span style="color: rgb(95,135,135)">#  is sufficiently strict that it casts appropriately.</span>
+<span class="ansi-green-intense-fg ansi-bold">    862</span>     preserve_dtype <span style="color: rgb(98,98,98)">=</span> <span class="ansi-bold" style="color: rgb(0,135,0)">True</span>
+<span class="ansi-green-fg">--&gt; 864</span> result <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">_aggregate_series_pure_python</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">obj</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">func</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    866</span> npvalues <span style="color: rgb(98,98,98)">=</span> lib<span style="color: rgb(98,98,98)">.</span>maybe_convert_objects(result, try_float<span style="color: rgb(98,98,98)">=</span><span class="ansi-bold" style="color: rgb(0,135,0)">False</span>)
+<span class="ansi-green-intense-fg ansi-bold">    867</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> preserve_dtype:
+
+File <span class="ansi-green-fg">~/Library/Caches/pypoetry/virtualenvs/c3p-93U7KWO_-py3.11/lib/python3.11/site-packages/pandas/core/groupby/ops.py:884</span>, in <span class="ansi-cyan-fg">BaseGrouper._aggregate_series_pure_python</span><span class="ansi-blue-fg">(self, obj, func)</span>
+<span class="ansi-green-intense-fg ansi-bold">    880</span> initialized <span style="color: rgb(98,98,98)">=</span> <span class="ansi-bold" style="color: rgb(0,135,0)">False</span>
+<span class="ansi-green-intense-fg ansi-bold">    882</span> splitter <span style="color: rgb(98,98,98)">=</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_get_splitter(obj, axis<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(98,98,98)">0</span>)
+<span class="ansi-green-fg">--&gt; 884</span> <span class="ansi-yellow-bg ansi-bold" style="color: rgb(0,135,0)">for</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">i</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">group</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg ansi-bold" style="color: rgb(175,0,255)">in</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">enumerate</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">splitter</span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg">:</span>
+<span class="ansi-green-intense-fg ansi-bold">    885</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">res</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">func</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">group</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    886</span> <span class="ansi-yellow-bg">    </span><span class="ansi-yellow-bg">res</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">=</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">extract_result</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">res</span><span class="ansi-yellow-bg">)</span>
+
+File <span class="ansi-green-fg">~/Library/Caches/pypoetry/virtualenvs/c3p-93U7KWO_-py3.11/lib/python3.11/site-packages/pandas/core/groupby/ops.py:1160</span>, in <span class="ansi-cyan-fg">DataSplitter.__iter__</span><span class="ansi-blue-fg">(self)</span>
+<span class="ansi-green-intense-fg ansi-bold">   1157</span> starts, ends <span style="color: rgb(98,98,98)">=</span> lib<span style="color: rgb(98,98,98)">.</span>generate_slices(<span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_slabels, <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>ngroups)
+<span class="ansi-green-intense-fg ansi-bold">   1159</span> <span class="ansi-bold" style="color: rgb(0,135,0)">for</span> start, end <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> <span style="color: rgb(0,135,0)">zip</span>(starts, ends):
+<span class="ansi-green-fg">-&gt; 1160</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">yield</span> <span class="ansi-yellow-bg" style="color: rgb(0,135,0)">self</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">_chop</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">sdata</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg" style="color: rgb(0,135,0)">slice</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">start</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">end</span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg">)</span>
+
+File <span class="ansi-green-fg">~/Library/Caches/pypoetry/virtualenvs/c3p-93U7KWO_-py3.11/lib/python3.11/site-packages/pandas/core/groupby/ops.py:1175</span>, in <span class="ansi-cyan-fg">SeriesSplitter._chop</span><span class="ansi-blue-fg">(self, sdata, slice_obj)</span>
+<span class="ansi-green-intense-fg ansi-bold">   1173</span> mgr <span style="color: rgb(98,98,98)">=</span> sdata<span style="color: rgb(98,98,98)">.</span>_mgr<span style="color: rgb(98,98,98)">.</span>get_slice(slice_obj)
+<span class="ansi-green-intense-fg ansi-bold">   1174</span> ser <span style="color: rgb(98,98,98)">=</span> sdata<span style="color: rgb(98,98,98)">.</span>_constructor_from_mgr(mgr, axes<span style="color: rgb(98,98,98)">=</span>mgr<span style="color: rgb(98,98,98)">.</span>axes)
+<span class="ansi-green-fg">-&gt; 1175</span> ser<span style="color: rgb(98,98,98)">.</span>_name <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">sdata</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">name</span>
+<span class="ansi-green-intense-fg ansi-bold">   1176</span> <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> ser<span style="color: rgb(98,98,98)">.</span>__finalize__(sdata, method<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(175,0,0)">"</span><span style="color: rgb(175,0,0)">groupby</span><span style="color: rgb(175,0,0)">"</span>)
+
+File <span class="ansi-green-fg">~/Library/Caches/pypoetry/virtualenvs/c3p-93U7KWO_-py3.11/lib/python3.11/site-packages/pandas/core/series.py:734</span>, in <span class="ansi-cyan-fg">Series.name</span><span class="ansi-blue-fg">(self)</span>
+<span class="ansi-green-intense-fg ansi-bold">    731</span>     <span style="color: rgb(95,135,135)"># DataFrame compatibility</span>
+<span class="ansi-green-intense-fg ansi-bold">    732</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>dtype
+<span class="ansi-green-fg">--&gt; 734</span> <span style="color: rgb(175,0,255)">@property</span>
+<span class="ansi-green-intense-fg ansi-bold">    735</span> <span class="ansi-bold" style="color: rgb(0,135,0)">def</span> <span style="color: rgb(0,0,255)">name</span>(<span style="color: rgb(0,135,0)">self</span>) <span style="color: rgb(98,98,98)">-</span><span style="color: rgb(98,98,98)">&gt;</span> Hashable:
+<span class="ansi-green-intense-fg ansi-bold">    736</span> <span style="color: rgb(188,188,188)">    </span><span style="color: rgb(175,0,0)">"""</span>
+<span class="ansi-green-intense-fg ansi-bold">    737</span> <span style="color: rgb(175,0,0)">    Return the name of the Series.</span>
+<span class="ansi-green-intense-fg ansi-bold">    738</span> 
+<span class="ansi-green-fg">   (...)</span>
+<span class="ansi-green-intense-fg ansi-bold">    780</span> <span style="color: rgb(175,0,0)">    'Even Numbers'</span>
+<span class="ansi-green-intense-fg ansi-bold">    781</span> <span style="color: rgb(175,0,0)">    """</span>
+<span class="ansi-green-intense-fg ansi-bold">    782</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">return</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>_name
+
+<span class="ansi-red-fg">KeyboardInterrupt</span>: </pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="highlight"><pre><span></span><code>
+</code></pre></div>
+
+</div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../..", "features": ["content.tabs.link"], "search": "../../assets/javascripts/workers/search.f8cc74c7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.c8b220af.min.js"></script>
+      
+    
+  </body>
+</html>

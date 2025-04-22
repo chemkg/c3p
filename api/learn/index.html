@@ -1,0 +1,3674 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../datamodel/">
+      
+      
+        <link rel="next" href="../classifier/">
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.11">
+    
+    
+      
+        <title>Learn - Learning ChEBI Classification Programs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.4af4bdda.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../css/ansi-colours.css">
+    
+      <link rel="stylesheet" href="../../css/jupyter-cells.css">
+    
+      <link rel="stylesheet" href="../../css/pandas-dataframe.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="pink">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#learn" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Learning ChEBI Classification Programs" class="md-header__button md-logo" aria-label="Learning ChEBI Classification Programs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Learning ChEBI Classification Programs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Learn
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="pink"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="blue" data-md-color-accent="amber"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Learning ChEBI Classification Programs" class="md-nav__button md-logo" aria-label="Learning ChEBI Classification Programs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Learning ChEBI Classification Programs
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Methods
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Methods
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../leia/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Learning Algorithm
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../benchmark/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Benchmark
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../chebacr/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Benchmark Evaluation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Results
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Results
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../analysis/programs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Programs
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../analysis/performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Performance
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../analysis/code_analysis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Code Analysis
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../analysis/chebifier/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Chebifier
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_5" id="__nav_3_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Applications
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_5">
+            <span class="md-nav__icon md-icon"></span>
+            Applications
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../analysis/npatlas/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Natural Products
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../analysis/metabolomics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Metabolomics
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_6" id="__nav_3_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Validation
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_6">
+            <span class="md-nav__icon md-icon"></span>
+            Validation
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../analysis/curation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Curated
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_6_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_6_2" id="__nav_3_6_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Terpenoids
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_6_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_6_2">
+            <span class="md-nav__icon md-icon"></span>
+            Terpenoids
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../analysis/terpenoids/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    About
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../analysis/terpenoids_table.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Table
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_7" id="__nav_3_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Ranked Classes
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_7">
+            <span class="md-nav__icon md-icon"></span>
+            Ranked Classes
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../analysis/classes_top.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Top Classes
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../analysis/classes_bottom.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Bottom Classes
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../analysis/classes_all.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    All Classes
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Notebooks
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Notebooks
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/Summarize-Benchmark/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Summarize Benchmark
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/Metabolights-Overrepresentation-Analysis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Metabolights analysis notebook
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/NPAtlas.ipynb" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    NPAtlas analysis notebook
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/Run-Chebifier/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Run Chebifier
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Code
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Code
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../datamodel/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Datamodel
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Learn
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Learn
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn" class="md-nav__link">
+    <span class="md-ellipsis">
+      learn
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn.capture_output" class="md-nav__link">
+    <span class="md-ellipsis">
+      capture_output
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn.evaluate_class" class="md-nav__link">
+    <span class="md-ellipsis">
+      evaluate_class
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn.evaluate_program" class="md-nav__link">
+    <span class="md-ellipsis">
+      evaluate_program
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn.generate_system_prompt" class="md-nav__link">
+    <span class="md-ellipsis">
+      generate_system_prompt
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn.get_positive_and_negative_train_instances" class="md-nav__link">
+    <span class="md-ellipsis">
+      get_positive_and_negative_train_instances
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn.get_positive_and_negative_validate_instances" class="md-nav__link">
+    <span class="md-ellipsis">
+      get_positive_and_negative_validate_instances
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn.learn_ontology_iter" class="md-nav__link">
+    <span class="md-ellipsis">
+      learn_ontology_iter
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn.learn_program" class="md-nav__link">
+    <span class="md-ellipsis">
+      learn_program
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn.learn_program_single_iter" class="md-nav__link">
+    <span class="md-ellipsis">
+      learn_program_single_iter
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn.repair_code" class="md-nav__link">
+    <span class="md-ellipsis">
+      repair_code
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn.run_code" class="md-nav__link">
+    <span class="md-ellipsis">
+      run_code
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn.safe_name" class="md-nav__link">
+    <span class="md-ellipsis">
+      safe_name
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      CLI
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn_cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      learn_cli
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn_cli.configure_logging" class="md-nav__link">
+    <span class="md-ellipsis">
+      configure_logging
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn_cli.learn_classes" class="md-nav__link">
+    <span class="md-ellipsis">
+      learn_classes
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn_cli.verbose_option" class="md-nav__link">
+    <span class="md-ellipsis">
+      verbose_option
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../classifier/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Classifier
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../extractor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Extractor
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn" class="md-nav__link">
+    <span class="md-ellipsis">
+      learn
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn.capture_output" class="md-nav__link">
+    <span class="md-ellipsis">
+      capture_output
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn.evaluate_class" class="md-nav__link">
+    <span class="md-ellipsis">
+      evaluate_class
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn.evaluate_program" class="md-nav__link">
+    <span class="md-ellipsis">
+      evaluate_program
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn.generate_system_prompt" class="md-nav__link">
+    <span class="md-ellipsis">
+      generate_system_prompt
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn.get_positive_and_negative_train_instances" class="md-nav__link">
+    <span class="md-ellipsis">
+      get_positive_and_negative_train_instances
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn.get_positive_and_negative_validate_instances" class="md-nav__link">
+    <span class="md-ellipsis">
+      get_positive_and_negative_validate_instances
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn.learn_ontology_iter" class="md-nav__link">
+    <span class="md-ellipsis">
+      learn_ontology_iter
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn.learn_program" class="md-nav__link">
+    <span class="md-ellipsis">
+      learn_program
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn.learn_program_single_iter" class="md-nav__link">
+    <span class="md-ellipsis">
+      learn_program_single_iter
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn.repair_code" class="md-nav__link">
+    <span class="md-ellipsis">
+      repair_code
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn.run_code" class="md-nav__link">
+    <span class="md-ellipsis">
+      run_code
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn.safe_name" class="md-nav__link">
+    <span class="md-ellipsis">
+      safe_name
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      CLI
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn_cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      learn_cli
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn_cli.configure_logging" class="md-nav__link">
+    <span class="md-ellipsis">
+      configure_logging
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn_cli.learn_classes" class="md-nav__link">
+    <span class="md-ellipsis">
+      learn_classes
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c3p.learn_cli.verbose_option" class="md-nav__link">
+    <span class="md-ellipsis">
+      verbose_option
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="learn">learn</h1>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<a id="c3p.learn"></a>
+    <div class="doc doc-contents first">
+
+
+
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="c3p.learn.capture_output" class="doc doc-heading">
+            <code class=" language-python"><span class="n">capture_output</span><span class="p">()</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Capture stdout and stderr using a context manager.</p>
+<p>Example:</p>
+<div class="codehilite"><pre><span></span><code>&gt;&gt;&gt; with capture_output() as (out, err):
+<span class="k">...</span>     print(&quot;Hello, World!&quot;)
+...
+&gt;&gt;&gt; print(out.getvalue())
+Hello, World!
+</code></pre></div>
+
+
+            <details class="quote">
+              <summary>Source code in <code>c3p/learn.py</code></summary>
+              <div class="codehilite"><table class="codehilitetable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">174</span>
+<span class="normal">175</span>
+<span class="normal">176</span>
+<span class="normal">177</span>
+<span class="normal">178</span>
+<span class="normal">179</span>
+<span class="normal">180</span>
+<span class="normal">181</span>
+<span class="normal">182</span>
+<span class="normal">183</span>
+<span class="normal">184</span>
+<span class="normal">185</span>
+<span class="normal">186</span>
+<span class="normal">187</span>
+<span class="normal">188</span>
+<span class="normal">189</span>
+<span class="normal">190</span>
+<span class="normal">191</span>
+<span class="normal">192</span>
+<span class="normal">193</span>
+<span class="normal">194</span>
+<span class="normal">195</span>
+<span class="normal">196</span>
+<span class="normal">197</span>
+<span class="normal">198</span>
+<span class="normal">199</span>
+<span class="normal">200</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@contextmanager</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">capture_output</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Capture stdout and stderr using a context manager.</span>
+
+<span class="sd">    Example:</span>
+
+<span class="sd">        &gt;&gt;&gt; with capture_output() as (out, err):</span>
+<span class="sd">        ...     print(&quot;Hello, World!&quot;)</span>
+<span class="sd">        ...</span>
+<span class="sd">        &gt;&gt;&gt; print(out.getvalue())</span>
+<span class="sd">        Hello, World!</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create StringIO objects to capture output</span>
+    <span class="n">stdout</span><span class="p">,</span> <span class="n">stderr</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">StringIO</span><span class="p">(),</span> <span class="n">io</span><span class="o">.</span><span class="n">StringIO</span><span class="p">()</span>
+
+    <span class="c1"># Save the current stdout/stderr</span>
+    <span class="n">old_stdout</span><span class="p">,</span> <span class="n">old_stderr</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">stdout</span><span class="p">,</span> <span class="n">sys</span><span class="o">.</span><span class="n">stderr</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># Replace stdout/stderr with our StringIO objects</span>
+        <span class="n">sys</span><span class="o">.</span><span class="n">stdout</span><span class="p">,</span> <span class="n">sys</span><span class="o">.</span><span class="n">stderr</span> <span class="o">=</span> <span class="n">stdout</span><span class="p">,</span> <span class="n">stderr</span>
+        <span class="k">yield</span> <span class="n">stdout</span><span class="p">,</span> <span class="n">stderr</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="c1"># Restore the original stdout/stderr</span>
+        <span class="n">sys</span><span class="o">.</span><span class="n">stdout</span><span class="p">,</span> <span class="n">sys</span><span class="o">.</span><span class="n">stderr</span> <span class="o">=</span> <span class="n">old_stdout</span><span class="p">,</span> <span class="n">old_stderr</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="c3p.learn.evaluate_class" class="doc doc-heading">
+            <code class=" language-python"><span class="n">evaluate_class</span><span class="p">(</span><span class="n">rset</span><span class="p">,</span> <span class="n">dataset</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Evaluate a chemical class.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>rset</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="ResultSet (c3p.datamodel.ResultSet)" href="../datamodel/#c3p.datamodel.ResultSet">ResultSet</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>dataset</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Dataset (c3p.datamodel.Dataset)" href="../datamodel/#c3p.datamodel.Dataset">Dataset</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <p>Returns:</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>c3p/learn.py</code></summary>
+              <div class="codehilite"><table class="codehilitetable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">475</span>
+<span class="normal">476</span>
+<span class="normal">477</span>
+<span class="normal">478</span>
+<span class="normal">479</span>
+<span class="normal">480</span>
+<span class="normal">481</span>
+<span class="normal">482</span>
+<span class="normal">483</span>
+<span class="normal">484</span>
+<span class="normal">485</span>
+<span class="normal">486</span>
+<span class="normal">487</span>
+<span class="normal">488</span>
+<span class="normal">489</span>
+<span class="normal">490</span>
+<span class="normal">491</span>
+<span class="normal">492</span>
+<span class="normal">493</span>
+<span class="normal">494</span>
+<span class="normal">495</span>
+<span class="normal">496</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">evaluate_class</span><span class="p">(</span><span class="n">rset</span><span class="p">:</span> <span class="n">ResultSet</span><span class="p">,</span> <span class="n">dataset</span><span class="p">:</span> <span class="n">Dataset</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EvaluationResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Evaluate a chemical class.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        rset:</span>
+<span class="sd">        dataset:</span>
+
+<span class="sd">    Returns:</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">br</span> <span class="o">=</span> <span class="n">rset</span><span class="o">.</span><span class="n">best_result</span>
+    <span class="n">cls_lite</span> <span class="o">=</span> <span class="n">br</span><span class="o">.</span><span class="n">chemical_class</span>
+    <span class="n">cls_name</span> <span class="o">=</span> <span class="n">cls_lite</span><span class="o">.</span><span class="n">name</span>
+    <span class="bp">cls</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">get_chemical_class_by_name</span><span class="p">(</span><span class="n">cls_name</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Evaluating </span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">positive_instances</span><span class="p">,</span> <span class="n">negative_instances</span> <span class="o">=</span> <span class="n">get_positive_and_negative_validate_instances</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">dataset</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Validate POS=</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">positive_instances</span><span class="p">)</span><span class="si">}</span><span class="s2"> NEG=</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">negative_instances</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">code_str</span> <span class="o">=</span> <span class="n">br</span><span class="o">.</span><span class="n">code</span>
+    <span class="n">test_result</span> <span class="o">=</span> <span class="n">evaluate_program</span><span class="p">(</span><span class="n">code_str</span><span class="p">,</span> <span class="n">cls_lite</span><span class="p">,</span> <span class="n">positive_instances</span><span class="p">,</span> <span class="n">negative_instances</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Test Result F1: </span><span class="si">{</span><span class="n">test_result</span><span class="o">.</span><span class="n">f1</span><span class="si">}</span><span class="s2"> Train F1: </span><span class="si">{</span><span class="n">br</span><span class="o">.</span><span class="n">f1</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">EvaluationResult</span><span class="p">(</span><span class="n">train_results</span><span class="o">=</span><span class="n">rset</span><span class="p">,</span> <span class="n">test_result</span><span class="o">=</span><span class="n">test_result</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="c3p.learn.evaluate_program" class="doc doc-heading">
+            <code class=" language-python"><span class="n">evaluate_program</span><span class="p">(</span><span class="n">code_str</span><span class="p">,</span> <span class="n">chemical_class</span><span class="p">,</span> <span class="n">positive_instances</span><span class="p">,</span> <span class="n">negative_instances</span><span class="p">,</span> <span class="n">attempt</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Evaluate a program on a set of positive and negative instances.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>code_str</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>chemical_class</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="ChemicalClass (c3p.datamodel.ChemicalClass)" href="../datamodel/#c3p.datamodel.ChemicalClass">ChemicalClass</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>positive_instances</code>
+            </td>
+            <td>
+                  <code><span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="ChemicalStructure (c3p.datamodel.ChemicalStructure)" href="../datamodel/#c3p.datamodel.ChemicalStructure">ChemicalStructure</a>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>negative_instances</code>
+            </td>
+            <td>
+                  <code><span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="ChemicalStructure (c3p.datamodel.ChemicalStructure)" href="../datamodel/#c3p.datamodel.ChemicalStructure">ChemicalStructure</a>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Result (c3p.datamodel.Result)" href="../datamodel/#c3p.datamodel.Result">Result</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>a Result object</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="quote">
+              <summary>Source code in <code>c3p/learn.py</code></summary>
+              <div class="codehilite"><table class="codehilitetable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">202</span>
+<span class="normal">203</span>
+<span class="normal">204</span>
+<span class="normal">205</span>
+<span class="normal">206</span>
+<span class="normal">207</span>
+<span class="normal">208</span>
+<span class="normal">209</span>
+<span class="normal">210</span>
+<span class="normal">211</span>
+<span class="normal">212</span>
+<span class="normal">213</span>
+<span class="normal">214</span>
+<span class="normal">215</span>
+<span class="normal">216</span>
+<span class="normal">217</span>
+<span class="normal">218</span>
+<span class="normal">219</span>
+<span class="normal">220</span>
+<span class="normal">221</span>
+<span class="normal">222</span>
+<span class="normal">223</span>
+<span class="normal">224</span>
+<span class="normal">225</span>
+<span class="normal">226</span>
+<span class="normal">227</span>
+<span class="normal">228</span>
+<span class="normal">229</span>
+<span class="normal">230</span>
+<span class="normal">231</span>
+<span class="normal">232</span>
+<span class="normal">233</span>
+<span class="normal">234</span>
+<span class="normal">235</span>
+<span class="normal">236</span>
+<span class="normal">237</span>
+<span class="normal">238</span>
+<span class="normal">239</span>
+<span class="normal">240</span>
+<span class="normal">241</span>
+<span class="normal">242</span>
+<span class="normal">243</span>
+<span class="normal">244</span>
+<span class="normal">245</span>
+<span class="normal">246</span>
+<span class="normal">247</span>
+<span class="normal">248</span>
+<span class="normal">249</span>
+<span class="normal">250</span>
+<span class="normal">251</span>
+<span class="normal">252</span>
+<span class="normal">253</span>
+<span class="normal">254</span>
+<span class="normal">255</span>
+<span class="normal">256</span>
+<span class="normal">257</span>
+<span class="normal">258</span>
+<span class="normal">259</span>
+<span class="normal">260</span>
+<span class="normal">261</span>
+<span class="normal">262</span>
+<span class="normal">263</span>
+<span class="normal">264</span>
+<span class="normal">265</span>
+<span class="normal">266</span>
+<span class="normal">267</span>
+<span class="normal">268</span>
+<span class="normal">269</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">evaluate_program</span><span class="p">(</span><span class="n">code_str</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">chemical_class</span><span class="p">:</span> <span class="n">ChemicalClass</span><span class="p">,</span> <span class="n">positive_instances</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">ChemicalStructure</span><span class="p">],</span> <span class="n">negative_instances</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">ChemicalStructure</span><span class="p">],</span> <span class="n">attempt</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Result</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Evaluate a program on a set of positive and negative instances.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        code_str:</span>
+<span class="sd">        chemical_class:</span>
+<span class="sd">        positive_instances:</span>
+<span class="sd">        negative_instances:</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        a Result object</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">safe</span> <span class="o">=</span> <span class="n">safe_name</span><span class="p">(</span><span class="n">chemical_class</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+    <span class="n">func_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;is_</span><span class="si">{</span><span class="n">safe</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="n">positive_structures</span> <span class="o">=</span> <span class="p">[</span><span class="n">instance</span><span class="o">.</span><span class="n">smiles</span> <span class="k">for</span> <span class="n">instance</span> <span class="ow">in</span> <span class="n">positive_instances</span><span class="p">]</span>
+    <span class="n">negative_structures</span> <span class="o">=</span> <span class="p">[</span><span class="n">instance</span><span class="o">.</span><span class="n">smiles</span> <span class="k">for</span> <span class="n">instance</span> <span class="ow">in</span> <span class="n">negative_instances</span><span class="p">]</span>
+    <span class="n">smiles_to_instance</span> <span class="o">=</span> <span class="p">{</span><span class="n">instance</span><span class="o">.</span><span class="n">smiles</span><span class="p">:</span> <span class="n">instance</span> <span class="k">for</span> <span class="n">instance</span> <span class="ow">in</span> <span class="n">positive_instances</span> <span class="o">+</span> <span class="n">negative_instances</span><span class="p">}</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Running code len: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">code_str</span><span class="p">)</span><span class="si">}</span><span class="s2"> on </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">positive_structures</span><span class="p">)</span><span class="si">}</span><span class="s2"> + </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">negative_structures</span><span class="p">)</span><span class="si">}</span><span class="s2"> instances&quot;</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">capture_output</span><span class="p">()</span> <span class="k">as</span> <span class="p">(</span><span class="n">stdout</span><span class="p">,</span> <span class="n">stderr</span><span class="p">):</span>
+            <span class="c1">#inputs = [instance.smiles for instance in positive_instances + negative_instances]</span>
+            <span class="n">results</span> <span class="o">=</span> <span class="n">run_code</span><span class="p">(</span><span class="n">code_str</span><span class="p">,</span> <span class="n">func_name</span><span class="p">,</span> <span class="n">positive_structures</span><span class="p">,</span> <span class="n">negative_structures</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Results: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">results</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="c1"># problem executing; we still yield a result, as this</span>
+        <span class="c1"># may be useful for post-processing all results;</span>
+        <span class="c1"># we also try again with a new attempt, unless we are suppressing LLM</span>
+        <span class="k">return</span> <span class="n">Result</span><span class="p">(</span>
+            <span class="n">chemical_class</span><span class="o">=</span><span class="n">chemical_class</span><span class="p">,</span>
+            <span class="c1"># config=config,</span>
+            <span class="n">code</span><span class="o">=</span><span class="n">code_str</span><span class="p">,</span>
+            <span class="c1"># message=err,</span>
+            <span class="n">attempt</span><span class="o">=</span><span class="n">attempt</span><span class="p">,</span>
+            <span class="n">success</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">error</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span> <span class="o">+</span> <span class="n">stderr</span><span class="o">.</span><span class="n">getvalue</span><span class="p">(),</span>
+            <span class="n">stdout</span><span class="o">=</span><span class="n">stdout</span><span class="o">.</span><span class="n">getvalue</span><span class="p">(),</span>
+        <span class="p">)</span>
+    <span class="n">all_structures</span> <span class="o">=</span> <span class="n">positive_structures</span> <span class="o">+</span> <span class="n">negative_structures</span>
+    <span class="n">all_structures_count</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">all_structures</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">mk</span><span class="p">(</span><span class="n">smiles</span><span class="p">,</span> <span class="n">reason</span><span class="p">):</span>
+        <span class="n">instance</span> <span class="o">=</span> <span class="n">smiles_to_instance</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">smiles</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">Outcome</span><span class="p">(</span><span class="n">smiles</span><span class="o">=</span><span class="n">smiles</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">instance</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">reason</span><span class="o">=</span><span class="n">reason</span><span class="p">)</span>
+    <span class="n">true_positives</span> <span class="o">=</span> <span class="p">[</span><span class="n">mk</span><span class="p">(</span><span class="n">smiles</span><span class="p">,</span> <span class="n">reason</span><span class="p">)</span> <span class="k">for</span> <span class="n">smiles</span><span class="p">,</span> <span class="n">is_cls</span><span class="p">,</span> <span class="n">reason</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">results</span> <span class="k">if</span> <span class="n">is_cls</span> <span class="ow">and</span> <span class="n">smiles</span> <span class="ow">in</span> <span class="n">positive_structures</span><span class="p">]</span>
+    <span class="n">true_negatives</span> <span class="o">=</span> <span class="p">[</span><span class="n">mk</span><span class="p">(</span><span class="n">smiles</span><span class="p">,</span> <span class="n">reason</span><span class="p">)</span> <span class="k">for</span> <span class="n">smiles</span><span class="p">,</span> <span class="n">is_cls</span><span class="p">,</span> <span class="n">reason</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">results</span> <span class="k">if</span>
+                      <span class="ow">not</span> <span class="n">is_cls</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">smiles</span> <span class="ow">in</span> <span class="n">positive_structures</span><span class="p">]</span>
+    <span class="n">false_positives</span> <span class="o">=</span> <span class="p">[</span><span class="n">mk</span><span class="p">(</span><span class="n">smiles</span><span class="p">,</span> <span class="n">reason</span><span class="p">)</span> <span class="k">for</span> <span class="n">smiles</span><span class="p">,</span> <span class="n">is_cls</span><span class="p">,</span> <span class="n">reason</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">results</span> <span class="k">if</span> <span class="n">is_cls</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">smiles</span> <span class="ow">in</span> <span class="n">positive_structures</span><span class="p">]</span>
+    <span class="n">false_negatives</span> <span class="o">=</span> <span class="p">[</span><span class="n">mk</span><span class="p">(</span><span class="n">smiles</span><span class="p">,</span> <span class="n">reason</span><span class="p">)</span> <span class="k">for</span> <span class="n">smiles</span><span class="p">,</span> <span class="n">is_cls</span><span class="p">,</span> <span class="n">reason</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">results</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">is_cls</span> <span class="ow">and</span> <span class="n">smiles</span> <span class="ow">in</span> <span class="n">positive_structures</span><span class="p">]</span>
+    <span class="c1"># We avoid placing all negatives in the payload as these can be large</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">Result</span><span class="p">(</span>
+        <span class="n">chemical_class</span><span class="o">=</span><span class="n">chemical_class</span><span class="p">,</span>
+        <span class="c1"># config=config,</span>
+        <span class="n">code</span><span class="o">=</span><span class="n">code_str</span><span class="p">,</span>
+        <span class="c1"># message=err,</span>
+        <span class="n">true_positives</span><span class="o">=</span><span class="n">true_positives</span><span class="p">,</span>
+        <span class="n">false_positives</span><span class="o">=</span><span class="n">false_positives</span><span class="p">,</span>
+        <span class="n">sample_false_negatives</span><span class="o">=</span><span class="n">false_negatives</span><span class="p">[:</span><span class="mi">10</span><span class="p">],</span>
+        <span class="n">sample_true_negatives</span><span class="o">=</span><span class="n">true_negatives</span><span class="p">[:</span><span class="mi">10</span><span class="p">],</span>
+        <span class="n">num_true_negatives</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">true_negatives</span><span class="p">),</span>
+        <span class="n">num_false_negatives</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">false_negatives</span><span class="p">),</span>
+        <span class="n">attempt</span><span class="o">=</span><span class="n">attempt</span><span class="p">,</span>
+        <span class="c1">#stdout=stdout.getvalue(),</span>
+        <span class="n">error</span><span class="o">=</span><span class="n">stderr</span><span class="o">.</span><span class="n">getvalue</span><span class="p">(),</span>
+        <span class="n">success</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">result</span><span class="o">.</span><span class="n">calculate</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">result</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="c3p.learn.generate_system_prompt" class="doc doc-heading">
+            <code class=" language-python"><span class="n">generate_system_prompt</span><span class="p">(</span><span class="n">program_examples</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Generate a system prompt for classifying chemical entities based on SMILES strings.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>program_examples</code>
+            </td>
+            <td>
+                  <code><span title="typing.List">List</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <p>Returns:</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>c3p/learn.py</code></summary>
+              <div class="codehilite"><table class="codehilitetable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">56</span>
+<span class="normal">57</span>
+<span class="normal">58</span>
+<span class="normal">59</span>
+<span class="normal">60</span>
+<span class="normal">61</span>
+<span class="normal">62</span>
+<span class="normal">63</span>
+<span class="normal">64</span>
+<span class="normal">65</span>
+<span class="normal">66</span>
+<span class="normal">67</span>
+<span class="normal">68</span>
+<span class="normal">69</span>
+<span class="normal">70</span>
+<span class="normal">71</span>
+<span class="normal">72</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">generate_system_prompt</span><span class="p">(</span><span class="n">program_examples</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Generate a system prompt for classifying chemical entities based on SMILES strings.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        program_examples:</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">program_examples</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">program_examples</span> <span class="o">=</span> <span class="n">VALIDATED_PROGRAM_EXAMPLES</span>
+    <span class="k">for</span> <span class="n">example</span> <span class="ow">in</span> <span class="n">program_examples</span><span class="p">:</span>
+        <span class="n">system_prompt</span> <span class="o">=</span> <span class="n">BASE_SYSTEM_PROMPT</span>
+        <span class="n">system_prompt</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;Here is an example for the chemical class </span><span class="si">{</span><span class="n">example</span><span class="si">}</span><span class="s2">:</span><span class="se">\n</span><span class="si">{</span><span class="n">example</span><span class="si">}</span><span class="s2">.py</span><span class="se">\n</span><span class="s2">---</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">example_dir</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">example</span><span class="si">}</span><span class="s2">.py&quot;</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">system_prompt</span> <span class="o">+=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">system_prompt</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="c3p.learn.get_positive_and_negative_train_instances" class="doc doc-heading">
+            <code class=" language-python"><span class="n">get_positive_and_negative_train_instances</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">dataset</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Get positive and negative instances for a chemical class.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>cls</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="ChemicalClass (c3p.datamodel.ChemicalClass)" href="../datamodel/#c3p.datamodel.ChemicalClass">ChemicalClass</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>dataset</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Dataset (c3p.datamodel.Dataset)" href="../datamodel/#c3p.datamodel.Dataset">Dataset</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <p>Returns:</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>c3p/learn.py</code></summary>
+              <div class="codehilite"><table class="codehilitetable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">432</span>
+<span class="normal">433</span>
+<span class="normal">434</span>
+<span class="normal">435</span>
+<span class="normal">436</span>
+<span class="normal">437</span>
+<span class="normal">438</span>
+<span class="normal">439</span>
+<span class="normal">440</span>
+<span class="normal">441</span>
+<span class="normal">442</span>
+<span class="normal">443</span>
+<span class="normal">444</span>
+<span class="normal">445</span>
+<span class="normal">446</span>
+<span class="normal">447</span>
+<span class="normal">448</span>
+<span class="normal">449</span>
+<span class="normal">450</span>
+<span class="normal">451</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_positive_and_negative_train_instances</span><span class="p">(</span><span class="bp">cls</span><span class="p">:</span> <span class="n">ChemicalClass</span><span class="p">,</span> <span class="n">dataset</span><span class="p">:</span> <span class="n">Dataset</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">ChemicalStructure</span><span class="p">],</span> <span class="n">List</span><span class="p">[</span><span class="n">ChemicalStructure</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get positive and negative instances for a chemical class.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        cls:</span>
+<span class="sd">        dataset:</span>
+
+<span class="sd">    Returns:</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">s2i</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">smiles_to_instance</span><span class="p">()</span>
+    <span class="n">all_validation</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">validation_examples</span><span class="p">)</span>
+    <span class="n">all_positive</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">all_positive_examples</span><span class="p">)</span>
+    <span class="n">all_smiles</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">all_smiles</span><span class="p">()</span>
+    <span class="n">positive_examples</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">all_positive</span> <span class="o">-</span> <span class="n">all_validation</span><span class="p">)</span>
+    <span class="n">positive_instances</span> <span class="o">=</span> <span class="p">[</span><span class="n">s2i</span><span class="p">[</span><span class="n">smiles</span><span class="p">]</span> <span class="k">for</span> <span class="n">smiles</span> <span class="ow">in</span> <span class="n">positive_examples</span><span class="p">]</span>
+    <span class="n">negative_examples</span> <span class="o">=</span> <span class="nb">list</span><span class="p">((</span><span class="n">all_smiles</span> <span class="o">-</span> <span class="n">all_positive</span><span class="p">)</span> <span class="o">-</span> <span class="n">all_validation</span><span class="p">)</span>
+    <span class="n">negative_instances</span> <span class="o">=</span> <span class="p">[</span><span class="n">s2i</span><span class="p">[</span><span class="n">smiles</span><span class="p">]</span> <span class="k">for</span> <span class="n">smiles</span> <span class="ow">in</span> <span class="n">negative_examples</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">positive_instances</span><span class="p">,</span> <span class="n">negative_instances</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="c3p.learn.get_positive_and_negative_validate_instances" class="doc doc-heading">
+            <code class=" language-python"><span class="n">get_positive_and_negative_validate_instances</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">dataset</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Get positive and negative instances for a chemical class from validation set.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>cls</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="ChemicalClass (c3p.datamodel.ChemicalClass)" href="../datamodel/#c3p.datamodel.ChemicalClass">ChemicalClass</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>dataset</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Dataset (c3p.datamodel.Dataset)" href="../datamodel/#c3p.datamodel.Dataset">Dataset</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <p>Returns:</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>c3p/learn.py</code></summary>
+              <div class="codehilite"><table class="codehilitetable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">454</span>
+<span class="normal">455</span>
+<span class="normal">456</span>
+<span class="normal">457</span>
+<span class="normal">458</span>
+<span class="normal">459</span>
+<span class="normal">460</span>
+<span class="normal">461</span>
+<span class="normal">462</span>
+<span class="normal">463</span>
+<span class="normal">464</span>
+<span class="normal">465</span>
+<span class="normal">466</span>
+<span class="normal">467</span>
+<span class="normal">468</span>
+<span class="normal">469</span>
+<span class="normal">470</span>
+<span class="normal">471</span>
+<span class="normal">472</span>
+<span class="normal">473</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_positive_and_negative_validate_instances</span><span class="p">(</span><span class="bp">cls</span><span class="p">:</span> <span class="n">ChemicalClass</span><span class="p">,</span> <span class="n">dataset</span><span class="p">:</span> <span class="n">Dataset</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">ChemicalStructure</span><span class="p">],</span> <span class="n">List</span><span class="p">[</span><span class="n">ChemicalStructure</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get positive and negative instances for a chemical class from validation set.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        cls:</span>
+<span class="sd">        dataset:</span>
+
+<span class="sd">    Returns:</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">s2i</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">smiles_to_instance</span><span class="p">()</span>
+    <span class="n">all_validation</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">validation_examples</span><span class="p">)</span>
+    <span class="n">all_positive</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">all_positive_examples</span><span class="p">)</span>
+    <span class="n">all_smiles</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">all_smiles</span><span class="p">()</span>
+    <span class="n">positive_examples</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">all_positive</span><span class="o">.</span><span class="n">intersection</span><span class="p">(</span><span class="n">all_validation</span><span class="p">))</span>
+    <span class="n">positive_instances</span> <span class="o">=</span> <span class="p">[</span><span class="n">s2i</span><span class="p">[</span><span class="n">smiles</span><span class="p">]</span> <span class="k">for</span> <span class="n">smiles</span> <span class="ow">in</span> <span class="n">positive_examples</span><span class="p">]</span>
+    <span class="n">negative_examples</span> <span class="o">=</span> <span class="nb">list</span><span class="p">((</span><span class="n">all_smiles</span> <span class="o">-</span> <span class="n">all_positive</span><span class="p">)</span><span class="o">.</span><span class="n">intersection</span><span class="p">(</span><span class="n">all_validation</span><span class="p">))</span>
+    <span class="n">negative_instances</span> <span class="o">=</span> <span class="p">[</span><span class="n">s2i</span><span class="p">[</span><span class="n">smiles</span><span class="p">]</span> <span class="k">for</span> <span class="n">smiles</span> <span class="ow">in</span> <span class="n">negative_examples</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">positive_instances</span><span class="p">,</span> <span class="n">negative_instances</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="c3p.learn.learn_ontology_iter" class="doc doc-heading">
+            <code class=" language-python"><span class="n">learn_ontology_iter</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">working_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">include_only</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">exclude</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">mapped_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Learn a set of chemical classes.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>dataset</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Dataset (c3p.datamodel.Dataset)" href="../datamodel/#c3p.datamodel.Dataset">Dataset</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>config</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Config (c3p.datamodel.Config)" href="../datamodel/#c3p.datamodel.Config">Config</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <p>Returns:</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>c3p/learn.py</code></summary>
+              <div class="codehilite"><table class="codehilitetable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">499</span>
+<span class="normal">500</span>
+<span class="normal">501</span>
+<span class="normal">502</span>
+<span class="normal">503</span>
+<span class="normal">504</span>
+<span class="normal">505</span>
+<span class="normal">506</span>
+<span class="normal">507</span>
+<span class="normal">508</span>
+<span class="normal">509</span>
+<span class="normal">510</span>
+<span class="normal">511</span>
+<span class="normal">512</span>
+<span class="normal">513</span>
+<span class="normal">514</span>
+<span class="normal">515</span>
+<span class="normal">516</span>
+<span class="normal">517</span>
+<span class="normal">518</span>
+<span class="normal">519</span>
+<span class="normal">520</span>
+<span class="normal">521</span>
+<span class="normal">522</span>
+<span class="normal">523</span>
+<span class="normal">524</span>
+<span class="normal">525</span>
+<span class="normal">526</span>
+<span class="normal">527</span>
+<span class="normal">528</span>
+<span class="normal">529</span>
+<span class="normal">530</span>
+<span class="normal">531</span>
+<span class="normal">532</span>
+<span class="normal">533</span>
+<span class="normal">534</span>
+<span class="normal">535</span>
+<span class="normal">536</span>
+<span class="normal">537</span>
+<span class="normal">538</span>
+<span class="normal">539</span>
+<span class="normal">540</span>
+<span class="normal">541</span>
+<span class="normal">542</span>
+<span class="normal">543</span>
+<span class="normal">544</span>
+<span class="normal">545</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">learn_ontology_iter</span><span class="p">(</span><span class="n">dataset</span><span class="p">:</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">Config</span><span class="p">,</span> <span class="n">working_dir</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">include_only</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">exclude</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">mapped_only</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">ResultSet</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Learn a set of chemical classes.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        dataset:</span>
+<span class="sd">        config:</span>
+
+<span class="sd">    Returns:</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">expt</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">experiment_name</span>
+    <span class="n">cache_dir</span> <span class="o">=</span> <span class="n">working_dir</span> <span class="o">/</span> <span class="n">expt</span> <span class="o">/</span> <span class="s2">&quot;cache&quot;</span>
+    <span class="n">cache_dir</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">for</span> <span class="bp">cls</span> <span class="ow">in</span> <span class="n">dataset</span><span class="o">.</span><span class="n">classes</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Learning </span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">safe_cls_name</span> <span class="o">=</span> <span class="n">safe_name</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">include_only</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">cls</span><span class="o">.</span><span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">include_only</span> <span class="ow">and</span> <span class="bp">cls</span><span class="o">.</span><span class="n">id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">include_only</span> <span class="ow">and</span> <span class="n">safe_cls_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">include_only</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Skipping </span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">, not in include_only&quot;</span><span class="p">)</span>
+                <span class="k">continue</span>
+        <span class="k">if</span> <span class="n">exclude</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">cls</span><span class="o">.</span><span class="n">name</span> <span class="ow">in</span> <span class="n">exclude</span> <span class="ow">or</span> <span class="bp">cls</span><span class="o">.</span><span class="n">id</span> <span class="ow">in</span> <span class="n">exclude</span> <span class="ow">or</span> <span class="n">safe_cls_name</span> <span class="ow">in</span> <span class="n">exclude</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Skipping </span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">, in exclude&quot;</span><span class="p">)</span>
+                <span class="k">continue</span>
+        <span class="k">if</span> <span class="n">mapped_only</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">cls</span><span class="o">.</span><span class="n">xrefs</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Skipping </span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">, not mapped&quot;</span><span class="p">)</span>
+                <span class="k">continue</span>
+        <span class="n">filename</span> <span class="o">=</span> <span class="n">cache_dir</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">safe_cls_name</span><span class="si">}</span><span class="s2">.json&quot;</span>
+        <span class="k">if</span> <span class="n">filename</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Skipping </span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">rset</span> <span class="o">=</span> <span class="n">ResultSet</span><span class="o">.</span><span class="n">model_validate_json</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">())</span>
+                <span class="c1"># yield rset</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">pos</span><span class="p">,</span> <span class="n">neg</span> <span class="o">=</span> <span class="n">get_positive_and_negative_train_instances</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">dataset</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">pos</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">config</span><span class="o">.</span><span class="n">min_positive_examples_for_training</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Skipping </span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">pos</span><span class="p">)</span><span class="si">}</span><span class="s2"> is not enough positive examples&quot;</span><span class="p">)</span>
+                <span class="k">continue</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">neg</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">config</span><span class="o">.</span><span class="n">min_negative_examples_for_training</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Skipping </span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">neg</span><span class="p">)</span><span class="si">}</span><span class="s2"> is not enough negative examples&quot;</span><span class="p">)</span>
+                <span class="k">continue</span>
+            <span class="n">rset</span> <span class="o">=</span> <span class="n">learn_program</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="n">neg</span><span class="p">,</span> <span class="n">config</span><span class="p">)</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">rset</span><span class="o">.</span><span class="n">model_dump_json</span><span class="p">(</span><span class="n">indent</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+        <span class="k">yield</span> <span class="n">rset</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="c3p.learn.learn_program" class="doc doc-heading">
+            <code class=" language-python"><span class="n">learn_program</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">positive_instances</span><span class="p">,</span> <span class="n">negative_instances</span><span class="p">,</span> <span class="n">config</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Learn a program for a chemical class.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>cls</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="ChemicalClass (c3p.datamodel.ChemicalClass)" href="../datamodel/#c3p.datamodel.ChemicalClass">ChemicalClass</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>positive_instances</code>
+            </td>
+            <td>
+                  <code><span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="ChemicalStructure (c3p.datamodel.ChemicalStructure)" href="../datamodel/#c3p.datamodel.ChemicalStructure">ChemicalStructure</a>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>negative_instances</code>
+            </td>
+            <td>
+                  <code><span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="ChemicalStructure (c3p.datamodel.ChemicalStructure)" href="../datamodel/#c3p.datamodel.ChemicalStructure">ChemicalStructure</a>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>config</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Config (c3p.datamodel.Config)" href="../datamodel/#c3p.datamodel.Config">Config</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <p>Returns:</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>c3p/learn.py</code></summary>
+              <div class="codehilite"><table class="codehilitetable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">381</span>
+<span class="normal">382</span>
+<span class="normal">383</span>
+<span class="normal">384</span>
+<span class="normal">385</span>
+<span class="normal">386</span>
+<span class="normal">387</span>
+<span class="normal">388</span>
+<span class="normal">389</span>
+<span class="normal">390</span>
+<span class="normal">391</span>
+<span class="normal">392</span>
+<span class="normal">393</span>
+<span class="normal">394</span>
+<span class="normal">395</span>
+<span class="normal">396</span>
+<span class="normal">397</span>
+<span class="normal">398</span>
+<span class="normal">399</span>
+<span class="normal">400</span>
+<span class="normal">401</span>
+<span class="normal">402</span>
+<span class="normal">403</span>
+<span class="normal">404</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">learn_program</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">:</span> <span class="n">ChemicalClass</span><span class="p">,</span>
+        <span class="n">positive_instances</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">ChemicalStructure</span><span class="p">],</span>
+        <span class="n">negative_instances</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">ChemicalStructure</span><span class="p">],</span>
+        <span class="n">config</span><span class="p">:</span> <span class="n">Config</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ResultSet</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Learn a program for a chemical class.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        cls:</span>
+<span class="sd">        positive_instances:</span>
+<span class="sd">        negative_instances:</span>
+<span class="sd">        config:</span>
+
+<span class="sd">    Returns:</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># print(f&quot;## {test_cls.name} POS={len(test_cls.instances)} NEG={len(test_cls.negatives)}&quot;)</span>
+    <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">learn_program_single_iter</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">positive_instances</span><span class="p">,</span> <span class="n">negative_instances</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">):</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;attempt=</span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">attempt</span><span class="si">}</span><span class="s2"> compiled=</span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">success</span><span class="si">}</span><span class="s2"> tp=</span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">num_true_positives</span><span class="si">}</span><span class="s2"> tn=</span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">num_true_negatives</span><span class="si">}</span><span class="s2"> fp=</span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">num_false_positives</span><span class="si">}</span><span class="s2"> f1=</span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">f1</span><span class="si">}</span><span class="s2">, len==</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">code</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+        <span class="n">result</span><span class="o">.</span><span class="n">calculate</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">ResultSet</span><span class="o">.</span><span class="n">from_results</span><span class="p">(</span><span class="n">results</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="c3p.learn.learn_program_single_iter" class="doc doc-heading">
+            <code class=" language-python"><span class="n">learn_program_single_iter</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">positive_instances</span><span class="p">,</span> <span class="n">negative_instances</span><span class="p">,</span> <span class="n">attempt</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">err</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">prog</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Main workflow</p>
+<p>The main workflow is a cycle between</p>
+<ol>
+<li>Generating code</li>
+<li>Running the code on positive and negative examples</li>
+<li>Go to 1 until <code>N</code> iterations or sufficient accuracy is received</li>
+</ol>
+<p>Each cycle will result a result. The final one is typically the best, but this
+is not guaranteed.</p>
+<p>:param cls: target chemical class for which is write a program
+:param positive_instances: positive instances
+:param negative_instances: negative instances
+:param attempt: counts which attempt this is
+:param err: error from previous iteration
+:param prog: program from previous iteration
+:param config: setup
+:return: iterator of results</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>c3p/learn.py</code></summary>
+              <div class="codehilite"><table class="codehilitetable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">271</span>
+<span class="normal">272</span>
+<span class="normal">273</span>
+<span class="normal">274</span>
+<span class="normal">275</span>
+<span class="normal">276</span>
+<span class="normal">277</span>
+<span class="normal">278</span>
+<span class="normal">279</span>
+<span class="normal">280</span>
+<span class="normal">281</span>
+<span class="normal">282</span>
+<span class="normal">283</span>
+<span class="normal">284</span>
+<span class="normal">285</span>
+<span class="normal">286</span>
+<span class="normal">287</span>
+<span class="normal">288</span>
+<span class="normal">289</span>
+<span class="normal">290</span>
+<span class="normal">291</span>
+<span class="normal">292</span>
+<span class="normal">293</span>
+<span class="normal">294</span>
+<span class="normal">295</span>
+<span class="normal">296</span>
+<span class="normal">297</span>
+<span class="normal">298</span>
+<span class="normal">299</span>
+<span class="normal">300</span>
+<span class="normal">301</span>
+<span class="normal">302</span>
+<span class="normal">303</span>
+<span class="normal">304</span>
+<span class="normal">305</span>
+<span class="normal">306</span>
+<span class="normal">307</span>
+<span class="normal">308</span>
+<span class="normal">309</span>
+<span class="normal">310</span>
+<span class="normal">311</span>
+<span class="normal">312</span>
+<span class="normal">313</span>
+<span class="normal">314</span>
+<span class="normal">315</span>
+<span class="normal">316</span>
+<span class="normal">317</span>
+<span class="normal">318</span>
+<span class="normal">319</span>
+<span class="normal">320</span>
+<span class="normal">321</span>
+<span class="normal">322</span>
+<span class="normal">323</span>
+<span class="normal">324</span>
+<span class="normal">325</span>
+<span class="normal">326</span>
+<span class="normal">327</span>
+<span class="normal">328</span>
+<span class="normal">329</span>
+<span class="normal">330</span>
+<span class="normal">331</span>
+<span class="normal">332</span>
+<span class="normal">333</span>
+<span class="normal">334</span>
+<span class="normal">335</span>
+<span class="normal">336</span>
+<span class="normal">337</span>
+<span class="normal">338</span>
+<span class="normal">339</span>
+<span class="normal">340</span>
+<span class="normal">341</span>
+<span class="normal">342</span>
+<span class="normal">343</span>
+<span class="normal">344</span>
+<span class="normal">345</span>
+<span class="normal">346</span>
+<span class="normal">347</span>
+<span class="normal">348</span>
+<span class="normal">349</span>
+<span class="normal">350</span>
+<span class="normal">351</span>
+<span class="normal">352</span>
+<span class="normal">353</span>
+<span class="normal">354</span>
+<span class="normal">355</span>
+<span class="normal">356</span>
+<span class="normal">357</span>
+<span class="normal">358</span>
+<span class="normal">359</span>
+<span class="normal">360</span>
+<span class="normal">361</span>
+<span class="normal">362</span>
+<span class="normal">363</span>
+<span class="normal">364</span>
+<span class="normal">365</span>
+<span class="normal">366</span>
+<span class="normal">367</span>
+<span class="normal">368</span>
+<span class="normal">369</span>
+<span class="normal">370</span>
+<span class="normal">371</span>
+<span class="normal">372</span>
+<span class="normal">373</span>
+<span class="normal">374</span>
+<span class="normal">375</span>
+<span class="normal">376</span>
+<span class="normal">377</span>
+<span class="normal">378</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">learn_program_single_iter</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">:</span> <span class="n">ChemicalClass</span><span class="p">,</span>
+        <span class="n">positive_instances</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">ChemicalStructure</span><span class="p">],</span>
+        <span class="n">negative_instances</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">ChemicalStructure</span><span class="p">],</span>
+        <span class="n">attempt</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">err</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">prog</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Config</span><span class="p">]</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Result</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Main workflow</span>
+
+<span class="sd">    The main workflow is a cycle between</span>
+
+<span class="sd">    1. Generating code</span>
+<span class="sd">    2. Running the code on positive and negative examples</span>
+<span class="sd">    3. Go to 1 until `N` iterations or sufficient accuracy is received</span>
+
+<span class="sd">    Each cycle will result a result. The final one is typically the best, but this</span>
+<span class="sd">    is not guaranteed.</span>
+
+<span class="sd">    :param cls: target chemical class for which is write a program</span>
+<span class="sd">    :param positive_instances: positive instances</span>
+<span class="sd">    :param negative_instances: negative instances</span>
+<span class="sd">    :param attempt: counts which attempt this is</span>
+<span class="sd">    :param err: error from previous iteration</span>
+<span class="sd">    :param prog: program from previous iteration</span>
+<span class="sd">    :param config: setup</span>
+<span class="sd">    :return: iterator of results</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Test: </span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> attempt=</span><span class="si">{</span><span class="n">attempt</span><span class="si">}</span><span class="s2"> err=</span><span class="si">{</span><span class="n">err</span><span class="si">}</span><span class="s2"> prog=</span><span class="si">{</span><span class="n">prog</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_key</span><span class="p">,</span> <span class="n">get_model</span>
+    <span class="k">if</span> <span class="n">config</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="n">Config</span><span class="p">()</span>
+    <span class="n">cls_lite</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">lite_copy</span><span class="p">()</span>
+    <span class="n">next_attempt</span> <span class="o">=</span> <span class="n">attempt</span> <span class="o">+</span> <span class="mi">1</span>
+    <span class="k">if</span> <span class="n">next_attempt</span> <span class="o">&gt;</span> <span class="n">config</span><span class="o">.</span><span class="n">max_attempts</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;FAILED: </span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> err=</span><span class="si">{</span><span class="n">err</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">40</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">positive_instances</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">negative_instances</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">AssertionError</span><span class="p">(</span><span class="s2">&quot;Run inference to get negative examples&quot;</span><span class="p">)</span>
+    <span class="n">system_prompt</span> <span class="o">=</span> <span class="n">generate_system_prompt</span><span class="p">(</span><span class="n">VALIDATED_PROGRAM_EXAMPLES</span><span class="p">)</span>
+    <span class="n">defn</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">definition</span> <span class="k">if</span> <span class="n">config</span><span class="o">.</span><span class="n">use_definitions</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="n">main_prompt</span> <span class="o">=</span> <span class="n">generate_main_prompt</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">defn</span><span class="p">,</span> <span class="n">positive_instances</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="n">config</span><span class="o">.</span><span class="n">max_positive_in_prompt</span><span class="p">],</span> <span class="n">err</span><span class="o">=</span><span class="n">err</span><span class="p">,</span> <span class="n">prog</span><span class="o">=</span><span class="n">prog</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;System Prompt: </span><span class="si">{</span><span class="n">system_prompt</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Main Prompt: </span><span class="si">{</span><span class="n">main_prompt</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">get_model</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">llm_model_name</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">model</span><span class="o">.</span><span class="n">needs_key</span><span class="p">:</span>
+        <span class="n">model</span><span class="o">.</span><span class="n">key</span> <span class="o">=</span> <span class="n">get_key</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">model</span><span class="o">.</span><span class="n">needs_key</span><span class="p">,</span> <span class="n">model</span><span class="o">.</span><span class="n">key_env_var</span><span class="p">)</span>
+    <span class="n">options</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="s2">&quot;llama&quot;</span> <span class="ow">in</span> <span class="n">config</span><span class="o">.</span><span class="n">llm_model_name</span><span class="p">:</span>
+        <span class="n">options</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;max_tokens&quot;</span><span class="p">:</span> <span class="mi">3000</span><span class="p">}</span>
+    <span class="k">if</span> <span class="s2">&quot;deepseek&quot;</span> <span class="ow">in</span> <span class="n">config</span><span class="o">.</span><span class="n">llm_model_name</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span>
+        <span class="n">options</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;max_tokens&quot;</span><span class="p">:</span> <span class="mi">8192</span> <span class="o">*</span> <span class="mi">2</span><span class="p">}</span>
+    <span class="k">if</span> <span class="s2">&quot;o1&quot;</span> <span class="ow">in</span> <span class="n">config</span><span class="o">.</span><span class="n">llm_model_name</span><span class="p">:</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">prompt</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;SYSTEM PROMPT: </span><span class="si">{</span><span class="n">system_prompt</span><span class="si">}</span><span class="s2"> MAIN PROMPT: </span><span class="si">{</span><span class="n">main_prompt</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">prompt</span><span class="p">(</span><span class="n">main_prompt</span><span class="p">,</span> <span class="n">system</span><span class="o">=</span><span class="n">system_prompt</span><span class="p">,</span> <span class="o">**</span><span class="n">options</span><span class="p">)</span>
+    <span class="n">code_str</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">code_str</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No code returned for </span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> // </span><span class="si">{</span><span class="n">response</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">reasoning</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="s2">&quot;```&quot;</span> <span class="ow">in</span> <span class="n">code_str</span><span class="p">:</span>  <span class="c1"># Remove code block markdown</span>
+        <span class="n">parts</span> <span class="o">=</span> <span class="n">code_str</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;```&quot;</span><span class="p">)</span>
+        <span class="n">reasoning</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+        <span class="n">code_str</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">code_str</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;python&quot;</span><span class="p">):</span>
+            <span class="n">code_str</span> <span class="o">=</span> <span class="n">code_str</span><span class="p">[</span><span class="mi">6</span><span class="p">:]</span>
+        <span class="n">code_str</span> <span class="o">=</span> <span class="n">code_str</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+
+    <span class="n">code_str</span> <span class="o">=</span> <span class="n">repair_code</span><span class="p">(</span><span class="n">code_str</span><span class="p">)</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">evaluate_program</span><span class="p">(</span><span class="n">code_str</span><span class="p">,</span> <span class="n">cls_lite</span><span class="p">,</span> <span class="n">positive_instances</span><span class="p">,</span> <span class="n">negative_instances</span><span class="p">)</span>
+    <span class="n">result</span><span class="o">.</span><span class="n">attempt</span> <span class="o">=</span> <span class="n">attempt</span>
+    <span class="n">result</span><span class="o">.</span><span class="n">reasoning</span> <span class="o">=</span> <span class="n">reasoning</span>
+    <span class="k">if</span> <span class="n">err</span><span class="p">:</span>
+        <span class="n">result</span><span class="o">.</span><span class="n">message</span> <span class="o">=</span> <span class="n">err</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Attempt </span><span class="si">{</span><span class="n">attempt</span><span class="si">}</span><span class="s2"> for </span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> F1=</span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">f1</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">yield</span> <span class="n">result</span>
+    <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">f1</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">result</span><span class="o">.</span><span class="n">f1</span> <span class="o">&lt;</span> <span class="n">config</span><span class="o">.</span><span class="n">f1_threshold</span><span class="p">:</span>
+        <span class="n">max_examples</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">max_examples_in_feedback</span>
+        <span class="c1"># try again, feeding in the results of the current attempt</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">error</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Error: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">error</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">msg</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Attempt failed: F1 score of </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">f1</span><span class="si">}</span><span class="s2"> is too low.&quot;</span>
+        <span class="n">msg</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Outcomes:</span><span class="se">\n</span><span class="s2">------</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">ser_list</span><span class="p">(</span><span class="n">outcomes</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Outcome</span><span class="p">],</span> <span class="n">categ</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">outcomes</span><span class="p">:</span>
+                <span class="k">return</span> <span class="s2">&quot;NONE&quot;</span>
+            <span class="k">return</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2"> * &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;SMILES: </span><span class="si">{</span><span class="n">o</span><span class="o">.</span><span class="n">smiles</span><span class="si">}</span><span class="s2"> NAME: </span><span class="si">{</span><span class="n">o</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> REASON: </span><span class="si">{</span><span class="n">categ</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">o</span><span class="o">.</span><span class="n">reason</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">outcomes</span><span class="p">[:</span><span class="n">max_examples</span><span class="p">])</span>
+
+        <span class="n">msg</span> <span class="o">+=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">True positives: &quot;</span> <span class="o">+</span> <span class="n">ser_list</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">true_positives</span><span class="p">,</span> <span class="s2">&quot;CORRECT&quot;</span><span class="p">)</span>
+        <span class="n">msg</span> <span class="o">+=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">False positives: &quot;</span> <span class="o">+</span> <span class="n">ser_list</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">false_positives</span><span class="p">,</span> <span class="s2">&quot;WRONGLY CLASSIFIED&quot;</span><span class="p">)</span>
+        <span class="n">msg</span> <span class="o">+=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">False negatives: &quot;</span> <span class="o">+</span> <span class="n">ser_list</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">sample_false_negatives</span><span class="p">,</span> <span class="s2">&quot;MISSED&quot;</span><span class="p">)</span>
+        <span class="n">msg</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">------</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="n">msg</span> <span class="o">+=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">In your reasoning step, analyze the previous program and the above outcomes, &quot;</span>
+        <span class="n">msg</span> <span class="o">+=</span> <span class="s2">&quot;hypothesizing about what went wrong, and how to improve.</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="k">if</span> <span class="n">config</span><span class="o">.</span><span class="n">use_the_force</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">+=</span> <span class="s2">&quot;IMPORTANT NOTE: I do not have 100</span><span class="si">% c</span><span class="s2">onfidence in the benchmark I am using. &quot;</span>
+            <span class="n">msg</span> <span class="o">+=</span> <span class="s2">&quot;There may be occasional and systematic mistakes. &quot;</span>
+            <span class="n">msg</span> <span class="o">+=</span> <span class="s2">&quot;Use your best judgment, and if you think the classifications your program are &quot;</span>
+            <span class="n">msg</span> <span class="o">+=</span> <span class="s2">&quot;consistent with your understanding if the meaning of the chemical class, then &quot;</span>
+            <span class="n">msg</span> <span class="o">+=</span> <span class="s2">&quot;you can ignore outliers, but explain your reasoning in doing so. &quot;</span>
+            <span class="n">msg</span> <span class="o">+=</span> <span class="s2">&quot;I have great confidence in your broad understanding of chemistry and your ability to &quot;</span>
+            <span class="n">msg</span> <span class="o">+=</span> <span class="s2">&quot;translate this into code.&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Retrying </span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> with new prompt&quot;</span><span class="p">)</span>
+        <span class="k">yield from</span> <span class="n">learn_program_single_iter</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">positive_instances</span><span class="p">,</span> <span class="n">negative_instances</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span> <span class="n">attempt</span><span class="o">=</span><span class="n">next_attempt</span><span class="p">,</span> <span class="n">err</span><span class="o">=</span><span class="n">msg</span><span class="p">,</span> <span class="n">prog</span><span class="o">=</span><span class="n">code_str</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="c3p.learn.repair_code" class="doc doc-heading">
+            <code class=" language-python"><span class="n">repair_code</span><span class="p">(</span><span class="n">code</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Repair code by adding comments for hallucinated code lines.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>code</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <p>Returns:</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>c3p/learn.py</code></summary>
+              <div class="codehilite"><table class="codehilitetable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">409</span>
+<span class="normal">410</span>
+<span class="normal">411</span>
+<span class="normal">412</span>
+<span class="normal">413</span>
+<span class="normal">414</span>
+<span class="normal">415</span>
+<span class="normal">416</span>
+<span class="normal">417</span>
+<span class="normal">418</span>
+<span class="normal">419</span>
+<span class="normal">420</span>
+<span class="normal">421</span>
+<span class="normal">422</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">repair_code</span><span class="p">(</span><span class="n">code</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Repair code by adding comments for hallucinated code lines.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        code:</span>
+
+<span class="sd">    Returns:</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">hcl</span><span class="p">,</span> <span class="n">reason</span> <span class="ow">in</span> <span class="n">HALLUCINATED_CODE_LINES</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">hcl</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">code</span><span class="p">:</span>
+            <span class="n">code</span> <span class="o">=</span> <span class="n">code</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">hcl</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;# </span><span class="si">{</span><span class="n">hcl</span><span class="si">}</span><span class="s2"> ## </span><span class="si">{</span><span class="n">reason</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">code</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="c3p.learn.run_code" class="doc doc-heading">
+            <code class=" language-python"><span class="n">run_code</span><span class="p">(</span><span class="n">code_str</span><span class="p">,</span> <span class="n">function_name</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">neg_args</span><span class="p">,</span> <span class="n">max_false</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Run the generated code and return the results.</p>
+<p>This expects the code to define a function with the name <code>function_name</code> that takes a single argument
+(SMILES) and returns a tuple of (arg, boolean, reason).</p>
+<p>Example:</p>
+<div class="codehilite"><pre><span></span><code>&gt;&gt;&gt; code = &quot;def is_foo(x): return x == &#39;foo&#39;, &#39;it is foo&#39;&quot;
+&gt;&gt;&gt; run_code(code, &#39;is_foo&#39;, [&#39;foo&#39;, &#39;bar&#39;], [])
+[(&#39;foo&#39;, True, &#39;it is foo&#39;, {}), (&#39;bar&#39;, False, &#39;it is foo&#39;, {})]
+</code></pre></div>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>code_str</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>function_name</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>args</code>
+            </td>
+            <td>
+                  <code><span title="typing.List">List</span>[<span title="typing.Any">Any</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>neg_args</code>
+            </td>
+            <td>
+                  <code><span title="typing.List">List</span>[<span title="typing.Any">Any</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>max_false</code>
+            </td>
+            <td>
+                  <code><span title="typing.Optional">Optional</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <p>Returns:</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>c3p/learn.py</code></summary>
+              <div class="codehilite"><table class="codehilitetable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 97</span>
+<span class="normal"> 98</span>
+<span class="normal"> 99</span>
+<span class="normal">100</span>
+<span class="normal">101</span>
+<span class="normal">102</span>
+<span class="normal">103</span>
+<span class="normal">104</span>
+<span class="normal">105</span>
+<span class="normal">106</span>
+<span class="normal">107</span>
+<span class="normal">108</span>
+<span class="normal">109</span>
+<span class="normal">110</span>
+<span class="normal">111</span>
+<span class="normal">112</span>
+<span class="normal">113</span>
+<span class="normal">114</span>
+<span class="normal">115</span>
+<span class="normal">116</span>
+<span class="normal">117</span>
+<span class="normal">118</span>
+<span class="normal">119</span>
+<span class="normal">120</span>
+<span class="normal">121</span>
+<span class="normal">122</span>
+<span class="normal">123</span>
+<span class="normal">124</span>
+<span class="normal">125</span>
+<span class="normal">126</span>
+<span class="normal">127</span>
+<span class="normal">128</span>
+<span class="normal">129</span>
+<span class="normal">130</span>
+<span class="normal">131</span>
+<span class="normal">132</span>
+<span class="normal">133</span>
+<span class="normal">134</span>
+<span class="normal">135</span>
+<span class="normal">136</span>
+<span class="normal">137</span>
+<span class="normal">138</span>
+<span class="normal">139</span>
+<span class="normal">140</span>
+<span class="normal">141</span>
+<span class="normal">142</span>
+<span class="normal">143</span>
+<span class="normal">144</span>
+<span class="normal">145</span>
+<span class="normal">146</span>
+<span class="normal">147</span>
+<span class="normal">148</span>
+<span class="normal">149</span>
+<span class="normal">150</span>
+<span class="normal">151</span>
+<span class="normal">152</span>
+<span class="normal">153</span>
+<span class="normal">154</span>
+<span class="normal">155</span>
+<span class="normal">156</span>
+<span class="normal">157</span>
+<span class="normal">158</span>
+<span class="normal">159</span>
+<span class="normal">160</span>
+<span class="normal">161</span>
+<span class="normal">162</span>
+<span class="normal">163</span>
+<span class="normal">164</span>
+<span class="normal">165</span>
+<span class="normal">166</span>
+<span class="normal">167</span>
+<span class="normal">168</span>
+<span class="normal">169</span>
+<span class="normal">170</span>
+<span class="normal">171</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">run_code</span><span class="p">(</span><span class="n">code_str</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">function_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">args</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="n">neg_args</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="n">max_false</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bool</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Run the generated code and return the results.</span>
+
+<span class="sd">    This expects the code to define a function with the name `function_name` that takes a single argument</span>
+<span class="sd">    (SMILES) and returns a tuple of (arg, boolean, reason).</span>
+
+<span class="sd">    Example:</span>
+
+<span class="sd">        &gt;&gt;&gt; code = &quot;def is_foo(x): return x == &#39;foo&#39;, &#39;it is foo&#39;&quot;</span>
+<span class="sd">        &gt;&gt;&gt; run_code(code, &#39;is_foo&#39;, [&#39;foo&#39;, &#39;bar&#39;], [])</span>
+<span class="sd">        [(&#39;foo&#39;, True, &#39;it is foo&#39;, {}), (&#39;bar&#39;, False, &#39;it is foo&#39;, {})]</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        code_str:</span>
+<span class="sd">        function_name:</span>
+<span class="sd">        args:</span>
+<span class="sd">        neg_args:</span>
+<span class="sd">        max_false:</span>
+
+<span class="sd">    Returns:</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># suppress rdkit logging</span>
+    <span class="c1">#log_stream = io.StringIO()</span>
+    <span class="c1">#handler = logging.StreamHandler(log_stream)</span>
+    <span class="c1">#tmp_logger = logging.getLogger()</span>
+    <span class="c1">#tmp_logger.addHandler(handler)</span>
+    <span class="c1">#tmp_logger.setLevel(logging.FATAL)</span>
+    <span class="c1"># suppress at C++ level</span>
+    <span class="c1"># https://github.com/rdkit/rdkit/issues/2683</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">rdkit</span><span class="w"> </span><span class="kn">import</span> <span class="n">RDLogger</span>
+    <span class="n">RDLogger</span><span class="o">.</span><span class="n">DisableLog</span><span class="p">(</span><span class="s1">&#39;rdApp.*&#39;</span><span class="p">)</span>
+
+    <span class="n">__metadata__</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="c1"># redirect stdout to a StringIO object</span>
+    <span class="n">f</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">StringIO</span><span class="p">()</span>
+    <span class="k">with</span> <span class="n">redirect_stdout</span><span class="p">(</span><span class="n">f</span><span class="p">),</span> <span class="n">redirect_stderr</span><span class="p">(</span><span class="n">f</span><span class="p">):</span>
+        <span class="n">exec</span><span class="p">(</span><span class="n">code_str</span><span class="p">,</span> <span class="nb">globals</span><span class="p">())</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Compilation Output: </span><span class="si">{</span><span class="n">f</span><span class="o">.</span><span class="n">getvalue</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="n">f</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">StringIO</span><span class="p">()</span>
+    <span class="k">with</span> <span class="n">redirect_stdout</span><span class="p">(</span><span class="n">f</span><span class="p">),</span> <span class="n">redirect_stderr</span><span class="p">(</span><span class="n">f</span><span class="p">):</span>
+        <span class="n">metadata</span> <span class="o">=</span> <span class="nb">globals</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;__metadata__&#39;</span><span class="p">,</span> <span class="p">{})</span>
+        <span class="n">vals</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">num_false_positives</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">num_false_negatives</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Running code with </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">)</span><span class="si">}</span><span class="s2"> + </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">neg_args</span><span class="p">)</span><span class="si">}</span><span class="s2"> instances&quot;</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;CODE:</span><span class="se">\n</span><span class="si">{</span><span class="n">code_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">arg</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">args</span> <span class="o">+</span> <span class="n">neg_args</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">max_false</span> <span class="ow">and</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">)</span> <span class="ow">and</span> <span class="n">num_false_negatives</span> <span class="o">&gt;</span> <span class="n">max_false</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="c1"># use json.dumps to make sure that the argument is safely encoded</span>
+            <span class="c1"># e.g. SMILES may use backslashes</span>
+            <span class="c1">#arg_encoded = json.dumps(arg)</span>
+            <span class="n">arg_encoded</span> <span class="o">=</span> <span class="nb">repr</span><span class="p">(</span><span class="n">arg</span><span class="p">)</span>
+            <span class="n">func_exec_str</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">function_name</span><span class="si">}</span><span class="s2">(</span><span class="si">{</span><span class="n">arg_encoded</span><span class="si">}</span><span class="s2">)&quot;</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Executing: </span><span class="si">{</span><span class="n">func_exec_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">is_cls</span><span class="p">,</span> <span class="n">reason</span> <span class="o">=</span> <span class="n">eval_with_timeout</span><span class="p">(</span><span class="n">func_exec_str</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error executing </span><span class="si">{</span><span class="n">func_exec_str</span><span class="si">}</span><span class="s2">:</span><span class="se">\n</span><span class="s2"> </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">is_cls</span> <span class="ow">and</span> <span class="n">i</span> <span class="o">&gt;=</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
+                <span class="c1"># in 2nd batch, should be negative</span>
+                <span class="n">num_false_positives</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="k">if</span> <span class="n">max_false</span> <span class="ow">and</span> <span class="n">num_false_positives</span> <span class="o">&gt;</span> <span class="n">max_false</span><span class="p">:</span>
+                    <span class="k">break</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">is_cls</span> <span class="ow">and</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
+                <span class="c1"># in 1st batch, should be positive</span>
+                <span class="n">num_false_negatives</span> <span class="o">+=</span> <span class="mi">1</span>
+
+            <span class="n">vals</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">arg</span><span class="p">,</span> <span class="n">is_cls</span><span class="p">,</span> <span class="n">reason</span><span class="p">,</span> <span class="n">metadata</span><span class="p">))</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Exec Output: </span><span class="si">{</span><span class="n">f</span><span class="o">.</span><span class="n">getvalue</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="c1">#tmp_logger.removeHandler(handler)</span>
+    <span class="k">return</span> <span class="n">vals</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="c3p.learn.safe_name" class="doc doc-heading">
+            <code class=" language-python"><span class="n">safe_name</span><span class="p">(</span><span class="n">name</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Convert a name to a safe format for use in python functions.</p>
+<p>Example:</p>
+<div class="codehilite"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span><span class="w"> </span><span class="nf">safe_name</span><span class="p">(</span><span class="s">&quot;foo&#39; 3&lt;-&gt;x bar&quot;</span><span class="p">)</span>
+<span class="s">&#39;foo__3___x_bar&#39;</span>
+</code></pre></div>
+
+
+            <details class="quote">
+              <summary>Source code in <code>c3p/learn.py</code></summary>
+              <div class="codehilite"><table class="codehilitetable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">44</span>
+<span class="normal">45</span>
+<span class="normal">46</span>
+<span class="normal">47</span>
+<span class="normal">48</span>
+<span class="normal">49</span>
+<span class="normal">50</span>
+<span class="normal">51</span>
+<span class="normal">52</span>
+<span class="normal">53</span>
+<span class="normal">54</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">safe_name</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Convert a name to a safe format for use in python functions.</span>
+
+<span class="sd">    Example:</span>
+
+<span class="sd">        &gt;&gt;&gt; safe_name(&quot;foo&#39; 3&lt;-&gt;x bar&quot;)</span>
+<span class="sd">        &#39;foo__3___x_bar&#39;</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">c</span> <span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">isalnum</span><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;_&quot;</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">name</span><span class="p">])</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="cli">CLI</h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<a id="c3p.learn_cli"></a>
+    <div class="doc doc-contents first">
+
+
+
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="c3p.learn_cli.configure_logging" class="doc doc-heading">
+            <code class=" language-python"><span class="n">configure_logging</span><span class="p">(</span><span class="n">verbosity</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Configure logging based on verbosity level</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>c3p/learn_cli.py</code></summary>
+              <div class="codehilite"><table class="codehilitetable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">20</span>
+<span class="normal">21</span>
+<span class="normal">22</span>
+<span class="normal">23</span>
+<span class="normal">24</span>
+<span class="normal">25</span>
+<span class="normal">26</span>
+<span class="normal">27</span>
+<span class="normal">28</span>
+<span class="normal">29</span>
+<span class="normal">30</span>
+<span class="normal">31</span>
+<span class="normal">32</span>
+<span class="normal">33</span>
+<span class="normal">34</span>
+<span class="normal">35</span>
+<span class="normal">36</span>
+<span class="normal">37</span>
+<span class="normal">38</span>
+<span class="normal">39</span>
+<span class="normal">40</span>
+<span class="normal">41</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">configure_logging</span><span class="p">(</span><span class="n">verbosity</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Configure logging based on verbosity level&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">verbosity</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">level</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">INFO</span>
+    <span class="k">elif</span> <span class="n">verbosity</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="n">level</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">level</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">WARNING</span>
+
+    <span class="c1"># Create formatter</span>
+    <span class="n">formatter</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">Formatter</span><span class="p">(</span>
+        <span class="s1">&#39;</span><span class="si">%(asctime)s</span><span class="s1"> - </span><span class="si">%(name)s</span><span class="s1"> - </span><span class="si">%(levelname)s</span><span class="s1"> - </span><span class="si">%(message)s</span><span class="s1">&#39;</span><span class="p">,</span>
+        <span class="n">datefmt</span><span class="o">=</span><span class="s1">&#39;%H:%M:%S&#39;</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Configure handler</span>
+    <span class="n">handler</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">StreamHandler</span><span class="p">()</span>
+    <span class="n">handler</span><span class="o">.</span><span class="n">setFormatter</span><span class="p">(</span><span class="n">formatter</span><span class="p">)</span>
+
+    <span class="c1"># Set up logger</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">level</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">addHandler</span><span class="p">(</span><span class="n">handler</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="c3p.learn_cli.learn_classes" class="doc doc-heading">
+            <code class=" language-python"><span class="n">learn_classes</span><span class="p">(</span><span class="n">class_names</span><span class="o">=</span><span class="n">typer</span><span class="o">.</span><span class="n">Argument</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;class name&#39;</span><span class="p">),</span> <span class="n">exclude_class_names</span><span class="o">=</span><span class="n">typer</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;--exclude&#39;</span><span class="p">,</span> <span class="s1">&#39;-X&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;class names to exclude&#39;</span><span class="p">),</span> <span class="n">dataset_path</span><span class="o">=</span><span class="n">typer</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;--dataset&#39;</span><span class="p">,</span> <span class="s1">&#39;-d&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;path to dataset&#39;</span><span class="p">),</span> <span class="n">working_dir</span><span class="o">=</span><span class="n">typer</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;--workdir&#39;</span><span class="p">,</span> <span class="s1">&#39;-w&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;path to workdir&#39;</span><span class="p">),</span> <span class="n">model_name</span><span class="o">=</span><span class="n">typer</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;--model&#39;</span><span class="p">,</span> <span class="s1">&#39;-m&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;model name&#39;</span><span class="p">),</span> <span class="n">max_negative</span><span class="o">=</span><span class="n">typer</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;--max-negative&#39;</span><span class="p">,</span> <span class="s1">&#39;-n&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;max negative examples&#39;</span><span class="p">),</span> <span class="n">randomize_order</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">mapped_only</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">use_the_force</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">max_attempts</span><span class="o">=</span><span class="n">typer</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;--max-attempts&#39;</span><span class="p">,</span> <span class="s1">&#39;-a&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;max attempts&#39;</span><span class="p">),</span> <span class="n">f1_threshold</span><span class="o">=</span><span class="n">typer</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;--f1-threshold&#39;</span><span class="p">,</span> <span class="s1">&#39;-f&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;f1 threshold&#39;</span><span class="p">),</span> <span class="n">exclude_definitions</span><span class="o">=</span><span class="n">typer</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;--exclude-definitions/--no-exclude-definitions&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;exclude definitions&#39;</span><span class="p">),</span> <span class="n">experiment_local_name</span><span class="o">=</span><span class="n">typer</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;--experiment-local-name&#39;</span><span class="p">,</span> <span class="s1">&#39;-e&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;experiment local name&#39;</span><span class="p">),</span> <span class="n">verbose</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Learn program classifiers from a dataset.</p>
+<p>The dataset should have been created beforehand.</p>
+<p>To learn all classes in the dataset use '-':</p>
+<div class="codehilite"><pre><span></span><code>c3p-learn -m gpt-4o --dataset dataset.json -w results -
+</code></pre></div>
+
+
+            <details class="quote">
+              <summary>Source code in <code>c3p/learn_cli.py</code></summary>
+              <div class="codehilite"><table class="codehilitetable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 57</span>
+<span class="normal"> 58</span>
+<span class="normal"> 59</span>
+<span class="normal"> 60</span>
+<span class="normal"> 61</span>
+<span class="normal"> 62</span>
+<span class="normal"> 63</span>
+<span class="normal"> 64</span>
+<span class="normal"> 65</span>
+<span class="normal"> 66</span>
+<span class="normal"> 67</span>
+<span class="normal"> 68</span>
+<span class="normal"> 69</span>
+<span class="normal"> 70</span>
+<span class="normal"> 71</span>
+<span class="normal"> 72</span>
+<span class="normal"> 73</span>
+<span class="normal"> 74</span>
+<span class="normal"> 75</span>
+<span class="normal"> 76</span>
+<span class="normal"> 77</span>
+<span class="normal"> 78</span>
+<span class="normal"> 79</span>
+<span class="normal"> 80</span>
+<span class="normal"> 81</span>
+<span class="normal"> 82</span>
+<span class="normal"> 83</span>
+<span class="normal"> 84</span>
+<span class="normal"> 85</span>
+<span class="normal"> 86</span>
+<span class="normal"> 87</span>
+<span class="normal"> 88</span>
+<span class="normal"> 89</span>
+<span class="normal"> 90</span>
+<span class="normal"> 91</span>
+<span class="normal"> 92</span>
+<span class="normal"> 93</span>
+<span class="normal"> 94</span>
+<span class="normal"> 95</span>
+<span class="normal"> 96</span>
+<span class="normal"> 97</span>
+<span class="normal"> 98</span>
+<span class="normal"> 99</span>
+<span class="normal">100</span>
+<span class="normal">101</span>
+<span class="normal">102</span>
+<span class="normal">103</span>
+<span class="normal">104</span>
+<span class="normal">105</span>
+<span class="normal">106</span>
+<span class="normal">107</span>
+<span class="normal">108</span>
+<span class="normal">109</span>
+<span class="normal">110</span>
+<span class="normal">111</span>
+<span class="normal">112</span>
+<span class="normal">113</span>
+<span class="normal">114</span>
+<span class="normal">115</span>
+<span class="normal">116</span>
+<span class="normal">117</span>
+<span class="normal">118</span>
+<span class="normal">119</span>
+<span class="normal">120</span>
+<span class="normal">121</span>
+<span class="normal">122</span>
+<span class="normal">123</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@app</span><span class="o">.</span><span class="n">command</span><span class="p">()</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">learn_classes</span><span class="p">(</span>
+        <span class="n">class_names</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="n">typer</span><span class="o">.</span><span class="n">Argument</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;class name&quot;</span><span class="p">),</span>
+        <span class="n">exclude_class_names</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="n">typer</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;--exclude&quot;</span><span class="p">,</span> <span class="s2">&quot;-X&quot;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;class names to exclude&quot;</span><span class="p">),</span>
+        <span class="n">dataset_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">=</span> <span class="n">typer</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;--dataset&quot;</span><span class="p">,</span> <span class="s2">&quot;-d&quot;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;path to dataset&quot;</span><span class="p">),</span>
+        <span class="n">working_dir</span><span class="p">:</span> <span class="n">Path</span> <span class="o">=</span> <span class="n">typer</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;--workdir&quot;</span><span class="p">,</span> <span class="s2">&quot;-w&quot;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;path to workdir&quot;</span><span class="p">),</span>
+        <span class="n">model_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">typer</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;--model&quot;</span><span class="p">,</span> <span class="s2">&quot;-m&quot;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;model name&quot;</span><span class="p">),</span>
+        <span class="n">max_negative</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">typer</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;--max-negative&quot;</span><span class="p">,</span> <span class="s2">&quot;-n&quot;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;max negative examples&quot;</span><span class="p">),</span>
+        <span class="n">randomize_order</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="n">typer</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="s2">&quot;--randomize-order/--no-randomize-order&quot;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;randomize order&quot;</span><span class="p">)]</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">mapped_only</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="n">typer</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="s2">&quot;--mapped-only/--no-mapped-only&quot;</span><span class="p">,</span> <span class="s2">&quot;-x/--no-x&quot;</span><span class="p">)]</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">use_the_force</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="n">typer</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="s2">&quot;--use-the-force/--no-use-the-force&quot;</span><span class="p">,</span> <span class="p">)]</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">max_attempts</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">typer</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;--max-attempts&quot;</span><span class="p">,</span> <span class="s2">&quot;-a&quot;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;max attempts&quot;</span><span class="p">),</span>
+        <span class="n">f1_threshold</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="n">typer</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;--f1-threshold&quot;</span><span class="p">,</span> <span class="s2">&quot;-f&quot;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;f1 threshold&quot;</span><span class="p">),</span>
+        <span class="n">exclude_definitions</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="n">typer</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;--exclude-definitions/--no-exclude-definitions&quot;</span><span class="p">,</span>  <span class="n">help</span><span class="o">=</span><span class="s2">&quot;exclude definitions&quot;</span><span class="p">),</span>
+        <span class="n">experiment_local_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">typer</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;--experiment-local-name&quot;</span><span class="p">,</span> <span class="s2">&quot;-e&quot;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;experiment local name&quot;</span><span class="p">),</span>
+        <span class="n">verbose</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">verbose_option</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Learn program classifiers from a dataset.</span>
+
+<span class="sd">    The dataset should have been created beforehand.</span>
+
+<span class="sd">    To learn all classes in the dataset use &#39;-&#39;:</span>
+
+<span class="sd">        c3p-learn -m gpt-4o --dataset dataset.json -w results -</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">configure_logging</span><span class="p">(</span><span class="n">verbose</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">dataset_path</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">dataset</span> <span class="o">=</span> <span class="n">Dataset</span><span class="o">.</span><span class="n">model_validate_json</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">())</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Classes: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">classes</span><span class="p">)</span><span class="si">}</span><span class="s2"> Instances: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">structures</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Structures: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">structures</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">class_names</span> <span class="o">==</span> <span class="p">[</span><span class="s2">&quot;-&quot;</span><span class="p">]:</span>
+        <span class="n">class_names</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">config</span> <span class="o">=</span> <span class="n">Config</span><span class="p">(</span>
+        <span class="n">llm_model_name</span><span class="o">=</span><span class="n">model_name</span><span class="p">,</span>
+        <span class="n">max_negative_to_test</span><span class="o">=</span><span class="n">max_negative</span><span class="p">,</span>
+        <span class="n">experiment_local_name</span><span class="o">=</span><span class="n">experiment_local_name</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">exclude_definitions</span><span class="p">:</span>
+        <span class="n">config</span><span class="o">.</span><span class="n">use_definitions</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="k">if</span> <span class="n">max_attempts</span><span class="p">:</span>
+        <span class="n">config</span><span class="o">.</span><span class="n">max_attempts</span> <span class="o">=</span> <span class="n">max_attempts</span>
+    <span class="k">if</span> <span class="n">f1_threshold</span><span class="p">:</span>
+        <span class="n">config</span><span class="o">.</span><span class="n">f1_threshold</span> <span class="o">=</span> <span class="n">f1_threshold</span>
+    <span class="k">if</span> <span class="n">use_the_force</span><span class="p">:</span>
+        <span class="n">config</span><span class="o">.</span><span class="n">use_the_force</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">if</span> <span class="n">randomize_order</span><span class="p">:</span>
+        <span class="n">random</span><span class="o">.</span><span class="n">shuffle</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">classes</span><span class="p">)</span>
+
+    <span class="n">objs</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">rset</span> <span class="ow">in</span> <span class="n">learn_ontology_iter</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span>
+                                    <span class="n">include_only</span><span class="o">=</span><span class="n">class_names</span><span class="p">,</span>
+                                    <span class="n">exclude</span><span class="o">=</span><span class="n">exclude_class_names</span><span class="p">,</span>
+                                    <span class="n">mapped_only</span><span class="o">=</span><span class="n">mapped_only</span><span class="p">,</span> <span class="n">working_dir</span><span class="o">=</span><span class="n">working_dir</span><span class="p">):</span>
+        <span class="c1"># print(rset.model_dump_json(indent=2))</span>
+        <span class="n">obj</span> <span class="o">=</span> <span class="n">result_as_dict</span><span class="p">(</span><span class="n">rset</span><span class="o">.</span><span class="n">best_result</span><span class="p">)</span>
+        <span class="n">br</span> <span class="o">=</span> <span class="n">rset</span><span class="o">.</span><span class="n">best_result</span>
+        <span class="n">num</span> <span class="o">=</span> <span class="n">br</span><span class="o">.</span><span class="n">num_true_positives</span> <span class="o">+</span> <span class="n">br</span><span class="o">.</span><span class="n">num_false_negatives</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Class: </span><span class="si">{</span><span class="n">br</span><span class="o">.</span><span class="n">chemical_class</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> F1: </span><span class="si">{</span><span class="n">br</span><span class="o">.</span><span class="n">f1</span><span class="si">}</span><span class="s2"> N=</span><span class="si">{</span><span class="n">num</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">objs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">objs</span><span class="p">)</span>
+    <span class="n">df</span><span class="p">[</span><span class="s2">&quot;num_examples&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">num_true_positives</span> <span class="o">+</span> <span class="n">df</span><span class="o">.</span><span class="n">num_false_negatives</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">describe</span><span class="p">())</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="c3p.learn_cli.verbose_option" class="doc doc-heading">
+            <code class=" language-python"><span class="n">verbose_option</span><span class="p">(</span><span class="n">f</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Decorator to add verbose option to commands</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>c3p/learn_cli.py</code></summary>
+              <div class="codehilite"><table class="codehilitetable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">44</span>
+<span class="normal">45</span>
+<span class="normal">46</span>
+<span class="normal">47</span>
+<span class="normal">48</span>
+<span class="normal">49</span>
+<span class="normal">50</span>
+<span class="normal">51</span>
+<span class="normal">52</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">verbose_option</span><span class="p">(</span><span class="n">f</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Decorator to add verbose option to commands&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">typer</span><span class="o">.</span><span class="n">Option</span><span class="p">(</span>
+        <span class="mi">0</span><span class="p">,</span>
+        <span class="s2">&quot;--verbose&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;-v&quot;</span><span class="p">,</span>
+        <span class="n">count</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">&quot;Verbosity level: -v for INFO, -vv for DEBUG&quot;</span><span class="p">,</span>
+    <span class="p">)(</span><span class="n">f</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../..", "features": ["content.tabs.link"], "search": "../../assets/javascripts/workers/search.f8cc74c7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.c8b220af.min.js"></script>
+      
+    
+  </body>
+</html>

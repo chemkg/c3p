@@ -1,0 +1,344 @@
+chemical_class,f1
+cardiolipin,1.0
+tetrachlorobenzene,1.0
+aliphatic aldoxime,1.0
+myo-inositol phosphate,1.0
+polonium atom,1.0
+triglyceride,0.9967320261437909
+metal atom,0.9850746268656716
+triradylglycerol,0.9822294022617125
+glycerophosphoinositol,0.9821428571428571
+polyprenol phosphate,0.9767441860465117
+wax ester,0.975609756097561
+phosphatidylinositol,0.970059880239521
+aldopentose,0.967741935483871
+phosphatidylcholine,0.9668874172185431
+very long-chain fatty acyl-CoA,0.9642857142857143
+glycerophosphocholine,0.9632829373650108
+phosphatidylglycerol,0.9629629629629629
+"1,2-diacyl-sn-glycero-3-phosphocholine",0.9627118644067796
+phosphatidic acid,0.9533678756476685
+CDP-diacylglycerol,0.9523809523809523
+chalcogen,0.9523809523809523
+cholesteryl ester,0.9473684210526316
+phosphatidyl-L-serine,0.9457364341085271
+diglyceride,0.9453551912568305
+alkane,0.9354838709677419
+chlorophyll,0.923076923076923
+cyanohydrin,0.923076923076923
+phosphatidylethanolamine,0.9212410501193318
+glycerophospholipid,0.9173086800205444
+1-monoglyceride,0.9090909090909091
+2-acyl-1-alkyl-sn-glycero-3-phosphocholine,0.9090909090909091
+lipid hydroperoxide,0.896551724137931
+polychlorobiphenyl,0.888888888888889
+polychlorinated dibenzodioxines and related compounds,0.8799999999999999
+trichlorobenzene,0.8750000000000001
+carbapenems,0.875
+para-terphenyl,0.8648648648648649
+diradylglycerol,0.8630490956072352
+aldose,0.8593750000000001
+fatty aldehyde,0.8571428571428572
+tocol,0.8571428571428571
+inositol phosphoceramide,0.8571428571428571
+unsaturated fatty acyl-CoA,0.85
+monoacylglycerol,0.84
+aldoxime,0.8387096774193549
+quaternary ammonium ion,0.8368200836820083
+2-oxo monocarboxylic acid anion,0.8333333333333333
+wax,0.8235294117647058
+monoacyl-sn-glycerol 3-phosphate,0.8181818181818181
+monocarboxylic acid anion,0.8130563798219583
+sphingomyelin,0.8125000000000001
+O-acyl-L-carnitine,0.8108108108108109
+monoradylglycerol,0.8076923076923077
+beta-lactam,0.8044692737430167
+hopanoid,0.7878787878787877
+macrolide,0.782608695652174
+2-hydroxy fatty acid,0.7826086956521738
+nucleoside,0.7821782178217822
+anthocyanidin cation,0.7816091954022989
+sulfolipid,0.7777777777777778
+alkanethiol,0.7777777777777778
+epoxy fatty acid,0.7777777777777777
+mononitrophenol,0.7777777777777777
+2-monoglyceride,0.7777777777777777
+branched-chain fatty acyl-CoA,0.7741935483870968
+3-hydroxy fatty acyl-CoA(4-),0.7727272727272727
+glucosinolate,0.7692307692307693
+beta-lactam antibiotic,0.7657142857142858
+N-hydroxy-alpha-amino-acid,0.761904761904762
+long-chain fatty acid,0.7596153846153845
+omega-hydroxy fatty acid,0.7567567567567568
+carotenoid,0.7559055118110236
+3-oxo-fatty acyl-CoA(4-),0.7499999999999999
+tetraterpenoid,0.7457627118644068
+thiosugar,0.7450980392156863
+chalcones,0.7419354838709677
+vitamin D,0.7407407407407408
+quinic acid,0.7407407407407407
+cation,0.7382456140350876
+polysaccharide,0.7329842931937173
+hexose,0.7307692307692308
+fatty acid,0.7274021352313168
+phosphatidylinositol phosphate,0.7272727272727273
+fatty acid anion,0.7212389380530974
+cephalosporin,0.7123287671232876
+flavanones,0.706422018348624
+steroid,0.7058823529411764
+straight-chain saturated fatty acid,0.7000000000000001
+limonoid,0.7000000000000001
+galactosylceramide,0.7000000000000001
+pyrimidine deoxyribonucleoside,0.7000000000000001
+polyunsaturated fatty acid,0.6970509383378017
+lysophosphatidic acids,0.6896551724137931
+3-oxo-fatty acyl-CoA,0.6808510638297872
+2-oxo monocarboxylic acid,0.6774193548387099
+nucleoside phosphate,0.6680327868852458
+N-sulfonylurea,0.6666666666666667
+sphingomyelin d18:1,0.6666666666666666
+2-hydroxydicarboxylic acid,0.6666666666666666
+germacranolide,0.6551724137931034
+tertiary amine oxide,0.6470588235294118
+monosaccharide,0.6420664206642067
+nitrohydrocarbon,0.64
+short-chain fatty acid,0.64
+quinone,0.6386333771353483
+trienoic fatty acid,0.6341463414634146
+flavonoids,0.6314598264805733
+1-O-acylglycerophosphoethanolamine,0.6153846153846153
+isothiocyanate,0.6
+phosphoinositide,0.6
+very long-chain fatty acid,0.5833333333333334
+tricarboxylic acid,0.5777777777777778
+corrinoid,0.5714285714285714
+steroid saponin,0.5617977528089887
+furanocoumarin,0.5538461538461539
+N-acylsphinganine,0.5454545454545454
+prenols,0.5454545454545454
+sulfonamide,0.5435616438356164
+triterpenoid saponin,0.5390070921985816
+dihydroflavonols,0.5384615384615384
+acyl-CoA,0.5353982300884956
+alpha-amino-acid zwitterion,0.53125
+dipeptide,0.5306122448979591
+porphyrins,0.5283018867924528
+steroid sulfate,0.5263157894736842
+fatty acid methyl ester,0.5263157894736842
+butyrate ester,0.5245901639344261
+polypeptide,0.5232067510548524
+unsaturated fatty acid,0.52317880794702
+aldehyde,0.521875
+medium-chain fatty acyl-CoA(4-),0.52
+alditol,0.5185185185185185
+polycyclic arene,0.5128205128205129
+xanthophyll,0.5108695652173912
+monounsaturated fatty acyl-CoA,0.5074626865671642
+flavones,0.5019607843137256
+bisbenzylisoquinoline alkaloid,0.5
+beta-D-glucosiduronate,0.5
+flavin,0.5
+ultra-long-chain fatty acid,0.5
+organometalloidal compound,0.5
+alkene,0.4999999999999999
+anthoxanthin,0.4990176817288801
+glycolipid,0.4914285714285713
+cardiac glycoside,0.48484848484848486
+long-chain fatty acyl-CoA(4-),0.48437500000000006
+alpha-amino acid,0.48051948051948057
+non-proteinogenic amino acid,0.48033126293995854
+amino sugar,0.47918188458729
+octadecadienoic acid,0.4782608695652174
+long-chain fatty alcohol,0.4776119402985074
+macromolecule,0.47657605552342386
+carbonate ester,0.4761904761904762
+hydroxy fatty acid,0.47244094488188976
+organoiodine compound,0.4722222222222222
+D-hexose,0.47058823529411764
+sterol ester,0.46511627906976744
+long-chain fatty acyl-CoA,0.46357615894039733
+clavulone,0.4615384615384615
+B vitamin,0.4583333333333333
+octanoate ester,0.4571428571428572
+tetrapeptide,0.45714285714285713
+amino acid,0.45614035087719296
+sesquiterpenoid,0.45588235294117646
+aliphatic nitrile,0.4545454545454546
+ganglioside,0.45161290322580644
+alkanesulfonate oxoanion,0.45161290322580644
+fatty acyl-CoA,0.44751381215469616
+mineral nutrient,0.4444444444444445
+hydroxynaphthoquinone,0.43750000000000006
+proanthocyanidin,0.43478260869565216
+N-acylphytosphingosine,0.43243243243243246
+flavonols,0.4307692307692308
+organochlorine compound,0.4290220820189275
+phenyl acetates,0.42857142857142855
+oligopeptide,0.423573904821935
+triterpenoid,0.4231851435002813
+oligosaccharide,0.423076923076923
+3'-hydroxyflavanones,0.4210526315789474
+3-hydroxy fatty acyl-CoA,0.4210526315789473
+catechin,0.42
+ceramide,0.4186046511627907
+thiol,0.40909090909090906
+gamma-lactone,0.40893470790378006
+prenylquinone,0.40740740740740744
+4'-hydroxyflavanones,0.40579710144927544
+epoxide,0.40045766590389015
+pterocarpans,0.4
+ubiquinones,0.4
+butenolide,0.39999999999999997
+nitrile,0.3976945244956772
+alpha-amino acid ester,0.3968253968253968
+6-aminopurines,0.3956723338485317
+isoflavonoid,0.3824884792626728
+flavonoid,0.3795918367346939
+azole,0.3776344086021506
+essential fatty acid,0.37735849056603776
+UDP-sugar,0.375
+cyclohexenones,0.37254901960784315
+leukotriene,0.368421052631579
+"11,12-saturated fatty acyl-CoA(4-)",0.3684210526315789
+N-acylglycine,0.3676470588235294
+organofluorine compound,0.36685288640595903
+oxo fatty acid,0.3636363636363636
+organohalogen compound,0.35470085470085466
+L-alpha-amino acid,0.34946236559139787
+N-acetyl-amino acid,0.34782608695652173
+withanolide,0.3448275862068966
+dicarboxylic acid,0.33992094861660077
+disaccharide,0.3384615384615384
+organobromine compound,0.3359375
+2'-deoxyribonucleoside 5'-monophosphate,0.32558139534883723
+carbamate ester,0.3253588516746412
+beta-carbolines,0.3245469522240527
+olefinic fatty acid,0.3234624145785877
+monoterpenoid,0.31675874769797424
+polyamine,0.3125
+arenecarbaldehyde,0.3111111111111111
+glycosphingolipid,0.3076923076923077
+3-substituted propionyl-CoA(4-),0.30434782608695654
+neoflavonoid,0.3010752688172043
+saturated fatty acid,0.3010752688172043
+polypyrrole,0.2990654205607477
+sphingoid,0.2978723404255319
+bile acid,0.29213483146067415
+spiroketal,0.27906976744186046
+ether lipid,0.268370607028754
+nucleoside 5'-phosphate,0.26819923371647514
+3-oxo steroid,0.26422764227642276
+organic sulfide,0.2616822429906543
+dodecanoate ester,0.25882352941176473
+decanoate ester,0.25806451612903225
+monounsaturated fatty acid,0.25142857142857145
+17alpha-hydroxy steroid,0.2424242424242424
+pyrroline,0.24000000000000002
+ribonucleoside,0.2380952380952381
+"1,2,4-triazines",0.23529411764705882
+N-acylsphingosine,0.23376623376623376
+primary alcohol,0.23192771084337352
+monoterpenoid indole alkaloid,0.2278481012658228
+tetradecanoate ester,0.22471910112359553
+acetate ester,0.22262443438914023
+medium-chain fatty acyl-CoA,0.2222222222222222
+glucosylceramide,0.2222222222222222
+3-hydroxy fatty acid,0.21686746987951808
+catecholamine,0.21621621621621626
+nucleotide,0.21607378129117258
+3-oxo-Delta(4) steroid,0.21532091097308487
+phospho sugar,0.21435793731041455
+secondary alpha-hydroxy ketone,0.21243523316062177
+prostaglandin,0.21212121212121213
+methyl sulfide,0.21138211382113822
+enone,0.2101167315175097
+catechols,0.20770519262981577
+monoamine,0.20689655172413793
+2-enoyl-CoA,0.2068965517241379
+fatty alcohol,0.2035541195476575
+isoflavones,0.2011173184357542
+fatty amide,0.20048899755501223
+alpha-hydroxy ketone,0.19919517102615691
+rotenoid,0.1978021978021978
+7-hydroxyisoflavones,0.1964285714285714
+secondary alcohol,0.1952404079650316
+iridoid monoterpenoid,0.1951219512195122
+alkaloid,0.19413092550790068
+mineral,0.1846153846153846
+tetrasaccharide,0.18404907975460122
+tetrahydrofuranone,0.183206106870229
+polyprenol,0.18181818181818182
+aliphatic alcohol,0.1776504297994269
+1-acyl-sn-glycero-3-phosphoserine,0.16091954022988506
+phenylpropanoid,0.1599229287090559
+saccharolipid,0.15068493150684928
+polyphenol,0.14253135689851767
+diketone,0.14049586776859505
+17beta-hydroxy steroid,0.1371841155234657
+trans-2-enoyl-CoA,0.13559322033898305
+biflavonoid,0.13084112149532712
+3beta-hydroxy steroid,0.12825278810408922
+1-acyl-sn-glycero-3-phosphoethanolamine,0.125
+indole alkaloid,0.12158054711246201
+beta-D-glucosiduronic acid,0.11764705882352941
+short-chain fatty acyl-CoA,0.1142857142857143
+cyclic fatty acid,0.11363636363636365
+carboxamidine,0.11009174311926605
+aromatic amino acid,0.10843373493975904
+"2,5-diketopiperazines",0.10833333333333334
+3-sn-phosphatidyl-L-serine,0.10526315789473684
+secondary ammonium ion,0.09836065573770492
+1-phosphatidyl-1D-myo-inositol,0.09523809523809523
+D-glucoside,0.0951993490642799
+endocannabinoid,0.09345794392523366
+aromatic primary alcohol,0.08835341365461848
+3beta-hydroxy-Delta(5)-steroid,0.08582089552238806
+methyl-branched fatty acid,0.0821917808219178
+nonclassic icosanoid,0.08
+lipopeptide,0.07547169811320754
+volatile organic compound,0.07390300230946883
+beta-D-glucoside,0.07168831168831169
+sterol,0.07155322862129145
+anilide,0.07075962539021852
+3alpha-hydroxy steroid,0.06557377049180327
+guaiacols,0.06402439024390244
+amine,0.05924259467566555
+branched-chain fatty acid,0.05563282336578581
+proteinogenic amino acid,0.053763440860215055
+diterpenoid,0.05345065335872349
+diol,0.04793674326661725
+sesterterpenoid,0.04413472706155633
+icosanoid,0.04283246977547496
+lipopolysaccharide,0.04081632653061224
+3-oxo-Delta(1) steroid,0.040540540540540536
+11-oxo steroid,0.0400728597449909
+polar amino acid,0.03932584269662922
+3-oxo-5alpha-steroid,0.0384
+cucurbitacin,0.0380952380952381
+tripeptide,0.03630862329803328
+N-acyl-L-alpha-amino acid,0.03389830508474576
+bile acid conjugate,0.03179487179487179
+11beta-hydroxy steroid,0.028985507246376812
+peptide antibiotic,0.02777777777777778
+tertiary amine,0.0275
+primary amine,0.025806451612903226
+nucleobase analogue,0.023809523809523808
+lactol,0.020493358633776087
+mucopolysaccharide,0.018995929443690635
+16beta-hydroxy steroid,0.018867924528301886
+glycosaminoglycan,0.018306636155606407
+aralkylamine,0.014436958614051972
+dihydroagarofuran sesquiterpenoid,0.012345679012345678
+cannabinoid,0.010050251256281407
+secondary amine,0.0081799591002045
+3-oxo-5beta-steroid,0.008113590263691682
+beta-D-galactoside,0.005271084337349398
+bioconjugate,0.005235602094240838
+acrovestone,0.003883495145631068
+semisynthetic derivative,0.000562271577171774
+phytosterols,0.0
+gas molecular entity,0.0
+polymer,0.0
+hemiaminal,0.0
+penicillin,
+tannin,

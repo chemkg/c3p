@@ -1,0 +1,51 @@
+model,chemical_class,complexity,max_indent,log_lines_of_code,methods_called_count,returns_count,smarts_strings_count
+DeepSeek-R1,3alpha-hydroxy steroid,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,11-oxo steroid,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,phospho sugar,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,tetraterpenoid,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,phosphatidic acid,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,phytosterols,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,dihydroflavonols,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,withanolide,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,3-oxo-5alpha-steroid,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,lipopolysaccharide,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,3-oxo-Delta(1) steroid,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,isoflavonoid,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,phosphatidylinositol phosphate,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,UDP-sugar,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,branched-chain fatty acyl-CoA,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,long-chain fatty alcohol,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,saturated fatty acid,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,steroid sulfate,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,hopanoid,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,omega-hydroxy fatty acid,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,carotenoid,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,beta-lactam antibiotic,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,"11,12-saturated fatty acyl-CoA(4-)",0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,nucleoside,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,sesterterpenoid,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,branched-chain fatty acid,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,chlorophyll,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,glycosphingolipid,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,2-acyl-1-alkyl-sn-glycero-3-phosphocholine,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,17beta-hydroxy steroid,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,corrinoid,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,tocol,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,glycosaminoglycan,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,glycolipid,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,glucosylceramide,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,long-chain fatty acyl-CoA(4-),0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,semisynthetic derivative,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,aldose,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,3'-hydroxyflavanones,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,enone,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,very long-chain fatty acyl-CoA,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,phosphatidylinositol,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,trans-2-enoyl-CoA,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,glycerophosphocholine,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,octanoate ester,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,hydroxynaphthoquinone,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,dipeptide,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,ganglioside,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,bisbenzylisoquinoline alkaloid,0.0,0.0,0.0,0.0,0.0,0.0
+DeepSeek-R1,beta-carbolines,0.0,0.0,0.0,0.0,0.0,0.0

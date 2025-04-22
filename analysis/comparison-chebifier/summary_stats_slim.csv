@@ -1,0 +1,3 @@
+,micro_f1,macro_f1,micro_precision,macro_precision,micro_recall,macro_recall,micro_accuracy,macro_accuracy,micro_negative_predictive_value,macro_negative_predictive_value
+chebifier,0.69,0.634,0.603,0.576,0.808,0.748,0.998,0.998,0.999,0.999
+ensemble-9,0.286,0.461,0.175,0.402,0.767,0.76,0.987,0.979,0.999,0.991

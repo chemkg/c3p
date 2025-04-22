@@ -1,0 +1,533 @@
+,rank,rank,rank,rank,rank
+,mean,std,min,max,range
+chemical_class,,,,,
+trichlorobenzene,25.22,8.35,16.0,36.0,20.0
+polychlorobiphenyl,22.7,11.59,10.0,48.0,38.0
+quaternary ammonium ion,25.5,14.31,6.0,46.0,40.0
+carotenoid,43.33,16.97,19.0,72.0,53.0
+chalcogen,24.5,17.26,7.0,66.0,59.0
+quinone,83.71,19.55,60.0,110.0,50.0
+monocarboxylic acid anion,28.64,19.66,11.0,75.0,64.0
+cation,48.2,20.0,16.0,79.0,63.0
+mononitrophenol,63.0,20.2,24.0,96.0,72.0
+fatty acid anion,58.27,22.4,27.0,94.0,67.0
+tertiary amine oxide,47.2,24.78,25.0,101.0,76.0
+chalcones,63.57,25.21,35.0,110.0,75.0
+lipid hydroperoxide,38.3,25.46,9.0,102.0,93.0
+isoflavones,231.0,25.72,177.0,258.0,81.0
+isothiocyanate,61.73,26.57,25.0,109.0,84.0
+fatty acid,83.3,28.48,47.0,127.0,80.0
+2-oxo monocarboxylic acid anion,40.45,28.55,11.0,108.0,97.0
+triterpenoid,136.78,28.74,72.0,177.0,105.0
+dodecanoate ester,202.56,29.27,146.0,242.0,96.0
+aldopentose,26.5,30.35,5.0,108.0,103.0
+polyunsaturated fatty acid,85.2,31.81,48.0,144.0,96.0
+dipeptide,115.75,32.62,55.0,158.0,103.0
+epoxy fatty acid,59.7,33.1,18.0,123.0,105.0
+2-oxo monocarboxylic acid,67.45,33.16,24.0,133.0,109.0
+glycerophosphocholine,19.78,33.54,4.0,108.0,104.0
+trienoic fatty acid,124.9,33.79,74.0,180.0,106.0
+octadecadienoic acid,88.22,33.92,45.0,150.0,105.0
+unsaturated fatty acid,125.0,35.02,75.0,173.0,98.0
+N-hydroxy-alpha-amino-acid,66.27,35.21,13.0,126.0,113.0
+thiol,148.62,35.44,108.0,218.0,110.0
+hydroxy fatty acid,128.1,35.51,66.0,187.0,121.0
+alkanesulfonate oxoanion,95.8,35.54,62.0,166.0,104.0
+B vitamin,135.62,35.59,103.0,212.0,109.0
+organometalloidal compound,80.0,35.68,37.0,137.0,100.0
+alkene,72.0,35.79,41.0,142.0,101.0
+very long-chain fatty acyl-CoA,45.11,36.22,6.0,108.0,102.0
+polypeptide,103.33,36.41,44.0,158.0,114.0
+alpha-amino-acid zwitterion,109.82,36.52,62.0,186.0,124.0
+tricarboxylic acid,101.7,36.97,54.0,171.0,117.0
+carbonate ester,68.33,37.16,23.0,153.0,130.0
+leukotriene,144.1,37.45,80.0,200.0,120.0
+rotenoid,240.57,38.76,199.0,315.0,116.0
+organoiodine compound,77.18,38.84,26.0,155.0,129.0
+sulfonamide,70.18,39.15,24.0,158.0,134.0
+alpha-amino acid,129.3,39.42,67.0,207.0,140.0
+cyclohexenones,159.38,39.58,115.0,227.0,112.0
+triterpenoid saponin,153.43,40.6,97.0,227.0,130.0
+ribonucleoside,194.3,40.8,131.0,264.0,133.0
+neoflavonoid,200.89,41.21,108.0,246.0,138.0
+alditol,98.14,41.64,43.0,158.0,115.0
+methyl sulfide,184.78,41.83,142.0,252.0,110.0
+octanoate ester,168.33,41.86,98.0,222.0,124.0
+endocannabinoid,234.38,41.92,158.0,292.0,134.0
+withanolide,166.43,41.95,108.0,221.0,113.0
+aliphatic alcohol,209.7,42.4,158.0,294.0,136.0
+organic sulfide,143.9,42.58,81.0,230.0,149.0
+dicarboxylic acid,129.6,42.76,58.0,209.0,151.0
+UDP-sugar,178.67,42.85,108.0,227.0,119.0
+polychlorinated dibenzodioxines and related compounds,47.56,43.06,11.0,137.0,126.0
+3-oxo steroid,184.33,43.07,95.0,229.0,134.0
+aliphatic aldoxime,31.18,43.22,1.0,151.0,150.0
+cyanohydrin,29.3,43.69,7.0,152.0,145.0
+organochlorine compound,83.27,43.73,31.0,174.0,143.0
+saturated fatty acid,175.56,43.73,108.0,238.0,130.0
+nucleoside 5'-phosphate,174.75,43.77,131.0,230.0,99.0
+long-chain fatty acid,80.67,43.88,34.0,157.0,123.0
+17beta-hydroxy steroid,215.0,44.67,130.0,276.0,146.0
+oxo fatty acid,164.3,44.75,85.0,211.0,126.0
+monosaccharide,136.0,44.75,69.0,213.0,144.0
+sterol ester,208.22,45.27,157.0,290.0,133.0
+nitrohydrocarbon,76.4,45.76,26.0,165.0,139.0
+sphingomyelin,47.36,45.85,10.0,158.0,148.0
+monounsaturated fatty acid,169.67,46.35,88.0,235.0,147.0
+macromolecule,96.5,46.42,37.0,175.0,138.0
+long-chain fatty alcohol,163.11,46.45,77.0,227.0,150.0
+disaccharide,152.67,46.58,75.0,216.0,141.0
+isoflavonoid,192.5,47.07,108.0,246.0,138.0
+amino acid,122.22,47.17,56.0,206.0,150.0
+alpha-amino acid ester,143.0,47.33,71.0,213.0,142.0
+nitrile,91.7,47.47,30.0,191.0,161.0
+fatty alcohol,206.33,47.49,108.0,276.0,168.0
+polyprenol,198.7,47.68,108.0,269.0,161.0
+medium-chain fatty acyl-CoA,192.89,47.81,108.0,246.0,138.0
+epoxide,93.27,47.81,31.0,187.0,156.0
+aromatic amino acid,239.6,48.15,182.0,293.0,111.0
+nucleotide,161.89,48.3,108.0,247.0,139.0
+olefinic fatty acid,147.44,48.36,62.0,215.0,153.0
+sterol,221.22,48.39,158.0,300.0,142.0
+beta-carbolines,182.67,48.79,99.0,227.0,128.0
+L-alpha-amino acid,164.67,48.84,82.0,259.0,177.0
+beta-lactam antibiotic,62.67,49.02,14.0,142.0,128.0
+monoacyl-sn-glycerol 3-phosphate,109.78,49.06,49.0,200.0,151.0
+flavonoid,221.29,49.16,151.0,315.0,164.0
+trans-2-enoyl-CoA,196.67,49.2,128.0,277.0,149.0
+acetate ester,166.64,49.36,49.0,242.0,193.0
+ultra-long-chain fatty acid,123.18,49.36,80.0,249.0,169.0
+bile acid,189.8,49.76,108.0,227.0,119.0
+"1,2,4-triazines",143.0,49.79,102.0,237.0,135.0
+spiroketal,140.12,49.98,85.0,226.0,141.0
+limonoid,103.9,49.99,32.0,199.0,167.0
+tetradecanoate ester,158.7,50.23,93.0,241.0,148.0
+sesquiterpenoid,118.22,50.24,47.0,203.0,156.0
+N-acylglycine,145.73,50.4,67.0,221.0,154.0
+flavonols,191.0,50.59,106.0,254.0,148.0
+prenols,155.11,50.75,82.0,239.0,157.0
+gamma-lactone,129.9,50.95,60.0,225.0,165.0
+organohalogen compound,104.36,51.75,34.0,205.0,171.0
+semisynthetic derivative,268.86,51.82,219.0,337.0,118.0
+3-hydroxy fatty acid,214.0,52.17,108.0,315.0,207.0
+organobromine compound,100.18,52.23,35.0,211.0,176.0
+11-oxo steroid,250.57,52.56,158.0,313.0,155.0
+nonclassic icosanoid,205.67,52.64,133.0,296.0,163.0
+ganglioside,184.0,52.76,108.0,246.0,138.0
+non-proteinogenic amino acid,146.4,52.9,70.0,258.0,188.0
+prenylquinone,135.88,53.06,83.0,220.0,137.0
+N-acyl-L-alpha-amino acid,240.44,53.09,158.0,318.0,160.0
+organofluorine compound,109.2,53.13,44.0,203.0,159.0
+azole,123.1,53.15,52.0,221.0,169.0
+17alpha-hydroxy steroid,189.33,53.17,108.0,246.0,138.0
+mineral nutrient,127.22,53.17,53.0,202.0,149.0
+2'-deoxyribonucleoside 5'-monophosphate,234.0,53.23,170.0,315.0,145.0
+3-sn-phosphatidyl-L-serine,209.91,53.4,108.0,288.0,180.0
+tetraterpenoid,82.29,53.49,27.0,158.0,131.0
+3-oxo-5alpha-steroid,243.67,53.73,158.0,315.0,157.0
+11beta-hydroxy steroid,238.11,54.25,158.0,320.0,162.0
+phospho sugar,167.38,54.35,87.0,249.0,162.0
+N-acetyl-amino acid,185.8,54.43,93.0,253.0,160.0
+phenyl acetates,168.5,54.78,90.0,254.0,164.0
+secondary alcohol,172.8,54.94,73.0,263.0,190.0
+3-substituted propionyl-CoA(4-),176.9,55.04,84.0,246.0,162.0
+long-chain fatty acyl-CoA(4-),118.0,55.06,58.0,221.0,163.0
+carbamate ester,116.0,55.16,42.0,213.0,171.0
+iridoid monoterpenoid,193.9,55.29,108.0,272.0,164.0
+very long-chain fatty acid,100.1,55.33,32.0,223.0,191.0
+1-phosphatidyl-1D-myo-inositol,204.55,55.55,108.0,290.0,182.0
+hydroxynaphthoquinone,184.56,55.68,108.0,269.0,161.0
+butenolide,120.0,55.74,63.0,221.0,158.0
+fatty amide,168.33,55.78,69.0,259.0,190.0
+tetrasaccharide,172.78,56.14,114.0,267.0,153.0
+phosphoinositide,128.38,56.22,54.0,246.0,192.0
+aliphatic nitrile,135.91,56.22,41.0,231.0,190.0
+aralkylamine,236.1,56.3,158.0,329.0,171.0
+polyphenol,162.6,56.31,108.0,274.0,166.0
+3'-hydroxyflavanones,200.38,56.32,108.0,267.0,159.0
+secondary alpha-hydroxy ketone,192.88,56.39,119.0,254.0,135.0
+short-chain fatty acid,96.4,56.49,38.0,243.0,205.0
+polypyrrole,105.11,56.67,39.0,223.0,184.0
+oligosaccharide,142.11,56.8,80.0,227.0,147.0
+monounsaturated fatty acyl-CoA,109.44,57.0,44.0,221.0,177.0
+guaiacols,238.38,57.07,156.0,315.0,159.0
+indole alkaloid,179.9,57.4,108.0,281.0,173.0
+D-glucoside,204.56,57.43,134.0,291.0,157.0
+oligopeptide,106.67,57.6,54.0,220.0,166.0
+nucleobase analogue,238.78,57.73,158.0,324.0,166.0
+proteinogenic amino acid,219.3,57.8,107.0,306.0,199.0
+tertiary amine,234.8,58.14,152.0,322.0,170.0
+2-enoyl-CoA,193.12,58.23,85.0,256.0,171.0
+3-hydroxy fatty acyl-CoA,162.44,58.31,65.0,227.0,162.0
+alpha-hydroxy ketone,155.78,58.48,64.0,260.0,196.0
+cardiac glycoside,171.33,58.57,105.0,246.0,141.0
+arenecarbaldehyde,155.7,58.86,84.0,254.0,170.0
+1-acyl-sn-glycero-3-phosphoethanolamine,224.67,58.94,108.0,315.0,207.0
+cyclic fatty acid,192.78,59.05,88.0,284.0,196.0
+phenylpropanoid,176.0,59.1,122.0,272.0,150.0
+xanthophyll,111.3,59.14,40.0,225.0,185.0
+bile acid conjugate,250.43,59.59,158.0,322.0,164.0
+essential fatty acid,186.11,59.59,71.0,293.0,222.0
+phytosterols,254.71,59.62,158.0,338.0,180.0
+"2,5-diketopiperazines",178.67,59.77,119.0,287.0,168.0
+primary alcohol,205.44,59.8,97.0,289.0,192.0
+catechols,168.89,59.87,104.0,254.0,150.0
+2-acyl-1-alkyl-sn-glycero-3-phosphocholine,85.5,59.89,11.0,218.0,207.0
+ceramide,183.44,59.91,108.0,315.0,207.0
+enone,168.5,59.92,100.0,253.0,153.0
+carboxamidine,196.8,60.27,108.0,289.0,181.0
+polymer,249.78,60.27,157.0,338.0,181.0
+bioconjugate,247.67,60.42,156.0,335.0,179.0
+O-acyl-L-carnitine,56.0,60.54,15.0,225.0,210.0
+beta-D-glucoside,211.6,60.71,108.0,299.0,191.0
+3-oxo-5beta-steroid,261.29,60.85,158.0,333.0,175.0
+beta-D-glucosiduronic acid,194.5,60.91,108.0,282.0,174.0
+"11,12-saturated fatty acyl-CoA(4-)",176.5,60.92,65.0,227.0,162.0
+decanoate ester,190.45,60.97,108.0,317.0,209.0
+galactosylceramide,169.36,61.01,61.0,246.0,185.0
+beta-D-glucosiduronate,116.45,61.11,50.0,227.0,177.0
+catecholamine,177.7,61.16,66.0,246.0,180.0
+glycolipid,166.22,61.43,80.0,247.0,167.0
+polar amino acid,221.73,61.52,108.0,314.0,206.0
+2-hydroxy fatty acid,139.27,61.81,36.0,225.0,189.0
+pyrroline,148.4,61.93,53.0,256.0,203.0
+1-acyl-sn-glycero-3-phosphoserine,187.4,61.95,107.0,271.0,164.0
+N-acylsphingosine,184.7,62.0,71.0,246.0,175.0
+aromatic primary alcohol,185.64,62.06,108.0,293.0,185.0
+phosphatidylinositol phosphate,108.5,62.24,29.0,227.0,198.0
+glycosphingolipid,201.38,62.5,78.0,277.0,199.0
+2-hydroxydicarboxylic acid,148.1,62.79,50.0,246.0,196.0
+fatty aldehyde,59.27,62.95,14.0,232.0,218.0
+3beta-hydroxy steroid,207.12,63.05,108.0,279.0,171.0
+1-monoglyceride,74.2,63.1,6.0,197.0,191.0
+diketone,197.22,63.22,99.0,275.0,176.0
+3-oxo-Delta(4) steroid,158.22,63.44,57.0,248.0,191.0
+volatile organic compound,208.78,63.63,79.0,298.0,219.0
+proanthocyanidin,176.44,63.68,77.0,246.0,169.0
+anilide,196.0,63.76,108.0,301.0,193.0
+tetrahydrofuranone,175.44,64.05,76.0,274.0,198.0
+fatty acid methyl ester,126.8,64.28,36.0,211.0,175.0
+prostaglandin,184.0,64.33,98.0,283.0,185.0
+primary amine,221.55,64.4,108.0,323.0,215.0
+polyamine,190.6,64.41,82.0,304.0,222.0
+butyrate ester,147.8,64.83,56.0,221.0,165.0
+4'-hydroxyflavanones,152.33,64.87,63.0,254.0,191.0
+lysophosphatidic acids,136.78,65.13,47.0,251.0,204.0
+7-hydroxyisoflavones,240.44,65.13,99.0,322.0,223.0
+long-chain fatty acyl-CoA,148.8,65.18,51.0,246.0,195.0
+alkanethiol,113.18,65.36,19.0,234.0,215.0
+3-oxo-Delta(1) steroid,218.44,65.56,108.0,312.0,204.0
+monoterpenoid indole alkaloid,174.33,65.61,92.0,246.0,154.0
+alkaloid,169.11,65.66,111.0,265.0,154.0
+steroid,81.67,65.68,24.0,221.0,197.0
+secondary amine,242.2,65.71,108.0,332.0,224.0
+tannin,151.44,65.85,46.0,251.0,205.0
+glucosylceramide,201.1,66.01,101.0,301.0,200.0
+aldehyde,113.9,66.07,50.0,254.0,204.0
+saccharolipid,197.89,66.69,108.0,316.0,208.0
+triglyceride,24.36,66.71,1.0,225.0,224.0
+secondary ammonium ion,158.3,66.84,97.0,289.0,192.0
+beta-D-galactoside,230.55,67.06,108.0,334.0,226.0
+steroid sulfate,129.0,67.2,53.0,227.0,174.0
+fatty acyl-CoA,120.09,67.27,27.0,225.0,198.0
+aldose,88.78,67.29,15.0,187.0,172.0
+phosphatidic acid,70.22,67.3,6.0,225.0,219.0
+metal atom,36.1,67.45,4.0,221.0,217.0
+glycerophospholipid,59.2,67.47,8.0,198.0,190.0
+acrovestone,230.4,67.56,102.0,336.0,234.0
+flavin,147.18,67.67,46.0,227.0,181.0
+tripeptide,204.45,67.9,108.0,317.0,209.0
+porphyrins,120.75,67.97,40.0,227.0,187.0
+branched-chain fatty acid,206.33,68.21,95.0,305.0,210.0
+3-hydroxy fatty acyl-CoA(4-),82.8,68.24,19.0,227.0,208.0
+16beta-hydroxy steroid,229.4,68.27,108.0,327.0,219.0
+phosphatidylcholine,27.0,68.27,2.0,221.0,219.0
+lipopolysaccharide,230.56,68.38,104.0,319.0,215.0
+branched-chain fatty acyl-CoA,132.89,68.56,39.0,246.0,207.0
+nucleoside phosphate,112.11,68.59,22.0,225.0,203.0
+N-sulfonylurea,62.91,68.64,14.0,254.0,240.0
+peptide antibiotic,224.7,68.95,108.0,321.0,213.0
+phosphatidylethanolamine,48.5,69.07,6.0,221.0,215.0
+hexose,89.4,69.1,25.0,259.0,234.0
+lipopeptide,210.1,69.48,100.0,298.0,198.0
+beta-lactam,59.64,69.5,7.0,220.0,213.0
+mineral,170.7,70.26,56.0,283.0,227.0
+sesterterpenoid,220.25,70.49,137.0,309.0,172.0
+icosanoid,167.5,70.61,78.0,310.0,232.0
+lactol,221.56,70.63,108.0,325.0,217.0
+tetrapeptide,153.62,70.68,55.0,255.0,200.0
+glycerophosphoinositol,51.44,70.95,8.0,221.0,213.0
+diol,191.0,71.05,61.0,308.0,247.0
+clavulone,164.67,71.11,49.0,246.0,197.0
+cucurbitacin,215.88,71.34,108.0,316.0,208.0
+D-hexose,129.44,71.5,67.0,309.0,242.0
+triradylglycerol,61.25,71.51,3.0,152.0,149.0
+cannabinoid,240.44,71.55,106.0,331.0,225.0
+ether lipid,156.7,71.58,83.0,302.0,219.0
+unsaturated fatty acyl-CoA,85.62,71.61,9.0,225.0,216.0
+straight-chain saturated fatty acid,148.38,71.69,45.0,246.0,201.0
+medium-chain fatty acyl-CoA(4-),155.55,71.74,42.0,254.0,212.0
+flavones,207.78,71.75,81.0,322.0,241.0
+polysaccharide,103.75,71.85,29.0,246.0,217.0
+thiosugar,114.12,71.87,36.0,227.0,191.0
+monoamine,210.25,72.1,98.0,308.0,210.0
+quinic acid,129.33,72.19,39.0,246.0,207.0
+mucopolysaccharide,231.7,72.31,108.0,326.0,218.0
+short-chain fatty acyl-CoA,212.5,72.32,108.0,322.0,214.0
+diterpenoid,182.88,72.92,95.0,307.0,212.0
+tetrachlorobenzene,48.67,73.45,1.0,221.0,220.0
+germacranolide,113.5,73.61,31.0,246.0,215.0
+sphingoid,175.56,73.62,74.0,278.0,204.0
+ubiquinones,157.4,74.12,18.0,227.0,209.0
+vitamin D,171.89,74.64,77.0,285.0,208.0
+3beta-hydroxy-Delta(5)-steroid,204.44,75.19,73.0,294.0,221.0
+amine,200.11,75.28,94.0,304.0,210.0
+sphingomyelin d18:1,147.0,75.29,50.0,227.0,177.0
+bisbenzylisoquinoline alkaloid,191.78,76.08,82.0,322.0,240.0
+monoterpenoid,157.89,76.13,55.0,272.0,217.0
+methyl-branched fatty acid,221.25,76.19,122.0,315.0,193.0
+alkane,43.5,77.08,4.0,244.0,240.0
+phosphatidyl-L-serine,39.22,77.97,3.0,246.0,243.0
+nucleoside,134.78,78.01,31.0,246.0,215.0
+3-oxo-fatty acyl-CoA(4-),104.5,78.39,31.0,246.0,215.0
+dihydroagarofuran sesquiterpenoid,236.38,78.58,108.0,330.0,222.0
+biflavonoid,213.2,79.06,108.0,322.0,214.0
+1-O-acylglycerophosphoethanolamine,175.0,79.61,55.0,306.0,251.0
+3-oxo-fatty acyl-CoA,136.82,79.96,51.0,246.0,195.0
+3alpha-hydroxy steroid,187.0,80.09,93.0,302.0,209.0
+catechin,212.0,80.15,47.0,322.0,275.0
+hemiaminal,190.73,80.34,74.0,338.0,264.0
+furanocoumarin,187.67,81.06,67.0,322.0,255.0
+amino sugar,137.7,81.28,38.0,258.0,220.0
+glycosaminoglycan,232.88,81.28,108.0,328.0,220.0
+acyl-CoA,113.5,81.9,14.0,246.0,232.0
+polycyclic arene,148.5,82.03,43.0,270.0,227.0
+diglyceride,61.91,82.1,4.0,221.0,217.0
+gas molecular entity,180.7,82.63,63.0,338.0,275.0
+monoacylglycerol,112.45,82.88,25.0,254.0,229.0
+diradylglycerol,91.2,83.24,20.0,246.0,226.0
+phosphatidylglycerol,90.09,84.1,4.0,246.0,242.0
+pterocarpans,205.75,84.15,32.0,315.0,283.0
+inositol phosphoceramide,102.7,85.72,22.0,225.0,203.0
+6-aminopurines,168.44,86.04,64.0,315.0,251.0
+dihydroflavonols,200.62,86.82,36.0,315.0,279.0
+wax ester,95.0,86.86,2.0,228.0,226.0
+2-monoglyceride,122.55,87.62,18.0,273.0,255.0
+polyprenol phosphate,97.0,89.56,10.0,315.0,305.0
+pyrimidine deoxyribonucleoside,158.2,89.93,32.0,315.0,283.0
+tocol,141.11,89.94,21.0,246.0,225.0
+"1,2-diacyl-sn-glycero-3-phosphocholine",50.5,90.22,2.0,254.0,252.0
+flavonoids,124.38,90.32,33.0,279.0,246.0
+anthocyanidin cation,140.9,91.02,28.0,254.0,226.0
+hopanoid,167.0,91.09,55.0,292.0,237.0
+steroid saponin,177.14,91.21,65.0,322.0,257.0
+N-acylphytosphingosine,156.9,91.44,26.0,315.0,289.0
+penicillin,149.38,91.45,24.0,254.0,230.0
+N-acylsphinganine,179.89,92.11,60.0,306.0,246.0
+chlorophyll,122.22,93.49,12.0,254.0,242.0
+wax,138.1,94.01,12.0,284.0,272.0
+carbapenems,146.0,94.42,17.0,254.0,237.0
+phosphatidylinositol,57.33,94.55,5.0,227.0,222.0
+glucosinolate,159.91,94.84,13.0,322.0,309.0
+myo-inositol phosphate,140.9,94.93,1.0,246.0,245.0
+cephalosporin,131.12,95.5,30.0,254.0,224.0
+flavanones,126.38,95.77,42.0,254.0,212.0
+cardiolipin,80.45,95.97,1.0,227.0,226.0
+sulfolipid,144.3,96.71,17.0,322.0,305.0
+corrinoid,168.12,97.59,43.0,315.0,272.0
+para-terphenyl,65.4,97.8,7.0,275.0,268.0
+anthoxanthin,182.22,100.38,42.0,322.0,280.0
+cholesteryl ester,178.22,102.96,3.0,309.0,306.0
+omega-hydroxy fatty acid,149.0,103.71,27.0,315.0,288.0
+CDP-diacylglycerol,120.91,106.06,7.0,246.0,239.0
+polonium atom,54.55,111.18,1.0,322.0,321.0
+monoradylglycerol,120.71,112.29,32.0,315.0,283.0
+aldoxime,90.36,114.65,9.0,315.0,306.0
+macrolide,107.57,114.71,35.0,315.0,280.0
+(2S)-flavan-4-one,254.0,,254.0,254.0,0.0
+(R)-3-hydroxyacyl-CoA(4-),34.0,,34.0,34.0,0.0
+"1,2-diacyl-sn-glycero-3-phosphoethanolamine",29.0,,29.0,29.0,0.0
+"1,2-diacyl-sn-glycero-3-phosphoethanolamine zwitterion",40.0,,40.0,40.0,0.0
+"1,2-diacyl-sn-glycerol 3-phosphate",82.0,,82.0,82.0,0.0
+"1,2-diacyl-sn-glycerol 3-phosphate(2-)",15.0,,15.0,15.0,0.0
+"1,4-benzoquinones",76.0,,76.0,76.0,0.0
+1-(alk-1-enyl)-2-acyl-glycero-3-phosphocholine,65.0,,65.0,65.0,0.0
+1-O-(alk-1-enyl)-2-acyl-sn-glycerolipid,110.0,,110.0,110.0,0.0
+1-O-acyl-sn-glycero-3-phosphocholine,132.0,,132.0,132.0,0.0
+1-alkyl-2-acyl-glycero-3-phosphocholine,86.0,,86.0,86.0,0.0
+1-phosphatidyl-1D-myo-inositol anion derivative,147.0,,147.0,147.0,0.0
+"11,12-saturated fatty acyl-CoA",108.0,,108.0,108.0,0.0
+15-methylhexadecaphytosphingosine,84.0,,84.0,84.0,0.0
+17-oxo steroid,96.0,,96.0,96.0,0.0
+1H-indole-3-carboxylate ester,42.0,,42.0,42.0,0.0
+"2,3-trans-enoyl CoA(4-)",25.0,,25.0,25.0,0.0
+2-hydroxy carboxylate,117.0,,117.0,117.0,0.0
+2-hydroxy fatty acid anion,139.0,,139.0,139.0,0.0
+2-lysophosphatidic acid,185.0,,185.0,185.0,0.0
+2-lysophosphatidylcholine,132.0,,132.0,132.0,0.0
+3-hydroxyacyl-CoA,78.0,,78.0,78.0,0.0
+3-oxo monocarboxylic acid anion,97.0,,97.0,97.0,0.0
+"3-oxo-Delta(1),Delta(4)-steroid",44.0,,44.0,44.0,0.0
+3-oxoacyl-CoA(4-),254.0,,254.0,254.0,0.0
+3beta-sterol,208.0,,208.0,208.0,0.0
+4'-methoxyisoflavones,254.0,,254.0,254.0,0.0
+4-hydroxybenzoate ester,122.0,,122.0,122.0,0.0
+7-hydroxyflavonol,254.0,,254.0,254.0,0.0
+7-oxo steroid,125.0,,125.0,125.0,0.0
+7alpha-hydroxy steroid,79.0,,79.0,79.0,0.0
+C21-steroid,193.0,,193.0,193.0,0.0
+C4-dicarboxylate,254.0,,254.0,254.0,0.0
+L-alpha-amino acid anion,145.0,,145.0,145.0,0.0
+L-alpha-amino acid zwitterion,94.0,,94.0,94.0,0.0
+N-(2-naphthyl)carboxamide,254.0,,254.0,254.0,0.0
+N-(fatty acyl)-L-alpha-amino acid anion,138.0,,138.0,138.0,0.0
+N-(fatty acyl)-ethanolamine,254.0,,254.0,254.0,0.0
+N-(long-chain-acyl)ethanolamine,252.0,,252.0,252.0,0.0
+N-(very-long-chain fatty acyl)-sphingoid base,230.0,,230.0,230.0,0.0
+N-acyl-1-O-beta-D-glucosyl-15-methylhexadecasphing-4-enine,68.0,,68.0,68.0,0.0
+N-acyl-1-O-beta-D-glucosyl-4-hydroxy-15-methylhexadecasphinganine,68.0,,68.0,68.0,0.0
+N-acyl-15-methylhexadecaphytosphingosine,100.0,,100.0,100.0,0.0
+N-acyl-15-methylhexadecasphing-4-enine,89.0,,89.0,89.0,0.0
+N-acyl-15-methylhexadecasphing-4-enine-1-phosphocholine,23.0,,23.0,23.0,0.0
+N-acyl-4-hydroxy-15-methylhexadecasphinganine-1-phosphocholine,56.0,,56.0,56.0,0.0
+N-acyl-D-galactosylsphingosine,101.0,,101.0,101.0,0.0
+N-acyl-L-alpha-amino acid anion,87.0,,87.0,87.0,0.0
+N-acyl-beta-D-galactosylsphingosine,101.0,,101.0,101.0,0.0
+N-acylammonia,248.0,,248.0,248.0,0.0
+N-acylethanolamine,245.0,,245.0,245.0,0.0
+N-acylglycinate,175.0,,175.0,175.0,0.0
+N-acylsphingoid,161.0,,161.0,161.0,0.0
+acetylenic compound,135.0,,135.0,135.0,0.0
+acyl-CoA(4-),4.0,,4.0,4.0,0.0
+acyl-sn-glycero-3-phosphocholine,254.0,,254.0,254.0,0.0
+"alkyl,acyl-sn-glycero-3-phosphocholine",254.0,,254.0,254.0,0.0
+alkylacylglycero-3-phosphocholine,83.0,,83.0,83.0,0.0
+allenes,254.0,,254.0,254.0,0.0
+allylic alcohol,254.0,,254.0,254.0,0.0
+alpha-D-galactoside,236.0,,236.0,236.0,0.0
+aromatic alcohol,239.0,,239.0,239.0,0.0
+aromatic carboxylate,148.0,,148.0,148.0,0.0
+aryl sulfate oxoanion,85.0,,85.0,85.0,0.0
+aurones,254.0,,254.0,254.0,0.0
+beta-D-glucosylceramide,168.0,,168.0,168.0,0.0
+beta-D-glucuronoside(1-),74.0,,74.0,74.0,0.0
+carbohydrazide,254.0,,254.0,254.0,0.0
+carboxylic acid anion,5.0,,5.0,5.0,0.0
+coumestans,254.0,,254.0,254.0,0.0
+dicarboximide,64.0,,64.0,64.0,0.0
+dicarboxylic acid dianion,184.0,,184.0,184.0,0.0
+dihydroceramide,210.0,,210.0,210.0,0.0
+dipeptide zwitterion,35.0,,35.0,35.0,0.0
+enal,254.0,,254.0,254.0,0.0
+enamide,254.0,,254.0,254.0,0.0
+enamine,202.0,,202.0,202.0,0.0
+enoate ester,183.0,,183.0,183.0,0.0
+enol,136.0,,136.0,136.0,0.0
+enol ether,226.0,,226.0,226.0,0.0
+ethyl ester,205.0,,205.0,205.0,0.0
+fatty acid 18:3,240.0,,240.0,240.0,0.0
+fatty acid ester,140.0,,140.0,140.0,0.0
+fatty acid ethyl ester,231.0,,231.0,231.0,0.0
+fatty acyl-CoA(4-),9.0,,9.0,9.0,0.0
+fatty acyl-L-carnitine,52.0,,52.0,52.0,0.0
+flavans,254.0,,254.0,254.0,0.0
+glucosinolic acid,42.0,,42.0,42.0,0.0
+glycero-3-monophosphate(2-),123.0,,123.0,123.0,0.0
+glycerophosphoglycerophosphoglycerol,39.0,,39.0,39.0,0.0
+guanidinium ion,254.0,,254.0,254.0,0.0
+hemiketal,201.0,,201.0,201.0,0.0
+hexadecanoate ester,199.0,,199.0,199.0,0.0
+hexanoate ester,220.0,,220.0,220.0,0.0
+homoallylic alcohol,254.0,,254.0,254.0,0.0
+hydroperoxy polyunsaturated fatty acid,254.0,,254.0,254.0,0.0
+hydroperoxy polyunsaturated fatty acid anion,254.0,,254.0,254.0,0.0
+hydroquinones,254.0,,254.0,254.0,0.0
+hydroxy polyunsaturated fatty acid anion,191.0,,191.0,191.0,0.0
+imidothioate,116.0,,116.0,116.0,0.0
+imine,222.0,,222.0,222.0,0.0
+inositol phosphoceramide(1-),33.0,,33.0,33.0,0.0
+isoflavanones,254.0,,254.0,254.0,0.0
+isoflavans,254.0,,254.0,254.0,0.0
+isopropyl ester,224.0,,224.0,224.0,0.0
+ketoxime,112.0,,112.0,112.0,0.0
+leucoanthocyanidin,254.0,,254.0,254.0,0.0
+long chain primary alcohol,250.0,,250.0,250.0,0.0
+long-chain alkane,254.0,,254.0,254.0,0.0
+long-chain fatty acid anion,91.0,,91.0,91.0,0.0
+long-chain fatty acid ethyl ester,246.0,,246.0,246.0,0.0
+long-chain primary fatty alcohol,250.0,,250.0,250.0,0.0
+lysophosphatidic acid,254.0,,254.0,254.0,0.0
+lysophosphatidylcholine,254.0,,254.0,254.0,0.0
+lysophosphatidylethanolamine,254.0,,254.0,254.0,0.0
+lysophosphatidylserine,254.0,,254.0,254.0,0.0
+medium-chain fatty acid,187.0,,187.0,187.0,0.0
+medium-chain fatty acid anion,186.0,,186.0,186.0,0.0
+methyl ester,166.0,,166.0,166.0,0.0
+monoalkylglycerophosphocholine,254.0,,254.0,254.0,0.0
+monocarboxylic acid amide,165.0,,165.0,165.0,0.0
+monothioacetal,254.0,,254.0,254.0,0.0
+monounsaturated fatty acid anion,177.0,,177.0,177.0,0.0
+monounsaturated fatty acyl-CoA(4-),120.0,,120.0,120.0,0.0
+nitrosamine,72.0,,72.0,72.0,0.0
+"nucleoside 3',5'-cyclic phosphate",21.0,,21.0,21.0,0.0
+omega-hydroxy fatty acid anion,254.0,,254.0,254.0,0.0
+omega-hydroxy-long-chain fatty acid,242.0,,242.0,242.0,0.0
+omega-hydroxy-long-chain fatty acid anion,254.0,,254.0,254.0,0.0
+organic disulfide,28.0,,28.0,28.0,0.0
+organosulfate oxoanion,13.0,,13.0,13.0,0.0
+organosulfonate oxoanion,46.0,,46.0,46.0,0.0
+organosulfonic acid,105.0,,105.0,105.0,0.0
+organosulfonic ester,155.0,,155.0,155.0,0.0
+oxime,118.0,,118.0,118.0,0.0
+oxime O-ether,77.0,,77.0,77.0,0.0
+penicillinate anion,254.0,,254.0,254.0,0.0
+peroxides,36.0,,36.0,36.0,0.0
+peroxol,38.0,,38.0,38.0,0.0
+phenyl sulfate oxoanion,254.0,,254.0,254.0,0.0
+phosphatidate(2-),15.0,,15.0,15.0,0.0
+phosphatidylethanolamine zwitterion,40.0,,40.0,40.0,0.0
+phosphatidylglycerol phosphate,61.0,,61.0,61.0,0.0
+phthalimides,154.0,,154.0,154.0,0.0
+phytoceramide,179.0,,179.0,179.0,0.0
+phytoceramides,181.0,,181.0,181.0,0.0
+polyunsaturated dicarboxylic acid dianion,254.0,,254.0,254.0,0.0
+polyunsaturated fatty acyl-CoA(4-),106.0,,106.0,106.0,0.0
+primary allylic alcohol,254.0,,254.0,254.0,0.0
+primary alpha-hydroxy ketone,254.0,,254.0,254.0,0.0
+primary ammonium ion,104.0,,104.0,104.0,0.0
+primary arylamine,254.0,,254.0,254.0,0.0
+primary carboxamide,254.0,,254.0,254.0,0.0
+primary fatty alcohol,247.0,,247.0,247.0,0.0
+primary fatty amide,254.0,,254.0,254.0,0.0
+propanoate ester,238.0,,238.0,238.0,0.0
+purine 2'-deoxyribonucleoside,204.0,,204.0,204.0,0.0
+purine ribonucleoside,190.0,,190.0,190.0,0.0
+pyrrolidin-2-ones,254.0,,254.0,254.0,0.0
+rotenones,254.0,,254.0,254.0,0.0
+saturated fatty acyl-CoA,254.0,,254.0,254.0,0.0
+saturated fatty acyl-CoA(4-),141.0,,141.0,141.0,0.0
+saturated fatty aldehyde,254.0,,254.0,254.0,0.0
+secondary allylic alcohol,254.0,,254.0,254.0,0.0
+secondary carboxamide,254.0,,254.0,254.0,0.0
+secondary fatty alcohol,241.0,,241.0,241.0,0.0
+short-chain fatty acid anion,216.0,,216.0,216.0,0.0
+sn-glycero-3-monophosphate(2-),123.0,,123.0,123.0,0.0
+sphinganine-based sphingolipid,103.0,,103.0,103.0,0.0
+sphingosine-based sphingolipid,115.0,,115.0,115.0,0.0
+steroidal acyl-CoA(4-),254.0,,254.0,254.0,0.0
+sulfuric ester,213.0,,213.0,213.0,0.0
+terminal acetylenic compound,254.0,,254.0,254.0,0.0
+tert-butyl ester,180.0,,180.0,180.0,0.0
+tertiary alcohol,114.0,,114.0,114.0,0.0
+tertiary allylic alcohol,254.0,,254.0,254.0,0.0
+tertiary alpha-hydroxy ketone,160.0,,160.0,160.0,0.0
+tertiary ammonium ion,109.0,,109.0,109.0,0.0
+tertiary carboxamide,194.0,,194.0,194.0,0.0
+thioester,18.0,,18.0,18.0,0.0
+triacyl-sn-glycerol,163.0,,163.0,163.0,0.0
+trichothecene,254.0,,254.0,254.0,0.0
+ultra-long-chain fatty acid anion,203.0,,203.0,203.0,0.0
+very long-chain acyl-CoA(4-),254.0,,254.0,254.0,0.0
+very long-chain fatty acid anion,189.0,,189.0,189.0,0.0
+very long-chain fatty acyl-CoA(4-),254.0,,254.0,254.0,0.0
+very long-chain fatty alcohol,253.0,,253.0,253.0,0.0
