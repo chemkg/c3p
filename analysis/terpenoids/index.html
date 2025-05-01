@@ -9,10 +9,10 @@
       
       
       
-        <link rel="prev" href="../curation/">
+        <link rel="prev" href="../glycerophosphocholine/">
       
       
-        <link rel="next" href="../classes_top.html">
+        <link rel="next" href="../terpenoids_table.html">
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
@@ -658,6 +658,29 @@
                 
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../glycerophosphocholine/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Glycerophosphocholine
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
     
   
   
@@ -671,10 +694,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_6_2" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_6_3" checked>
         
           
-          <label class="md-nav__link" for="__nav_3_6_2" id="__nav_3_6_2_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3_6_3" id="__nav_3_6_3_label" tabindex="0">
             
   
   
@@ -687,8 +710,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_6_2_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_3_6_2">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_6_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3_6_3">
             <span class="md-nav__icon md-icon"></span>
             Terpenoids
           </label>
@@ -734,7 +757,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../terpenoids_table.md" class="md-nav__link">
+      <a href="../terpenoids_table.html" class="md-nav__link">
         
   
   
@@ -979,7 +1002,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../notebooks/NPAtlas.ipynb" class="md-nav__link">
+      <a href="../../notebooks/NPAtlasAnalysis/" class="md-nav__link">
         
   
   
@@ -1048,7 +1071,7 @@
   
   
   <span class="md-ellipsis">
-    Code
+    Analysis Code
     
   </span>
   
@@ -1059,7 +1082,7 @@
         <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_5">
             <span class="md-nav__icon md-icon"></span>
-            Code
+            Analysis Code
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
             
@@ -1197,9 +1220,12 @@
 
 
 <h1 id="terpenoid-vision-model-analysis">Terpenoid vision model analysis</h1>
+<p>Based on our analysis of the NPAtlas database, we sought to investigate the classification of terpenoids further. We took 107 terpenoid structures where the C3PO classification disagreed with what was in the ChEBI benchmarks. For each structure, we generated a 2D visualization using RDKit, and presented the image to a multimodal LLM (GPT-4o) and prompted the model to classify the structure into a terpenoid subtype, or another category. The model agreed with the ChEBI classification in only 40% of cases.</p>
+<ul>
+<li>Results as <a href="https://docs.google.com/spreadsheets/d/1lqHS2DSKax6TwbsBibN2Sw1bC6CJRwV3sYqk9FwUYGQ/edit?gid=1854221255#gid=1854221255">google sheet</a></li>
+<li>Results as <a href="../terpenoids_table.html">HTML table</a></li>
+</ul>
 <p>See also <a href="https://github.com/ebi-chebi/ChEBI/issues/4651">issue #4651</a></p>
-<p>See <a href="https://docs.google.com/spreadsheets/d/1lqHS2DSKax6TwbsBibN2Sw1bC6CJRwV3sYqk9FwUYGQ/edit?gid=1854221255#gid=1854221255">google sheet</a></p>
-<p>See also <a href="../terpenoids_table.html">this table</a></p>
 
 
 
