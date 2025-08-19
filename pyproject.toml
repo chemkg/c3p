@@ -51,6 +51,7 @@ c3p-summarize = "c3p.summarize_cli:app"
 c3p-combine = "c3p.combine_cli:app"
 c3p-validate = "c3p.validate_cli:app"
 c3p-compare = "c3p.compare_cli:app"
+c3p-analyze = "c3p.analyze_differences:app"
 
 [tool.poetry-dynamic-versioning]
 enable = true

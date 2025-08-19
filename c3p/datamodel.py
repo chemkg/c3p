@@ -117,11 +117,17 @@ class Outcome(BaseModel):
     name: Optional[str] = None
     reason: Optional[str] = None
 
+    class Config:
+        frozen = True  # Makes the model immutable
+
     def __str__(self):
         return f"{self.smiles} ({self.name}): {self.reason}"
 
     def __repr__(self):
         return f"{self.smiles} ({self.name}): {self.reason}"
+
+    def __hash__(self):
+        return hash((self.smiles, self.name, self.reason))
 
 
 class CodeStatistics(BaseModel):
@@ -292,7 +298,7 @@ class Result(BaseModel):
             self.code_statistics = CodeStatistics.from_code(self.code)
 
 class ResultSet(BaseModel):
-    """A set of results"""
+    """A set of results for a chemical class"""
     best_result: Optional[Result] = None
     results: List[Result]
     sorted_attempts: List[int] = []

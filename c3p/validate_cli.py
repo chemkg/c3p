@@ -1,13 +1,15 @@
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Annotated
+from typing import List, Optional, Annotated, Dict
+import json
 
 import pandas as pd
 import typer
+import numpy as np
 
 from c3p.cli import verbose_option, configure_logging
-from c3p.datamodel import Dataset, Config, EvaluationResult, ResultSet
+from c3p.datamodel import Dataset, Config, EvaluationResult, ResultSet, Result
 from c3p.dumper import result_as_dict, write_programs, write_programs_for_commits
 from c3p.learn import learn_ontology_iter, evaluate_class
 
@@ -23,7 +25,7 @@ app = typer.Typer()
 
 
 @app.command()
-def summarize(
+def validate(
         working_dir: Path = typer.Option(None, "--workdir", "-w", help="path to workdir"),
         dataset_path: Path = typer.Option(None, "--dataset", "-d", help="path to dataset"),
         verbose: Annotated[int, verbose_option] = 0
@@ -58,7 +60,6 @@ def summarize(
         dt = datetime.fromtimestamp(timestamp)
         formatted_time = dt.strftime("%Y-%m-%d %H:%M:%S")
         er_dict["time"] = formatted_time
-        #er_dict["auprc"] = auprc
         eval_results.append(er_dict)
     if not eval_results:
         raise ValueError("No results found")
@@ -66,6 +67,8 @@ def summarize(
     print(df.describe())
     write_programs(ers, working_dir.parent)
     write_programs_for_commits(ers, working_dir.parent)
+
+
 
 
 if __name__ == "__main__":

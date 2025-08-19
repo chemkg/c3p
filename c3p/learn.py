@@ -199,7 +199,10 @@ def capture_output():
         # Restore the original stdout/stderr
         sys.stdout, sys.stderr = old_stdout, old_stderr
 
-def evaluate_program(code_str: str, chemical_class: ChemicalClass, positive_instances: List[ChemicalStructure], negative_instances: List[ChemicalStructure], attempt=0) -> Result:
+def evaluate_program(code_str: str, chemical_class: ChemicalClass, positive_instances: List[ChemicalStructure], negative_instances: List[ChemicalStructure], attempt=0,
+                     threshold: Optional[float] = None,
+                     model: Optional[Result] = None,
+                     ) -> Result:
     """
     Evaluate a program on a set of positive and negative instances.
 
@@ -208,11 +211,17 @@ def evaluate_program(code_str: str, chemical_class: ChemicalClass, positive_inst
         chemical_class:
         positive_instances:
         negative_instances:
+        attempt: attempt number
+        threshold: threshold for probability score, if None, no threshold is applied
 
     Returns:
         a Result object
 
     """
+    if threshold == 0.0:
+        threshold = None
+    if threshold is None and not model:
+        raise ValueError("Threshold is None, but no model is provided to get the threshold from")
     safe = safe_name(chemical_class.name)
     func_name = f"is_{safe}"
     positive_structures = [instance.smiles for instance in positive_instances]
@@ -248,6 +257,8 @@ def evaluate_program(code_str: str, chemical_class: ChemicalClass, positive_inst
                       not is_cls and not smiles in positive_structures]
     false_positives = [mk(smiles, reason) for smiles, is_cls, reason, _ in results if is_cls and not smiles in positive_structures]
     false_negatives = [mk(smiles, reason) for smiles, is_cls, reason, _ in results if not is_cls and smiles in positive_structures]
+
+
     # We avoid placing all negatives in the payload as these can be large
     result = Result(
         chemical_class=chemical_class,
@@ -472,12 +483,12 @@ def get_positive_and_negative_validate_instances(cls: ChemicalClass, dataset: Da
     negative_instances = [s2i[smiles] for smiles in negative_examples]
     return positive_instances, negative_instances
 
-def evaluate_class(rset: ResultSet, dataset: Dataset) -> EvaluationResult:
+def evaluate_class(rset: ResultSet, dataset: Dataset, threshold: float=None) -> EvaluationResult:
     """
     Evaluate a chemical class.
 
     Args:
-        rset:
+        rset: ResultSet containing the best result for a chemical class
         dataset:
 
     Returns:
@@ -491,7 +502,10 @@ def evaluate_class(rset: ResultSet, dataset: Dataset) -> EvaluationResult:
     positive_instances, negative_instances = get_positive_and_negative_validate_instances(cls, dataset)
     logger.info(f"Validate POS={len(positive_instances)} NEG={len(negative_instances)}")
     code_str = br.code
-    test_result = evaluate_program(code_str, cls_lite, positive_instances, negative_instances)
+    test_result = evaluate_program(code_str, cls_lite, positive_instances, negative_instances,
+                                   threshold=threshold,
+                                   model=br,
+                                   )
     logger.info(f"Test Result F1: {test_result.f1} Train F1: {br.f1}")
     return EvaluationResult(train_results=rset, test_result=test_result)
 
@@ -543,3 +557,22 @@ def learn_ontology_iter(dataset: Dataset, config: Config, working_dir: Optional[
             with open(filename, "w") as f:
                 f.write(rset.model_dump_json(indent=2))
         yield rset
+
+
+def apply_threshold(rset: ResultSet, threshold: float) -> ResultSet:
+    """
+    Apply a threshold to a ResultSet.
+
+    Args:
+        rset: ResultSet to apply the threshold to
+        threshold: threshold to apply
+
+    Returns:
+        ResultSet with the threshold applied
+    """
+    new_results = []
+    for result in rset.results:
+
+        if result.f1 is not None and result.f1 >= threshold:
+            new_results.append(result)
+    return ResultSet(results=new_results, chemical_class=rset.chemical_class, config=rset.config)

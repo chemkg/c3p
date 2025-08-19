@@ -1,19 +1,23 @@
+import json
 from collections import defaultdict
 from itertools import combinations
 from pathlib import Path
-from typing import List, Optional, Annotated
+from typing import List, Optional, Annotated, Dict
+from unittest.mock import right
 
 import pandas as pd
 import typer
 from matplotlib import pyplot as plt
 import seaborn as sns
+from diskcache import Cache
+from oaklib.datamodels.vocabulary import IS_A
 
 from c3p.cli import configure_logging, verbose_option
-from c3p.datamodel import Dataset, Config, ResultSet, EvaluationResult, CodeStatistics
+from c3p.datamodel import Dataset, Config, ResultSet, EvaluationResult, CodeStatistics, Result, ChemicalStructure
 from c3p.dumper import result_as_dict
-from c3p.learn import safe_name
+from c3p.learn import safe_name, run_code
 from c3p.outcome_stats import calculate_grouped_stats, assign_ranks_per_group
-from c3p.plotting import create_scatter_matrix, plot_scatter
+from c3p.plotting import create_scatter_matrix, plot_scatter, create_scatter_matrix_train_colored, plot_method_comparison_scatter
 
 app = typer.Typer(help="Compare models.")
 
@@ -23,6 +27,52 @@ import logging
 logger = logging.getLogger()  # Get root logger
 
 app = typer.Typer()
+
+
+# Create a persistent cache for ChEBI metadata
+chebi_cache = Cache('.chebi_metadata')
+
+@chebi_cache.memoize()
+def get_chebi_metadata(chebi_id: str) -> Dict[str, str]:
+    """
+    Get ChEBI metadata for a given ID, with automatic disk caching.
+    
+    Args:
+        chebi_id: ChEBI identifier (e.g., 'CHEBI:12345')
+        
+    Returns:
+        Dictionary with metadata fields
+    """
+    metadata_dict = {
+        'definition': '',
+        'formula': '',
+        'xrefs': '',
+        'curation_status': ''
+    }
+
+    print("Getting adapter..")
+    try:
+        from oaklib import get_adapter
+        # Initialize adapter if not already done
+        if not hasattr(get_chebi_metadata, '_adapter'):
+            logger.info(f"Initializing ChEBI adapter (one-time setup, may take a moment)...")
+            get_chebi_metadata._adapter = get_adapter("sqlite:obo:chebi")
+            logger.info("ChEBI adapter initialized")
+        
+        adapter = get_chebi_metadata._adapter
+        print(f"Looking up metadata for {chebi_id}")
+        metadata = adapter.entity_metadata_map(chebi_id)
+        
+        metadata_dict['definition'] = metadata.get('IAO:0000115', [''])[0] if 'IAO:0000115' in metadata else ''
+        metadata_dict['formula'] = metadata.get('obo:chebi/formula', [''])[0] if 'obo:chebi/formula' in metadata else ''
+        metadata_dict['xrefs'] = '|'.join(metadata.get('oio:hasDbXref', []))
+        metadata_dict['curation_status'] = '|'.join(metadata.get('oio:inSubset', []))
+        print(f"Metadata for {chebi_id}: {metadata_dict}")
+        
+    except Exception as e:
+        logger.debug(f"Could not get metadata for {chebi_id}: {e}")
+    
+    return metadata_dict
 
 
 @app.command()
@@ -91,6 +141,7 @@ def combine(
     if exclude_incomplete:
         df = df.groupby("chemical_name").filter(lambda x: len(x) == num_expts)
         print(f"Filtering to {len(df)} rows with complete data")
+    all_cls = list(df["chemical_class"].unique())
 
     # Create the pairwise comparison dataframe
     pairwise_df = pd.DataFrame(pairwise_data)
@@ -100,14 +151,46 @@ def combine(
     top_differences1 = pairwise_df.groupby(["left_method", "right_method"]).apply(
         lambda x: x.nlargest(top_n_threshold, "difference")
     ).reset_index(drop=True)
-    top_differences2 = pairwise_df.groupby(["right_method", "left_method"]).apply(
-        lambda x: x.nlargest(top_n_threshold, "difference")
+    top_differences2 = pairwise_df.groupby(["left_method", "right_method"]).apply(
+        lambda x: x.nsmallest(top_n_threshold, "difference")
     ).reset_index(drop=True)
     top_differences = pd.concat([top_differences1, top_differences2])
     top_differences.to_csv(output_dir / "top_pairwise_differences.csv", index=False)
 
     fig = create_scatter_matrix(df)
     fig.savefig(output_dir / "scatter_matrix.png")
+
+    # Create train F1 colored scatter matrices for each experiment
+    for experiment_name in df["experiment_name"].unique():
+        # Skip experiments that don't have train_f1 data (like chebifier)
+        exp_df = df[df["experiment_name"] == experiment_name]
+        if "train_f1" not in exp_df.columns or exp_df["train_f1"].isna().all():
+            logger.info(f"Skipping {experiment_name} - no train_f1 data available")
+            continue
+        
+        fig = create_scatter_matrix_train_colored(df, experiment_name)
+        if fig is not None:
+            safe_exp_name = experiment_name.replace("/", "_").replace(" ", "_")
+            fig.savefig(output_dir / f"scatter_matrix_{safe_exp_name}_train_scaled.png")
+            plt.close(fig)
+            logger.info(f"Created train F1 colored scatter matrix for {experiment_name}")
+        else:
+            logger.warning(f"Could not create scatter matrix for {experiment_name}")
+
+    # Create pairwise method comparison scatter plots
+    methods = list(df["experiment_name"].unique())
+    for i, method1 in enumerate(methods):
+        for j, method2 in enumerate(methods):
+            if i < j:  # Only create plots for unique pairs
+                fig = plot_method_comparison_scatter(df, method1, method2)
+                if fig is not None:
+                    safe_method1 = method1.replace("/", "_").replace(" ", "_")
+                    safe_method2 = method2.replace("/", "_").replace(" ", "_")
+                    fig.savefig(output_dir / f"method_comparison_{safe_method1}_vs_{safe_method2}.png")
+                    plt.close(fig)
+                    logger.info(f"Created method comparison plot: {method1} vs {method2}")
+                else:
+                    logger.warning(f"Could not create comparison plot for {method1} vs {method2}")
 
     # ranking
 
@@ -220,6 +303,8 @@ def combine(
 
     #stats["model"] = stats["model"].str.replace("gpt-4o", "4o").str.replace("-preview", "").str.replace("-undef", "").str.replace("ensembl-5", "ensemble").str.replace("-hi", "-iter6").str.replace("-coder", "").str.replace("-3-sonnet", "")
     rename_model(stats)
+    #all_cls = list(stats["chemical_class"].unique())
+    #num_cls = len(all_cls)
     for typ in ["micro", "macro"]:
         main_metric = f"{typ}_f1"
         # Sort dataframe by 'f1' in descending order
@@ -242,7 +327,7 @@ def combine(
         ax.set_xlabel("Models")
         ax.set_ylabel("Scores")
 
-        ax.set_title(f"Comparison over {num_cls} classes using {typ} stats, sorted by F1")
+        ax.set_title(f"Comparison using {typ} stats, sorted by F1")
         ax.set_xticks(x)
         ax.set_xticklabels(df_sorted['model'])
         ax.legend()
@@ -285,7 +370,6 @@ def combine(
     for m in complexity_metrics:
         plt.figure(figsize=(6, 6))
         plot_scatter(df, m, "f1", results_dir=output_dir)
-
 
 
 if __name__ == "__main__":

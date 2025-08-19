@@ -111,10 +111,10 @@ EX_COMPLETED = $(EX_ORIGINAL)
 PARTIAL =  gpt-4o-hi  deepseek-coder-undef deepseek-reasoner-undef deepseek-reasoner-force deepseek-chat-hi ensembl-7
 
 compare:
-	$(RUN) c3p-compare -o results/2025/comparison $(patsubst %,results/2025/%, $(EX_CORE)) results/2025/smartifier
+	$(RUN) c3p-compare -x -o results/2025/comparison $(patsubst %,results/2025/%, $(EX_CORE)) results/2025/smartifier
 
 compare-all:
-	$(RUN) c3p-compare -x -o results/2025/comparison $(patsubst %,results/2025/%, $(EX_COMPLETED) $(PARTIAL) chebifier)
+	$(RUN) c3p-compare -x -o results/2025/comparison-partial $(patsubst %,results/2025/%, $(EX_COMPLETED) $(PARTIAL) chebifier)
 
 compare-chebifier:
 	$(RUN) c3p-compare -x -o results/2025/comparison-chebifier $(patsubst %,results/2025/%, ensemble-9 chebifier)
@@ -155,3 +155,61 @@ compare-reasoner-force:
 compare-deepseek-hi:
 	$(RUN) c3p-compare -x -o results/2025/comparison-reasoner-hi results/2025/deepseek-coder-undef results/2025/deepseek-coder-hi
 
+
+FIGS = 1 2 3 4 5 6 7 8 9 10 S1 S2 S3 S4 S5
+all-figs: $(patsubst %,Figures/Figure-%.jpg,$(FIGS))
+
+sync-figs:
+	cp Figures/*jpg Figures-symlink/
+
+Figures/Figure-%.jpg: Figures/Figure-%.png
+	convert $< -quality 100 $@
+
+Figures/Figure-1.jpg:
+	cp Figures-from-slides/c3po-0.jpg $@
+
+Figures/Figure-2.jpg:
+	cp Figures-from-slides/c3po-1.jpg $@
+
+Figures/Figure-3.jpg:
+	cp Figures-from-slides/c3po-2.jpg $@
+
+Figures/Figure-4.jpg:
+	cp Figures-from-slides/c3po-3.jpg $@
+
+Figures/Figure-5.png:
+	cp results/analysis/c3p/individual_c3p/c3p_performance_analysis.png $@
+
+Figures/Figure-6.jpg:
+	cp Figures-from-slides/c3po-5.jpg $@
+
+Figures/Figure-7.png:
+	magick results/2025/comparison/model_comparison_macro.png results/2025/comparison/model_comparison_micro.png -append $@
+
+Figures/Figure-8.png:
+	magick results/2025/comparison-chebifier/model_comparison_macro.png results/2025/comparison-chebifier/model_comparison_micro.png -append $@
+
+Figures/Figure-9.png:
+	cp results/2025/comparison-chebifier/method_comparison_ensemble-9_vs_chebifier.png $@
+
+Figures/Figure-10.png:
+	cp results/analysis/enrichment_analysis.png $@
+
+Figures/Figure-S1.png:
+	cp results/2025/comparison/rank_distribution_top_50.png $@
+
+Figures/Figure-S2.png:
+	cp results/2025/ensemble-9/summary/scatterplot-train_f1-f1.png $@
+
+Figures/Figure-S3.jpg:
+	cp Figures-from-slides/c3po-13.jpg $@
+
+Figures/Figure-S4.png:
+	cp results/2025/comparison/complexity_comparison.png $@
+
+Figures/Figure-S5.jpg:
+	cp Figures-from-slides/c3po-15.jpg $@
+
+
+from-slides:
+	convert -density 600 ~/Downloads/C3PO\ Figures.pdf -quality 100 Figures-from-slides/c3po.jpg

@@ -94,7 +94,11 @@ def summarize(
         all_stats_sf.to_csv(output_dir / "outcome_stats.csv", index=False)
         df.describe().to_csv(output_dir / "summary.csv", index=True)
         df.describe().to_html(output_dir / "summary.html", index=True)
-        plot_scatter(df, "train_f1", "f1", results_dir=output_dir)
+        plot_scatter(df, "train_f1", "f1",
+                     title="F1 in training vs F1 on test data",
+                     xlabel="Train F1", ylabel="Test F1",
+                     results_dir = output_dir,
+                     )
         plot_scatter(df, "log_num_train_examples", "f1", results_dir=output_dir)
         plot_scatter(df, "complexity", "f1", results_dir=output_dir)
         #plot_scatter(df, "num_train_examples", "f1", results_dir=output_dir)
